@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact Us — Mosaic Wellness</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png" />
+  <link rel="shortcut icon" href="assets/favicon.ico" />
+  <meta name="description" content="Get in touch with the team at Mosaic Wellness. Fill out the form and we'll get back to you." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="wrap nav">
+      <a href="index.html" class="brand"><span class="logo-mark">M</span> Mosaic Wellness</a>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li class="has-menu">
+          <a href="our-brands.html">Our Brands ▾</a>
+          <div class="dropdown">
+            <a href="brands/man-matters.html"><span class="dot" style="background:var(--man)"></span><span><span class="d-title">Man Matters</span><br><span class="d-sub">Men's Wellness</span></span></a>
+            <a href="brands/be-bodywise.html"><span class="dot" style="background:var(--body)"></span><span><span class="d-title">Be Bodywise</span><br><span class="d-sub">Women's Wellness</span></span></a>
+            <a href="brands/little-joys.html"><span class="dot" style="background:var(--joys)"></span><span><span class="d-title">Little Joys</span><br><span class="d-sub">Children's Wellness</span></span></a>
+            <a href="brands/root-labs.html"><span class="dot" style="background:var(--root)"></span><span><span class="d-title">Root Labs</span><br><span class="d-sub">Indian Wellness for the World</span></span></a>
+          </div>
+        </li>
+        <li class="has-menu">
+          <a href="work-with-us.html">Work with Us ▾</a>
+          <div class="dropdown">
+            <a href="work-with-us.html#opportunities"><span class="dot" style="background:var(--green)"></span><span><span class="d-title">Opportunities@Mosaic</span><br><span class="d-sub">Jobs@Mosaic</span></span></a>
+            <a href="work-with-us.html#fellowship"><span class="dot" style="background:var(--leaf)"></span><span><span class="d-title">Mosaic Fellowship</span><br><span class="d-sub">For fresh graduates</span></span></a>
+            <a href="work-with-us.html#mavericks"><span class="dot" style="background:var(--joys)"></span><span><span class="d-title">Mosaic Mavericks</span><br><span class="d-sub">For experienced professionals</span></span></a>
+          </div>
+        </li>
+        <li><a href="blog.html">Blog</a></li>
+        <li><a href="contact-us.html" aria-current="page">Contact Us</a></li>
+      </ul>
+      <div class="nav-cta"><a href="work-with-us.html" class="btn btn--primary">Join Us <span class="arrow">→</span></a></div>
+      <button class="hamburger" aria-label="Toggle menu" aria-expanded="false"><span></span></button>
+    </div>
+  </header>
+
+  <section class="page-hero">
+    <div class="wrap">
+      <div class="breadcrumb"><a href="index.html">Home</a> › <span>Contact Us</span></div>
+      <span class="eyebrow">Contact Us</span>
+      <h1>Let's talk</h1>
+      <p class="lead" style="margin-top:18px">Fill out the form below to send us a message and our team will get back to you as soon as we can.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap contact-grid">
+      <div class="form-card reveal">
+        <div class="form-success" id="formSuccess">✓ Thanks! Your message has been sent. We'll be in touch shortly.</div>
+        <form id="contactForm" novalidate>
+          <div class="field">
+            <label for="name">Full Name</label>
+            <input type="text" id="name" name="name" placeholder="Your full name" required />
+          </div>
+          <div class="field">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" placeholder="you@example.com" required />
+          </div>
+          <div class="field">
+            <label for="phone">Phone <span class="muted">(Optional)</span></label>
+            <input type="tel" id="phone" name="phone" placeholder="+91 00000 00000" />
+          </div>
+          <div class="field">
+            <label for="message">Your Message</label>
+            <textarea id="message" name="message" placeholder="How can we help?" required></textarea>
+          </div>
+          <button type="submit" class="btn btn--primary">Send Message <span class="arrow">→</span></button>
+          <p class="form-note">This is a demo form — submissions are handled client-side and are not stored or sent anywhere.</p>
+        </form>
+      </div>
+
+      <div class="contact-info reveal">
+        <h3>Reach us directly</h3>
+        <div class="info-row"><div class="ic">📍</div><div><div class="t">Head Office</div><div class="s">6th Floor, Thane One, DIL Complex, G.B. Road, Kapurbawdi, Majiwade, Thane (West), Maharashtra 400610, India</div></div></div>
+        <div class="info-row"><div class="ic">✉️</div><div><div class="t">Email</div><div class="s">info@mosaicwellness.in</div></div></div>
+        <div class="info-row"><div class="ic">📞</div><div><div class="t">Phone</div><div class="s">+91 76070 27607</div></div></div>
+        <div class="info-row"><div class="ic">💼</div><div><div class="t">Careers</div><div class="s">Looking to join us? Head to <a href="work-with-us.html" style="color:var(--green);font-weight:600">Work with Us</a>.</div></div></div>
+        <div class="info-row"><div class="ic">🌿</div><div><div class="t">Our Brands</div><div class="s">Explore <a href="our-brands.html" style="color:var(--green);font-weight:600">Man Matters, Be Bodywise, Little Joys & Root Labs</a>.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div>
+          <a href="index.html" class="brand"><span class="logo-mark">M</span> Mosaic Wellness</a>
+          <p class="footer-about">Building India's most loved wellness brands. Science-backed, digital-first health for men, women, children and the world.</p>
+          <div class="social"><a href="#">in</a><a href="#">◎</a><a href="#">▶</a><a href="#">✕</a></div>
+        </div>
+        <div class="footer-col"><h4>Our Brands</h4><ul>
+          <li><a href="brands/man-matters.html">Man Matters</a></li>
+          <li><a href="brands/be-bodywise.html">Bodywise</a></li>
+          <li><a href="brands/little-joys.html">Little Joys</a></li>
+          <li><a href="brands/root-labs.html">Root Labs</a></li></ul></div>
+        <div class="footer-col"><h4>Work with Us</h4><ul>
+          <li><a href="work-with-us.html#fellowship">Fellowship</a></li>
+          <li><a href="work-with-us.html#mavericks">Mavericks</a></li>
+          <li><a href="work-with-us.html#opportunities">Opportunities@Mosaic</a></li></ul></div>
+        <div class="footer-col"><h4>Company</h4><ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="our-brands.html">Our Brands</a></li>
+          <li><a href="blog.html">Blog</a></li>
+          <li><a href="contact-us.html">Contact Us</a></li></ul></div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span id="year">2026</span> Mosaic Wellness Private Limited. All rights reserved.</span>
+        <span class="tagline-pill">Simplifying Health</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
