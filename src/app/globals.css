@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   SooulOne design system
+
+   CONCEPT — "the label is the hero"
+   The brief's own research says 73% of Indian snackers now read ingredient
+   labels, and calls transparent labelling "a conversion asset, not a
+   compliance cost". So the regulated furniture of Indian packaged food — the
+   veg/non-veg mark, the nutrient table, the MRP box, the FSSAI number — is the
+   visual system here rather than fine print hidden under a tab.
+
+   That decides the palette: green and brown-red are NOT decorative. They are
+   the statutory veg and non-veg marks and appear nowhere else, so colour
+   carries meaning. Turmeric is the appetite colour and belongs to The True
+   Store. Each gummies brand gets one accent, used at brand level only.
+   ========================================================================== */
+
+@theme {
+  /* --- Surfaces --- */
+  --color-ink: #241c15; /* roasted brown-black, committed rather than tinted grey */
+  --color-ink-soft: #5b4f45;
+  --color-ink-faint: #8c7f73;
+  --color-paper: #ffffff;
+  --color-shelf: #f2ede4; /* warm neutral band, the colour of kraft board */
+  --color-rule: #ddd3c5;
+
+  /* --- Statutory marks. Reserved. Never decorative. --- */
+  --color-veg: #1f7a3d;
+  --color-nonveg: #8b3a2e;
+
+  /* --- Brand accents --- */
+  --color-truestore: #e8a317; /* turmeric */
+  --color-womanaxis: #b5477e;
+  --color-kidsvault: #2e7fbf;
+  --color-manrituals: #1f5c4d;
+
+  /* --- Feedback --- */
+  --color-alert: #b03a2e;
+  --color-caution: #c9760a;
+
+  /* --- Type --- */
+  --font-display: "Bricolage Grotesque", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Scale: 1.25 major third, the packaging-typography default */
+  --text-micro: 0.6875rem;
+  --text-small: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lead: 1.125rem;
+  --text-h3: 1.375rem;
+  --text-h2: 1.875rem;
+  --text-h1: 2.75rem;
+  --text-hero: clamp(2.75rem, 7vw, 4.75rem);
+
+  --radius-panel: 4px; /* shallow. packaging is die-cut, not pill-shaped */
+}
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+
+* {
+  border-color: var(--color-rule);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  font-feature-settings: "tnum" 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* Numbers in prices, weights and nutrient tables must align in columns. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The shelf — the layout signature
+   A hairline under each grid row, the way a supermarket shelf edge reads.
+   Structural, not decorative: it groups a row into a shelf.
+   -------------------------------------------------------------------------- */
+
+.shelf-row {
+  border-bottom: 1px solid var(--color-rule);
+}
+
+/* --------------------------------------------------------------------------
+   Statutory veg / non-veg mark
+   Drawn to the Indian standard: filled dot inside a squared outline, green for
+   vegetarian and brown-red for non-vegetarian. Rendered as real geometry
+   rather than an emoji so it stays legible at 12px and prints correctly.
+   -------------------------------------------------------------------------- */
+
+.mark {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid currentColor;
+  flex: none;
+}
+
+.mark::after {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mark-veg {
+  color: var(--color-veg);
+}
+
+.mark-nonveg {
+  color: var(--color-nonveg);
+}
+
+/* --------------------------------------------------------------------------
+   Controls
+   -------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border: 1.5px solid var(--color-ink);
+  border-radius: var(--radius-panel);
+  font-weight: 600;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-solid {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.btn-solid:hover:not(:disabled) {
+  background: #3a2e24;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-ink);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--color-shelf);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.field {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1.5px solid var(--color-rule);
+  border-radius: var(--radius-panel);
+  background: var(--color-paper);
+  font: inherit;
+  color: inherit;
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--color-ink);
+}
+
+.label {
+  display: block;
+  font-size: var(--text-small);
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* --------------------------------------------------------------------------
+   The nutrient / supplement panel
+   Modelled on the statutory table: heavy rule under the header, hairlines
+   between rows, right-aligned tabular figures.
+   -------------------------------------------------------------------------- */
+
+.panel {
+  border: 1.5px solid var(--color-ink);
+  border-radius: var(--radius-panel);
+}
+
+.panel-head {
+  border-bottom: 1.5px solid var(--color-ink);
+  padding: 0.625rem 0.875rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.panel-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4375rem 0.875rem;
+  border-bottom: 1px solid var(--color-rule);
+  font-size: var(--text-small);
+}
+
+.panel-row:last-child {
+  border-bottom: 0;
+}
+
+.panel-row dd {
+  font-variant-numeric: tabular-nums;
+}

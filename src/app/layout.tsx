@@ -1,0 +1,170 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import "./globals.css";
+
+/**
+ * Fonts are loaded via a stylesheet link rather than `next/font/google`.
+ *
+ * `next/font` downloads and self-hosts the files at BUILD time, which is
+ * lovely until the build runs somewhere without egress to fonts.googleapis.com
+ * — a locked-down CI runner, an air-gapped box, or an offline laptop — where
+ * it fails the whole build over a typeface. A stylesheet link moves that
+ * fetch to the browser, so the build stays portable.
+ *
+ * The trade is a small flash of fallback text on first paint. The CSS variable
+ * stacks in globals.css name real fallbacks so that flash is legible rather
+ * than blank. If you would rather have zero layout shift and can guarantee
+ * build-time egress, swapping back to `next/font/google` is a contained change
+ * to this file.
+ */
+
+export const metadata: Metadata = {
+  title: "SooulOne — nutrition, honestly labelled",
+  description:
+    "Healthy namkeen, sweets and snacks from The True Store, and daily gummies from Woman Axis, Kids Vault and Man Rituals. Every label, in full, before you buy.",
+};
+
+function Nav() {
+  return (
+    <header className="sticky top-0 z-50 border-b border-[--color-rule] bg-paper/95 backdrop-blur">
+      <nav className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-3">
+        <Link href="/" className="font-display text-lead font-extrabold tracking-tight">
+          SooulOne
+        </Link>
+        <div className="hidden gap-5 text-small font-medium sm:flex">
+          <Link href="/true-store" className="hover:underline">
+            The True Store
+          </Link>
+          <Link href="/gummies" className="hover:underline">
+            Gummies
+          </Link>
+          <Link href="/stores" className="hover:underline">
+            Find a store
+          </Link>
+        </div>
+        <Link href="/cart" className="btn btn-outline ml-auto px-3 py-1.5 text-small">
+          Basket
+        </Link>
+      </nav>
+    </header>
+  );
+}
+
+/**
+ * The FSSAI licence number is a legally required site-wide display.
+ *
+ * When it is absent the footer says so plainly rather than rendering a
+ * placeholder. A fabricated licence number is a considerably worse problem
+ * than a visibly missing one, and the gap should be uncomfortable.
+ */
+function Footer() {
+  const licence = process.env.NEXT_PUBLIC_FSSAI_LICENCE_NUMBER;
+
+  return (
+    <footer className="mt-24 border-t border-[--color-rule] bg-shelf">
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="font-display text-h3 font-extrabold">SooulOne</p>
+          <p className="mt-2 max-w-[38ch] text-small text-ink-soft">
+            Snacks and supplements with the whole label on the page, not just on the pack.
+          </p>
+        </div>
+
+        <div className="text-small">
+          <p className="mb-2 font-semibold">Shop</p>
+          <ul className="grid gap-1.5 text-ink-soft">
+            <li>
+              <Link href="/true-store" className="hover:text-ink">
+                The True Store
+              </Link>
+            </li>
+            <li>
+              <Link href="/gummies/woman-axis" className="hover:text-ink">
+                Woman Axis
+              </Link>
+            </li>
+            <li>
+              <Link href="/gummies/kids-vault" className="hover:text-ink">
+                Kids Vault
+              </Link>
+            </li>
+            <li>
+              <Link href="/gummies/man-rituals" className="hover:text-ink">
+                Man Rituals
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        <div className="text-small">
+          <p className="mb-2 font-semibold">Policies</p>
+          <ul className="grid gap-1.5 text-ink-soft">
+            <li>
+              <Link href="/policies/privacy" className="hover:text-ink">
+                Privacy
+              </Link>
+            </li>
+            <li>
+              <Link href="/policies/terms" className="hover:text-ink">
+                Terms
+              </Link>
+            </li>
+            <li>
+              <Link href="/policies/refunds" className="hover:text-ink">
+                Refunds
+              </Link>
+            </li>
+            <li>
+              <Link href="/policies/shipping" className="hover:text-ink">
+                Shipping
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        <div className="text-small">
+          <p className="mb-2 font-semibold">Licensing</p>
+          {licence ? (
+            <p className="tabular text-ink-soft">FSSAI licence {licence}</p>
+          ) : (
+            <p className="text-alert">
+              FSSAI licence number not yet configured. Required before taking orders.
+            </p>
+          )}
+          <p className="mt-3 text-ink-faint">
+            Supplement statements have not been evaluated as medicines and are not intended to
+            diagnose, treat, cure or prevent any disease.
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/*
+          eslint-disable-next-line @next/next/no-page-custom-font --
+          This rule warns that a custom font "will only load for a single page"
+          unless it is declared in `pages/_document.js`. That premise is Pages
+          Router-specific: this IS the App Router root layout, so the link
+          applies to every route, which is exactly what the rule wants. The
+          deliberate choice not to use `next/font` here is explained above.
+        */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap"
+        />
+      </head>
+      <body>
+        <Nav />
+        <main>{children}</main>
+        <Footer />
+      </body>
+    </html>
+  );
+}

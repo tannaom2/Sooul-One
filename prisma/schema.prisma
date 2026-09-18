@@ -1,0 +1,451 @@
+// =============================================================================
+// SooulOne — data layer (build prompt Section 6)
+//
+// This is the Section 6 schema with the corrections needed to make it a valid,
+// migratable Prisma schema. Every deviation from the document is marked
+// [FIX] or [ADDED] with the reason, so the brief and the code can be diffed.
+//
+// [FIX] The document writes the datasource block inline with semicolons
+//       (`datasource db { provider = "postgresql"; url = env("DATABASE_URL") }`).
+//       Prisma's grammar has no statement separator — this must be multi-line.
+// [FIX] Several relations in the document are declared on only one side.
+//       Prisma requires both. Back-relations added on Brand, Category and
+//       ProductBatch; each is marked below.
+// [FIX] Prisma ORM 7 removed `datasource.url` from schema.prisma entirely —
+//       it now belongs in prisma.config.ts, alongside the driver adapter that
+//       v7 also requires for every relational database. See prisma.config.ts
+//       and src/lib/db.ts, and the README's "found while building" section
+//       for why this isn't simply a preference.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AdminRole {
+  OWNER
+  STAFF
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  FAILED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+/// Drives which label fields the admin form makes mandatory and which
+/// copy-guardrails apply. See build prompt Section 2.3 — packaged food and
+/// health supplements sit under different FSSAI rule sets, and collapsing them
+/// into one "product" shape is how a mandatory allergen field ships blank.
+enum RegulatoryType {
+  PACKAGED_FOOD
+  HEALTH_SUPPLEMENT
+  BEVERAGE
+}
+
+model Brand {
+  id            String     @id @default(cuid())
+  /// "the-true-store" | "woman-axis" | "kids-vault" | "man-rituals" | future lines
+  slug          String     @unique
+  name          String
+  tagline       String?
+  /// Brand accent colour. Seeded as a neutral placeholder until the brand kit exists —
+  /// the seed script does not invent brand colours (Section 14).
+  colorToken    String
+  description   String?
+  /// True for The True Store — the only brand operating physical superstores.
+  isRetailBrand Boolean    @default(false)
+  isActive      Boolean    @default(true)
+  categories    Category[]
+  products      Product[]
+  bundles       Bundle[] // [FIX] back-relation for Bundle.brand
+  quizResponses QuizResponse[] // [FIX] back-relation for QuizResponse.brand
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Category {
+  id            String         @id @default(cuid())
+  brandId       String
+  brand         Brand          @relation(fields: [brandId], references: [id])
+  slug          String
+  /// e.g. "Hair Fall" (Man Rituals), "Healthy Namkeen" (True Store — proposed, confirm)
+  name          String
+  description   String?
+  imageUrl      String?
+  sortOrder     Int            @default(0)
+  isActive      Boolean        @default(true)
+  products      Product[]
+  quizRecommendations QuizResponse[] // [FIX] back-relation for QuizResponse.recommendedCategory
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([brandId, slug])
+}
+
+model Product {
+  id               String         @id @default(cuid())
+  sku              String         @unique
+  name             String
+  slug             String         @unique
+  brandId          String
+  brand            Brand          @relation(fields: [brandId], references: [id])
+  categoryId       String
+  category         Category       @relation(fields: [categoryId], references: [id])
+  regulatoryType   RegulatoryType
+  shortDescription String
+  /// Markdown. For HEALTH_SUPPLEMENT this must stay in structure/function language
+  /// ("supports", "helps maintain") and never therapeutic language ("treats",
+  /// "cures", "prevents"). Enforced at the admin boundary — see src/lib/compliance/claims.ts.
+  description      String
+  basePrice        Decimal        @db.Decimal(10, 2)
+  compareAtPrice   Decimal?       @db.Decimal(10, 2)
+  hsnCode          String?
+  taxRatePercent   Decimal        @default(18) @db.Decimal(4, 2)
+  /// ONLINE stock only. Retail superstore stock is deliberately out of scope
+  /// (Decision #3) — this number never represents in-store availability.
+  stockQuantity     Int           @default(0)
+  lowStockThreshold Int           @default(10)
+  weightGrams       Int?
+  isActive          Boolean       @default(true)
+  isFeatured        Boolean       @default(false)
+  isOfferZone       Boolean       @default(false)
+  /// "Also sold in our stores" — display only, never a live stock claim.
+  availableInRetail Boolean       @default(false)
+  /// For short-shelf-life items unsuited to shipping.
+  retailOnly        Boolean       @default(false)
+
+  // --- Required for EVERY regulatory type ---
+  /// Veg/non-veg logo. Not defaulted: for gummies this depends on gelatin vs.
+  /// pectin/agar, which is an unresolved formulation fact (Section 14).
+  isVeg          Boolean?
+  allergens      String[] @default([])
+  /// [MOVED] Total shelf life from manufacture. The brief placed this in the
+  /// food-only block, but health supplements are food products under the FSS
+  /// Act, 2006, so the "any food article" delivery rule reaches them too.
+  /// Required for all three types at the validation layer — see
+  /// src/lib/checkout/quote.ts for the scope reasoning and the counsel flag.
+  shelfLifeDays  Int?
+
+  // --- Food-specific (regulatoryType = PACKAGED_FOOD | BEVERAGE) ---
+  /// { calories, protein, carbs, sugar, fat, sodium, fiber, ... } per serving.
+  nutritionFacts Json?
+
+  // --- Supplement-specific (regulatoryType = HEALTH_SUPPLEMENT) ---
+  servingsPerContainer Int?
+  /// "1 gummy daily" style — must carry explicit do-not-exceed language.
+  dosageGuidance       String?
+  /// { ingredient: { amountPerServing, percentRDA } }
+  supplementFacts      Json?
+
+  /// [ADDED] Set by the admin before a HEALTH_SUPPLEMENT product may go live.
+  /// Section 7.5's forcing function against accidental therapeutic claims.
+  /// Cleared automatically whenever `description` changes.
+  complianceReviewedAt DateTime?
+  complianceReviewedBy String?
+
+  metaTitle       String?
+  metaDescription String?
+
+  images            ProductImage[]
+  variants          ProductVariant[]
+  batches           ProductBatch[]
+  reviews           Review[]
+  orderItems        OrderItem[]
+  cartItems         CartItem[]
+  bundleEligibility BundleEligibleProduct[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@index([brandId, isActive])
+  @@index([categoryId, isActive])
+  @@index([regulatoryType])
+}
+
+/// FEFO stock plus the shelf-life-at-delivery rule (Section 2.3 / 7.2).
+model ProductBatch {
+  id                String      @id @default(cuid())
+  productId         String
+  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchNumber       String
+  manufacturedOn    DateTime
+  expiresOn         DateTime
+  quantityReceived  Int
+  quantityRemaining Int
+  orderItems        OrderItem[] // [FIX] back-relation — OrderItem.batchId is the recall-traceability link
+  createdAt         DateTime    @default(now())
+
+  @@unique([productId, batchNumber])
+  @@index([productId, expiresOn])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String
+  sortOrder Int     @default(0)
+  isPrimary Boolean @default(false)
+}
+
+/// Pack sizes — "200g" vs "500g", "30-count" vs "60-count".
+model ProductVariant {
+  id            String      @id @default(cuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name          String
+  skuSuffix     String
+  priceOverride Decimal?    @db.Decimal(10, 2)
+  stockQuantity Int         @default(0)
+  isDefault     Boolean     @default(false)
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+}
+
+/// The True Store retail superstores (Section 2.4). Reference data the
+/// storefront reads — address, hours, map pin. Never a live inventory feed.
+model StoreLocation {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  latitude     Float?
+  longitude    Float?
+  phone        String?
+  /// Free text or structured JSON — owner's call.
+  openingHours String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Customer {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  phone            String?
+  passwordHash     String?
+  name             String
+  emailVerifiedAt  DateTime?
+  loyaltyPoints    Int            @default(0)
+  /// Explicit, unchecked-by-default opt-in. A phone number collected for
+  /// delivery updates is not permission to send offers (Section 8.5).
+  marketingConsent Boolean        @default(false)
+  whatsappOptIn    Boolean        @default(false)
+  addresses        Address[]
+  orders           Order[]
+  cart             Cart?
+  reviews          Review[]
+  referralCode     ReferralCode?
+  quizResponses    QuizResponse[]
+  createdAt        DateTime       @default(now())
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label      String?
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  country    String   @default("IN")
+  phone      String
+  isDefault  Boolean  @default(false)
+}
+
+model Cart {
+  id         String     @id @default(cuid())
+  customerId String?    @unique
+  customer   Customer?  @relation(fields: [customerId], references: [id])
+  sessionId  String?    @unique
+  items      CartItem[]
+  updatedAt  DateTime   @updatedAt
+}
+
+model CartItem {
+  id         String          @id @default(cuid())
+  cartId     String
+  cart       Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id])
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity   Int
+  priceAtAdd Decimal         @db.Decimal(10, 2)
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  customerId      String?
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  guestEmail      String?
+  guestPhone      String?
+  status          OrderStatus @default(PENDING_PAYMENT)
+  items           OrderItem[]
+  subtotal        Decimal     @db.Decimal(10, 2)
+  discountAmount  Decimal     @default(0) @db.Decimal(10, 2)
+  shippingAmount  Decimal     @default(0) @db.Decimal(10, 2)
+  taxAmount       Decimal     @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal     @db.Decimal(10, 2)
+  couponCode      String?
+  shippingAddress Json
+  billingAddress  Json
+  paymentGateway  String?
+  paymentId       String?
+  paymentStatus   String?
+  trackingNumber  String?
+  courierPartner  String?
+  placedAt        DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status, placedAt])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  /// [FIX] Promoted from a bare String to a real relation. This is the recall
+  /// traceability link — "which batch went to which customer" is the question
+  /// you must answer under time pressure, and a dangling string id cannot
+  /// guarantee the batch row still exists.
+  batchId String?
+  batch   ProductBatch? @relation(fields: [batchId], references: [id])
+
+  productNameSnapshot String
+  unitPriceSnapshot   Decimal @db.Decimal(10, 2)
+  quantity            Int
+  lineTotal           Decimal @db.Decimal(10, 2)
+}
+
+model Coupon {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2)
+  minOrderValue Decimal?     @db.Decimal(10, 2)
+  maxUses       Int?
+  usedCount     Int          @default(0)
+  validFrom     DateTime
+  validUntil    DateTime
+  isActive      Boolean      @default(true)
+}
+
+/// Gift hampers for The True Store; "build your routine" kits for the gummies brands.
+model Bundle {
+  id               String                 @id @default(cuid())
+  brandId          String
+  brand            Brand                  @relation(fields: [brandId], references: [id])
+  slug             String                 @unique
+  /// e.g. "Diwali Namkeen Hamper", "Build Your Kids Vault Kit"
+  name             String
+  description      String?
+  minItems         Int                    @default(2)
+  maxItems         Int?
+  discountType     DiscountType
+  discountValue    Decimal                @db.Decimal(10, 2)
+  eligibleProducts BundleEligibleProduct[]
+  isActive         Boolean                @default(true)
+  createdAt        DateTime               @default(now())
+}
+
+model BundleEligibleProduct {
+  id        String  @id @default(cuid())
+  bundleId  String
+  bundle    Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([bundleId, productId])
+}
+
+model ReferralCode {
+  id             String   @id @default(cuid())
+  customerId     String   @unique
+  customer       Customer @relation(fields: [customerId], references: [id])
+  code           String   @unique
+  referrerReward Decimal  @default(0) @db.Decimal(10, 2)
+  refereeReward  Decimal  @default(0) @db.Decimal(10, 2)
+  timesRedeemed  Int      @default(0)
+  createdAt      DateTime @default(now())
+}
+
+/// Gummies brands only (Decision #8). Scoring logic and result copy come from
+/// the business, not the build agent (Section 14).
+model QuizResponse {
+  id                    String    @id @default(cuid())
+  brandId               String
+  brand                 Brand     @relation(fields: [brandId], references: [id])
+  customerId            String?
+  customer              Customer? @relation(fields: [customerId], references: [id])
+  answers               Json
+  recommendedCategoryId String?
+  recommendedCategory   Category? @relation(fields: [recommendedCategoryId], references: [id])
+  createdAt             DateTime  @default(now())
+}
+
+model Review {
+  id           String    @id @default(cuid())
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  customerName String
+  rating       Int
+  comment      String
+  isApproved   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+}
+
+model AdminUser {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String
+  name         String
+  role         AdminRole       @default(STAFF)
+  mfaSecret    String?
+  isActive     Boolean         @default(true)
+  lastLoginAt  DateTime?
+  auditLogs    AdminAuditLog[]
+  createdAt    DateTime        @default(now())
+}
+
+model AdminAuditLog {
+  id          String    @id @default(cuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id])
+  action      String
+  entityType  String
+  entityId    String
+  changes     Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([entityType, entityId])
+}

@@ -1,0 +1,188 @@
+import "server-only";
+import { cookies } from "next/headers";
+import { randomUUID } from "node:crypto";
+import { db } from "@/lib/db";
+import { decimalToPaise } from "@/lib/format";
+import { buildQuote, type QuoteLineInput } from "@/lib/checkout/quote";
+import { estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
+import type { GstTreatment } from "@/lib/money";
+
+/**
+ * Cart persistence and quoting.
+ *
+ * The cart lives in Postgres rather than a cookie, keyed by a guest session id.
+ * That survives a device switch, makes abandoned-cart recovery possible later,
+ * and keeps prices under server control — a cookie-held cart is a cart the
+ * customer can edit.
+ */
+
+const SESSION_COOKIE = "soulone_cart";
+
+/**
+ * The state SooulOne is registered in. Decides CGST+SGST versus IGST.
+ * Belongs in configuration, not a literal, because it changes if the company
+ * registers in a second state.
+ */
+const SELLER_STATE = (process.env.SELLER_STATE ?? "Maharashtra").toLowerCase();
+
+export async function getOrCreateSessionId(): Promise<string> {
+  const store = await cookies();
+  const existing = store.get(SESSION_COOKIE)?.value;
+  if (existing) return existing;
+
+  const id = randomUUID();
+  store.set(SESSION_COOKIE, id, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+  return id;
+}
+
+export async function readSessionId(): Promise<string | null> {
+  const store = await cookies();
+  return store.get(SESSION_COOKIE)?.value ?? null;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export async function getCart(sessionId: string) {
+  return db.cart.findUnique({
+    where: { sessionId },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: { brand: true, batches: { orderBy: { expiresOn: "asc" } } },
+          },
+          variant: true,
+        },
+      },
+    },
+  });
+}
+
+export async function addToCart(sessionId: string, productId: string, quantity: number) {
+  const cart =
+    (await db.cart.findUnique({ where: { sessionId } })) ??
+    (await db.cart.create({ data: { sessionId } }));
+
+  const product = await db.product.findUnique({ where: { id: productId } });
+  if (!product || !product.isActive) throw new Error("That product isn't available.");
+  if (product.retailOnly) throw new Error("That product is sold in our stores only.");
+
+  const existing = await db.cartItem.findFirst({ where: { cartId: cart.id, productId } });
+
+  if (existing) {
+    await db.cartItem.update({
+      where: { id: existing.id },
+      data: { quantity: existing.quantity + quantity },
+    });
+  } else {
+    await db.cartItem.create({
+      data: {
+        cartId: cart.id,
+        productId,
+        quantity,
+        // Price is snapshotted server-side at add time, never taken from the
+        // client. The quote re-reads the live price at checkout so a stale
+        // basket cannot lock in a withdrawn promotion.
+        priceAtAdd: product.basePrice,
+      },
+    });
+  }
+
+  return cart.id;
+}
+
+export async function updateQuantity(sessionId: string, itemId: string, quantity: number) {
+  const cart = await db.cart.findUnique({ where: { sessionId } });
+  if (!cart) return;
+
+  if (quantity <= 0) {
+    await db.cartItem.deleteMany({ where: { id: itemId, cartId: cart.id } });
+    return;
+  }
+  await db.cartItem.updateMany({ where: { id: itemId, cartId: cart.id }, data: { quantity } });
+}
+
+export async function clearCart(sessionId: string) {
+  const cart = await db.cart.findUnique({ where: { sessionId } });
+  if (cart) await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+}
+
+export interface QuoteContext {
+  pincode?: string;
+  state?: string;
+  couponCode?: string;
+}
+
+/**
+ * Turn a persisted cart into a priced, compliance-checked quote.
+ *
+ * Live product data is re-read here rather than trusting the cart snapshot,
+ * because between adding an item and paying for it the price may have changed
+ * and — more importantly — the stock that would fulfil it may have dropped
+ * below the shelf-life threshold.
+ */
+export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
+  const cart = await getCart(sessionId);
+  if (!cart || cart.items.length === 0) return null;
+
+  const zone = context.pincode ? zoneForPincode(context.pincode) : "REST_OF_INDIA";
+  const estimatedDeliveryDate = estimateDeliveryDate(new Date(), zone);
+
+  const gstTreatment: GstTreatment =
+    context.state && context.state.toLowerCase() === SELLER_STATE ? "INTRA_STATE" : "INTER_STATE";
+
+  const lines: QuoteLineInput[] = cart.items.map((item: any) => ({
+    productId: item.productId,
+    variantId: item.variantId ?? undefined,
+    name: item.product.name,
+    regulatoryType: item.product.regulatoryType,
+    unitPricePaise: item.variant?.priceOverride
+      ? decimalToPaise(item.variant.priceOverride)
+      : decimalToPaise(item.product.basePrice),
+    quantity: item.quantity,
+    taxRatePercent: Number(item.product.taxRatePercent?.toString?.() ?? 18),
+    shelfLifeDays: item.product.shelfLifeDays ?? undefined,
+    batches: (item.product.batches ?? []).map((b: any) => ({
+      id: b.id,
+      batchNumber: b.batchNumber,
+      expiresOn: new Date(b.expiresOn),
+      quantityRemaining: b.quantityRemaining,
+    })),
+    stockQuantity: item.product.stockQuantity,
+    retailOnly: item.product.retailOnly,
+  }));
+
+  let coupon;
+  if (context.couponCode) {
+    const found = await db.coupon.findUnique({ where: { code: context.couponCode.toUpperCase() } });
+    const now = new Date();
+    if (
+      found &&
+      found.isActive &&
+      new Date(found.validFrom) <= now &&
+      new Date(found.validUntil) >= now &&
+      (found.maxUses === null || found.usedCount < found.maxUses)
+    ) {
+      coupon = {
+        code: found.code,
+        type: found.discountType as "PERCENTAGE" | "FLAT",
+        value: Number(found.discountValue.toString()),
+      };
+    }
+  }
+
+  const quote = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon });
+
+  return {
+    quote,
+    cartItems: cart.items,
+    estimatedDeliveryDate,
+    couponRejected: Boolean(context.couponCode) && !quote.appliedCouponCode,
+  };
+}

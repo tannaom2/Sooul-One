@@ -1,0 +1,207 @@
+# Getting this to GitHub and onto the internet
+
+Two separate things: putting the code in version control, then deploying it.
+Do them in that order — Render deploys *from* GitHub.
+
+---
+
+## Part 1 — Push to GitHub
+
+### 1. Make an empty repository
+
+Go to [github.com/new](https://github.com/new).
+
+- Give it a name (`soulone-platform` is fine)
+- Choose **Private** unless you want the code public
+- **Do not tick** "Add a README", "Add .gitignore" or "Choose a licence"
+
+That last point matters. Initialising the repo with files creates a commit you'd
+then have to merge with, and the first thing you'd hit is a conflict.
+
+### 2. Push from your machine
+
+```bash
+cd soulone-platform
+git init
+git add .
+git commit -m "SooulOne commerce platform"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO.git
+git push -u origin main
+```
+
+Replace `YOUR-USERNAME` and `YOUR-REPO`. GitHub shows the exact URL on the page
+right after you create the repo.
+
+If you use SSH keys rather than HTTPS, the remote is
+`git@github.com:YOUR-USERNAME/YOUR-REPO.git` instead.
+
+### 3. Confirm your secrets didn't go with it
+
+```bash
+git ls-files | grep -i env
+```
+
+This should print **`.env.example` and nothing else**. If `.env` or `.env.local`
+appears, stop and remove them before doing anything else:
+
+```bash
+git rm --cached .env .env.local
+git commit -m "Remove environment files"
+git push
+```
+
+`.gitignore` already excludes them, so this should never happen — but a leaked
+`DATABASE_URL` or `JWT_SECRET` is worth ten seconds of checking. If one has been
+pushed at any point, rotate it rather than just deleting the file. Git keeps
+history.
+
+### 4. Working after the first push
+
+```bash
+git add .
+git commit -m "Describe what changed"
+git push
+```
+
+CI runs automatically on every push and pull request (`.github/workflows/ci.yml`):
+schema validation, lint, typecheck and the 146 tests. A red tick means don't
+deploy.
+
+---
+
+## Part 2 — Deploy to Render
+
+### 1. A permanent database first
+
+If you're still on a local database, you need a hosted one.
+
+Sign up at [neon.com](https://neon.com), create a project, copy the connection
+string.
+
+**Use Neon or Supabase rather than Render's free Postgres.** Render's free tier
+database is deleted after 30 days. Neon's free tier is permanent. The cost
+difference is zero and the difference in outcome is your entire order history.
+
+### 2. Create the web service
+
+1. Sign up at [render.com](https://render.com) and connect your GitHub account
+2. **New → Web Service**
+3. Pick your repository
+4. Render reads `render.yaml` and fills in most settings itself
+
+Check these match:
+
+| Setting | Value |
+|---|---|
+| Runtime | Node |
+| Build command | `npm ci && npx prisma generate && npx prisma migrate deploy && npm run build` |
+| Start command | `npm run start` |
+| Health check path | `/api/health` |
+| Plan | Starter ($7/month) or Free |
+
+The build command runs your migrations on every deploy, so the live database
+schema stays in step with the code automatically.
+
+**On the Free plan** the service sleeps after 15 minutes of inactivity and takes
+roughly 30 seconds to wake. Fine for showing someone; not fine for real
+customers. Starter is $7/month and always on.
+
+### 3. Set the environment variables
+
+In the Render dashboard, **Environment** tab. Every variable in `.env.example`
+that you actually use:
+
+| Variable | Where it comes from |
+|---|---|
+| `DATABASE_URL` | Neon or Supabase |
+| `JWT_SECRET` | Render can generate this — click "Generate" |
+| `NEXTAUTH_SECRET` | Render can generate this |
+| `NEXTAUTH_URL` | Your live URL, e.g. `https://soulone.onrender.com` |
+| `ADMIN_PATH` | Anything non-obvious |
+| `RAZORPAY_KEY_ID` / `_SECRET` | Razorpay dashboard, **live** keys |
+| `RAZORPAY_WEBHOOK_SECRET` | You choose it; must match Razorpay's webhook config |
+| `SELLER_STATE` | The state you're GST-registered in |
+| `NEXT_PUBLIC_FSSAI_LICENCE_NUMBER` | Your 14-digit licence |
+| `NEXT_PUBLIC_GSTIN` | Your GSTIN |
+| `NODE_ENV` | `production` |
+
+Leave `NEXT_PUBLIC_FSSAI_LICENCE_NUMBER` blank until the licence is actually
+issued. The footer will say the licence isn't configured, which is the honest
+state. Do not put a placeholder there.
+
+### 4. Create your owner account on the live database
+
+The admin account lives in the database, so a fresh production database has no
+way in.
+
+Easiest route: point your local `.env.local` at the **production**
+`DATABASE_URL` temporarily and run:
+
+```bash
+npm run admin:create
+```
+
+Then **change `.env.local` back to your development database**. Forgetting this
+is how test orders end up in production.
+
+Alternatively use Render's Shell tab on a paid plan.
+
+### 5. Point Razorpay's webhook at the live site
+
+In the Razorpay dashboard, **Settings → Webhooks → Add**:
+
+- URL: `https://your-app.onrender.com/api/webhooks/razorpay`
+- Secret: the same string as `RAZORPAY_WEBHOOK_SECRET`
+- Events: `payment.captured`, `payment.failed`, `refund.processed`
+
+Without this, payments will succeed at Razorpay and your orders will sit at
+`PENDING_PAYMENT` forever — the app treats the webhook as the only proof of
+payment, and the browser redirect as a convenience.
+
+### 6. Custom domain
+
+**Settings → Custom Domain** in Render, then add the CNAME record it gives you
+at your registrar. TLS is issued automatically and free.
+
+Then update, in your repository:
+
+- `sitemap.xml` — replace `https://www.example.com`
+- `robots.txt` — same
+- `NEXTAUTH_URL` in Render
+
+---
+
+## Before you take a real order
+
+- [ ] FSSAI Central Licence issued, and the number set in Render
+- [ ] GSTIN set
+- [ ] Privacy Policy, Terms, Refund and Shipping pages written and linked
+      (Razorpay requires these to activate a live account)
+- [ ] Razorpay account in **live** mode, not test
+- [ ] Webhook configured and a test payment confirmed end to end
+- [ ] One real, small, refundable purchase completed — a packaged food item and
+      a supplement, since they take different paths through the label and
+      compliance logic
+- [ ] Every product has its real nutrition, allergen and dosage data
+- [ ] Every supplement description reviewed by a person, not just the linter
+- [ ] The veg/non-veg mark on every gummy matches the actual formulation
+
+That last one is the easiest to overlook and the most embarrassing to get wrong.
+
+---
+
+## Deploying updates
+
+```bash
+git add .
+git commit -m "What changed"
+git push
+```
+
+Render redeploys `main` automatically. Migrations run as part of the build, so
+schema changes ship with the code that needs them.
+
+To roll back, use **Deploys → Rollback** in Render. Note that this reverts the
+code but **not** the database — a migration that dropped a column is not undone
+by rolling back. Take a backup before any destructive migration.

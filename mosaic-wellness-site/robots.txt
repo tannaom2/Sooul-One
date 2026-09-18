@@ -1,6 +1,0 @@
-# robots.txt for Mosaic Wellness (structural recreation)
-User-agent: *
-Allow: /
-
-# Update the domain below to your live site before deploying
-Sitemap: https://www.example.com/sitemap.xml

@@ -1,0 +1,46 @@
+# Render deployment (build prompt Section 10).
+#
+# One web service. The database is deliberately NOT declared here: the
+# recommended production setup is an external Neon/Supabase free-tier Postgres,
+# which is permanent and $0, whereas Render's free Postgres expires after 30
+# days. Point DATABASE_URL at it and the total fixed cost is the $7 starter
+# plan below.
+services:
+  - type: web
+    name: soulone-app
+    runtime: node
+    plan: starter
+    region: singapore # closest to an India-based customer base
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ADMIN_PATH
+        sync: false
+      - key: NEXT_PUBLIC_FSSAI_LICENCE_NUMBER
+        sync: false
+      - key: NEXT_PUBLIC_GSTIN
+        sync: false
+      - key: NODE_ENV
+        value: production

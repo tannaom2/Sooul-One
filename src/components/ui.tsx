@@ -1,0 +1,160 @@
+import Link from "next/link";
+import Image from "next/image";
+import { formatINR } from "@/lib/money";
+import type { ProductSummary } from "@/server/catalog";
+
+/**
+ * The statutory veg / non-veg mark.
+ *
+ * Rendered as geometry rather than an emoji: emoji render inconsistently
+ * across platforms and this is a legally required mark, not decoration. When
+ * the fact is genuinely unknown it says so instead of defaulting to
+ * vegetarian, because for the gummies this depends on an unresolved
+ * gelatin-versus-pectin decision.
+ */
+export function VegMark({ isVeg, showText = false }: { isVeg: boolean | null; showText?: boolean }) {
+  if (isVeg === null || isVeg === undefined) {
+    return (
+      <span className="text-micro font-semibold text-caution" title="Not yet declared">
+        Veg status not declared
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={`mark ${isVeg ? "mark-veg" : "mark-nonveg"}`}
+        role="img"
+        aria-label={isVeg ? "Vegetarian" : "Non-vegetarian"}
+      />
+      {showText && (
+        <span className="text-micro font-semibold">{isVeg ? "Vegetarian" : "Non-vegetarian"}</span>
+      )}
+    </span>
+  );
+}
+
+export function Price({ pricePaise, comparePaise }: { pricePaise: number; comparePaise?: number | null }) {
+  return (
+    <span className="flex items-baseline gap-2">
+      <span className="tabular font-display text-lead font-bold">{formatINR(pricePaise)}</span>
+      {comparePaise && comparePaise > pricePaise && (
+        <span className="tabular text-small text-ink-faint line-through">
+          {formatINR(comparePaise)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+const BRAND_ACCENT: Record<string, string> = {
+  "the-true-store": "var(--color-truestore)",
+  "woman-axis": "var(--color-womanaxis)",
+  "kids-vault": "var(--color-kidsvault)",
+  "man-rituals": "var(--color-manrituals)",
+};
+
+export function ProductCard({ product }: { product: ProductSummary }) {
+  const accent = BRAND_ACCENT[product.brandSlug] ?? "var(--color-ink)";
+
+  return (
+    <Link
+      href={`/product/${product.slug}`}
+      className="group flex flex-col gap-3 border border-[--color-rule] p-4 transition-colors hover:border-ink"
+      style={{ borderRadius: "var(--radius-panel)" }}
+    >
+      {product.imageUrl ? (
+        <Image
+          src={product.imageUrl}
+          alt={product.name}
+          width={400}
+          height={300}
+          className="aspect-[4/3] w-full border border-[--color-rule] object-cover"
+        />
+      ) : (
+        <div
+          className="flex aspect-[4/3] items-end justify-start p-3"
+          style={{ background: `color-mix(in srgb, ${accent} 12%, white)` }}
+        >
+          <span className="text-micro font-semibold" style={{ color: accent }}>
+            {product.categoryName}
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-base font-semibold leading-snug group-hover:underline">
+          {product.name}
+        </h3>
+        <VegMark isVeg={product.isVeg} />
+      </div>
+
+      <p className="text-small text-ink-soft">{product.shortDescription}</p>
+
+      {/* Allergens sit on the card, not behind a click. The brief's research
+          says label-conscious shoppers are the majority here, so hiding this
+          costs conversions as well as being worse practice. */}
+      {product.allergens.length > 0 && (
+        <p className="text-micro text-ink-faint">Contains {product.allergens.join(", ")}</p>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+        <Price pricePaise={product.pricePaise} comparePaise={product.comparePaise} />
+        {product.retailOnly ? (
+          <span className="text-micro font-semibold text-caution">In stores only</span>
+        ) : (
+          product.availableInRetail && (
+            <span className="text-micro text-ink-faint">Also in stores</span>
+          )
+        )}
+      </div>
+    </Link>
+  );
+}
+
+export function ProductGrid({ products }: { products: ProductSummary[] }) {
+  if (products.length === 0) return null;
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {products.map((p) => (
+        <ProductCard key={p.id} product={p} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Empty states are an invitation to act, not an apology. Each one says what is
+ * missing and what to do about it.
+ */
+export function Empty({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) {
+  return (
+    <div className="border border-dashed border-[--color-rule] p-10 text-center">
+      <p className="font-display text-h3 font-bold">{title}</p>
+      <p className="mx-auto mt-2 max-w-[48ch] text-small text-ink-soft">{detail}</p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+}
+
+export function PageHeader({
+  title,
+  intro,
+  accent,
+}: {
+  title: string;
+  intro?: string;
+  accent?: string;
+}) {
+  return (
+    <div className="border-b border-[--color-rule] bg-shelf">
+      <div className="mx-auto max-w-6xl px-5 py-12">
+        <h1 className="max-w-[20ch] text-h1 font-extrabold" style={accent ? { color: accent } : undefined}>
+          {title}
+        </h1>
+        {intro && <p className="mt-3 max-w-[60ch] text-lead text-ink-soft">{intro}</p>}
+      </div>
+    </div>
+  );
+}
