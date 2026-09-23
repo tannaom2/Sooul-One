@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { headers, cookies } from "next/headers";
-import { getOrCreateSessionId, SESSION_COOKIE } from "@/server/cart";
+import { headers } from "next/headers";
+import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import "./globals.css";
 
@@ -149,27 +149,15 @@ function Footer() {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Top of the funnel: recorded once per new visitor, not once per page view.
-  // A cookie that already exists means either a returning visitor or a
-  // session this same request cycle already assigned — either way, no DB
-  // write needed, which keeps this cheap for every request after the first.
-  // Skipped for /admin and API routes: this funnel is about shoppers, not
-  // owner traffic or the app's own internal calls.
-  const path = (await headers()).get("x-invoke-path") ?? "";
-  if (!path.startsWith("/admin") && !path.startsWith("/api")) {
-    try {
-      const hadSessionAlready = Boolean((await cookies()).get(SESSION_COOKIE)?.value);
-      if (!hadSessionAlready) {
-        const sessionId = await getOrCreateSessionId();
-        void recordEvent(sessionId, "VISIT", { metadata: { path } });
-      }
-    } catch {
-      // Next refuses to set a cookie while statically prerendering a page —
-      // the four policy pages under /policies/[policy] use
-      // generateStaticParams and hit this layout at build time, outside any
-      // real request. No visitor to record there; every other route in the
-      // app is force-dynamic and hits the branch above instead.
-    }
+  // Top of the funnel, recorded once per new visitor. proxy.ts issues the
+  // session cookie and sets x-new-session on the very first request, so this
+  // only reads — Server Components can't set cookies.
+  const requestHeaders = await headers();
+  const path = requestHeaders.get("x-invoke-path") ?? "";
+  const isAdmin = path.startsWith("/admin");
+  if (requestHeaders.get("x-new-session") === "1") {
+    const sessionId = await readSessionId();
+    if (sessionId) void recordEvent(sessionId, "VISIT", { metadata: { path } });
   }
 
   return (
@@ -191,9 +179,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
-        <Nav />
+        {/* The owner console has its own chrome (admin/layout.tsx); the
+            storefront's sticky header used to sit on top of it. */}
+        {!isAdmin && <Nav />}
         <main>{children}</main>
-        <Footer />
+        {!isAdmin && <Footer />}
       </body>
     </html>
   );

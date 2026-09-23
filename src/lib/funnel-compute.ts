@@ -21,10 +21,10 @@ export interface FunnelStage {
   readonly type: FunnelStageType;
   readonly label: string;
   readonly sessions: number;
-  /** Of the stage before this one. Null for the first stage. */
+  /** Of the stage before this one. Null for the first stage, or when the previous stage is empty. */
   readonly conversionFromPrevious: number | null;
-  /** Of the very first stage (VISIT). */
-  readonly conversionFromStart: number;
+  /** Of the very first stage (VISIT). Null when there were no visits to divide by. */
+  readonly conversionFromStart: number | null;
 }
 
 /**
@@ -36,14 +36,17 @@ export interface FunnelStage {
  * turns the resulting numbers into stages and conversion rates.
  */
 export function computeFunnelStages(counts: readonly number[]): FunnelStage[] {
-  const startCount = counts[0] || 1; // avoid divide-by-zero when there's no traffic yet
+  // A rate over an empty base isn't 0% or 200% — it's undefined, and showing
+  // a number there is how the funnel once reported "200% of visitors".
+  const rate = (part: number, whole: number) => (whole > 0 ? part / whole : null);
+  const start = counts[0] ?? 0;
 
   return STAGES.map((type, i) => ({
     type,
     label: STAGE_LABEL[type],
     sessions: counts[i] ?? 0,
-    conversionFromPrevious: i === 0 ? null : counts[i - 1] > 0 ? counts[i] / counts[i - 1] : 0,
-    conversionFromStart: (counts[i] ?? 0) / startCount,
+    conversionFromPrevious: i === 0 ? null : rate(counts[i] ?? 0, counts[i - 1] ?? 0),
+    conversionFromStart: rate(counts[i] ?? 0, start),
   }));
 }
 

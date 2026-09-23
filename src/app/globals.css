@@ -60,8 +60,13 @@
    Base
    -------------------------------------------------------------------------- */
 
-* {
-  border-color: var(--color-rule);
+/* In @layer base so utilities like border-alert can override it. Unlayered,
+   this beat every border-colour utility on the site — including the red
+   edge on the allergen warning. */
+@layer base {
+  * {
+    border-color: var(--color-rule);
+  }
 }
 
 html {

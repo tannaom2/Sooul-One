@@ -6,8 +6,8 @@ import { Empty, NoAccess } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-function pct(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
+function pct(value: number | null): string {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
 
 export default async function FunnelPage({
@@ -23,7 +23,12 @@ export default async function FunnelPage({
 
   const [funnel, abandoned] = await Promise.all([buildFunnel(days), findAbandonedCarts(7, 50)]);
 
-  const maxSessions = funnel.stages[0]?.sessions || 1;
+  // Bars scale to the largest stage, not the first, so a later stage can
+  // never draw wider than its card (it did, when visits read zero).
+  const maxSessions = Math.max(0, ...funnel.stages.map((s) => s.sessions));
+  // A later step can't genuinely outnumber an earlier one; when it does, the
+  // earlier step wasn't being recorded for part of the window.
+  const undercounted = funnel.stages.some((s, i) => i > 0 && s.sessions > funnel.stages[i - 1].sessions);
 
   return (
     <div className="grid gap-10">
@@ -48,15 +53,21 @@ export default async function FunnelPage({
           <Empty title="No traffic yet" detail="The funnel fills in as shoppers visit the site." />
         ) : (
           <div className="grid gap-3">
+            {undercounted && (
+              <p className="border-l-4 border-caution bg-shelf px-4 py-3 text-small">
+                Some steps show more sessions than the step before them, so rates over 100% here
+                aren&apos;t real conversion rates. Visit tracking only started working on 24 Sept 2026;
+                earlier sessions have product views but no recorded visit. This clears once the
+                selected period no longer reaches back before that date.
+              </p>
+            )}
             {funnel.stages.map((stage) => (
               <div key={stage.type} className="panel p-4">
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                   <p className="font-semibold">{stage.label}</p>
                   <p className="tabular text-small text-ink-faint">
-                    {stage.sessions.toLocaleString()} sessions
-                    {stage.conversionFromPrevious !== null && (
-                      <> · {pct(stage.conversionFromPrevious)} of previous step</>
-                    )}
+                    {stage.sessions.toLocaleString()} {stage.sessions === 1 ? "session" : "sessions"}
+                    {stage.type !== "VISIT" && <> · {pct(stage.conversionFromPrevious)} of previous step</>}
                     {" · "}
                     {pct(stage.conversionFromStart)} of visitors
                   </p>

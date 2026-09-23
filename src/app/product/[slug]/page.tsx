@@ -9,7 +9,7 @@ import {
   evaluateBatchForDelivery,
 } from "@/lib/compliance/shelf-life";
 import { estimateDeliveryDate } from "@/lib/checkout/delivery";
-import { getOrCreateSessionId } from "@/server/cart";
+import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { ReviewForm } from "@/components/review-form";
 
@@ -58,13 +58,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product: any = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
-  // Fire-and-forget: a funnel miss must never be the reason a product page
-  // fails to render. getOrCreateSessionId() also assigns the guest session
-  // cookie for a shopper who hasn't touched the cart yet, so it's the same
-  // identity the cart and checkout events below join against.
-  getOrCreateSessionId()
-    .then((sessionId) => recordEvent(sessionId, "PRODUCT_VIEW", { productId: product.id }))
-    .catch(() => {});
+  // The session cookie is issued by proxy.ts before this renders, so it's the
+  // same identity the cart and checkout events join against. recordEvent
+  // never throws, so a funnel miss can't stop the page rendering.
+  const sessionId = await readSessionId();
+  if (sessionId) void recordEvent(sessionId, "PRODUCT_VIEW", { productId: product.id });
 
   const isSupplement = product.regulatoryType === "HEALTH_SUPPLEMENT";
   const price = displayPrice(product);

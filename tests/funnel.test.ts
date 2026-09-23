@@ -17,23 +17,27 @@ describe("computeFunnelStages", () => {
     expect(stages[4].conversionFromStart).toBeCloseTo(0.04);
   });
 
-  it("does not divide by zero when there is no traffic at all", () => {
+  it("reports no rate at all, rather than 0%, when there is no traffic", () => {
     const stages = computeFunnelStages([0, 0, 0, 0, 0]);
-    expect(stages.every((s) => Number.isFinite(s.conversionFromStart))).toBe(true);
-    expect(stages[0].conversionFromStart).toBe(0);
+    expect(stages.every((s) => s.conversionFromStart === null)).toBe(true);
+    expect(stages.slice(1).every((s) => s.conversionFromPrevious === null)).toBe(true);
   });
 
-  it("reports zero conversion into a stage that had visitors before it but none reached it", () => {
+  it("reports a real 0% when visitors arrived but none reached the next stage", () => {
     const stages = computeFunnelStages([100, 0, 0, 0, 0]);
     expect(stages[1].conversionFromPrevious).toBe(0);
+    expect(stages[1].conversionFromStart).toBe(0);
   });
 
-  it("handles a stage recovering after a zero previous stage without dividing by zero", () => {
-    // Pathological (a later stage can't exceed an earlier one in practice),
-    // but the arithmetic must not produce Infinity/NaN regardless.
-    const stages = computeFunnelStages([0, 5, 0, 0, 0]);
-    expect(stages[1].conversionFromPrevious).toBe(0);
-    expect(Number.isFinite(stages[1].conversionFromStart)).toBe(true);
+  it("never invents a rate over an empty earlier stage (the '200% of visitors' bug)", () => {
+    // Zero recorded visits but real product views — what the funnel showed
+    // while visit tracking was silently failing. A previous version of this
+    // test only checked the result was finite, which 5/1 = 500% satisfied.
+    const stages = computeFunnelStages([0, 5, 5, 5, 2]);
+    expect(stages[1].conversionFromPrevious).toBeNull();
+    expect(stages[1].conversionFromStart).toBeNull();
+    expect(stages[4].conversionFromStart).toBeNull();
+    expect(stages[2].conversionFromPrevious).toBe(1);
   });
 });
 

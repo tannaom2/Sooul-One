@@ -1,38 +1,54 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/session-cookie";
 
 /**
- * Edge gate for the owner console.
+ * Runs before every page request. Two jobs:
  *
- * Only checks that a session cookie is PRESENT — it deliberately does not
- * verify the JWT here. This runs on the edge runtime, where the crypto needed
- * for verification is awkward, and more importantly a gate that merely
- * looks authoritative is worse than one that is honestly shallow. Real
- * verification (signature, expiry, MFA flag) happens in the admin layout on
- * the server, which is the boundary that actually protects data.
+ * 1. Storefront: issue the guest session cookie up front. Server Components
+ *    are not allowed to set cookies, so doing it during page render (as the
+ *    funnel tracking once did) threw — and the error was swallowed, which is
+ *    why "Visited the site" read zero. Here it can be set, and it's also put
+ *    on the request so the page rendering right now already sees it.
  *
- * This layer exists to bounce anonymous traffic cheaply, not to be the lock.
+ * 2. Owner console: bounce requests with no admin cookie at all. This only
+ *    checks the cookie is PRESENT — real verification (signature, expiry, MFA,
+ *    role) happens server-side in the admin layout and on every page and
+ *    action. This layer bounces anonymous traffic cheaply; it isn't the lock.
+ *
+ * `x-invoke-path` and `x-new-session` are always overwritten here, never
+ * trusted from the client, since layouts make decisions based on them.
  */
+
+const BOT = /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|lighthouse/i;
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isAdmin = pathname.startsWith("/admin");
+  const isApi = pathname.startsWith("/api");
 
-  if (!pathname.startsWith("/admin")) return NextResponse.next();
+  // Bots would otherwise each count as a new "visitor" in the funnel.
+  const newSessionId =
+    !isAdmin && !isApi && !request.cookies.get(SESSION_COOKIE) && !BOT.test(request.headers.get("user-agent") ?? "")
+      ? crypto.randomUUID()
+      : null;
+  if (newSessionId) request.cookies.set(SESSION_COOKIE, newSessionId);
 
-  // admin/layout.tsx reads this to tell the login page apart from every other
-  // admin route, since it can't call usePathname() from a server component.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-invoke-path", pathname);
-  const withPathHeader = { request: { headers: requestHeaders } };
+  requestHeaders.delete("x-new-session");
+  if (newSessionId) requestHeaders.set("x-new-session", "1");
 
-  if (pathname.startsWith("/admin/login")) return NextResponse.next(withPathHeader);
-
-  if (!request.cookies.get("soulone_admin")) {
+  if (isAdmin && !pathname.startsWith("/admin/login") && !request.cookies.get("soulone_admin")) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next(withPathHeader);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  if (newSessionId) response.cookies.set(SESSION_COOKIE, newSessionId, SESSION_COOKIE_OPTIONS);
+  return response;
 }
 
-export const config = { matcher: ["/admin/:path*"] };
+// Every page, but not static assets or files with an extension.
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"] };

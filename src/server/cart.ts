@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/session-cookie";
 import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
 import { buildQuote, type QuoteLineInput } from "@/lib/checkout/quote";
@@ -18,7 +19,7 @@ import type { BundleRule } from "@/lib/checkout/bundles";
  * customer can edit.
  */
 
-export const SESSION_COOKIE = "soulone_cart";
+export { SESSION_COOKIE };
 
 /**
  * The state SooulOne is registered in. Decides CGST+SGST versus IGST.
@@ -33,13 +34,7 @@ export async function getOrCreateSessionId(): Promise<string> {
   if (existing) return existing;
 
   const id = randomUUID();
-  store.set(SESSION_COOKIE, id, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  store.set(SESSION_COOKIE, id, SESSION_COOKIE_OPTIONS);
   return id;
 }
 
