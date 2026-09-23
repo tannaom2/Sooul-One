@@ -312,6 +312,7 @@ model Order {
   guestPhone      String?
   status          OrderStatus @default(PENDING_PAYMENT)
   items           OrderItem[]
+  events          OrderEvent[]
   /// Sum of lines at the price paid, after product-level discounts.
   subtotal        Decimal     @db.Decimal(10, 2)
   /// [ADDED] Saved through product-level discounts (list price minus price paid).
@@ -466,17 +467,50 @@ model AdminUser {
   createdAt    DateTime        @default(now())
 }
 
+/// Append-only: a database trigger (see migration
+/// 20260924010000_audit_trail) rejects UPDATE and DELETE, so an account that
+/// can change data can't also erase the record of having changed it. Admins
+/// with history therefore can't be deleted — deactivate them instead.
 model AdminAuditLog {
-  id          String    @id @default(cuid())
-  adminUserId String
-  adminUser   AdminUser @relation(fields: [adminUserId], references: [id])
+  id          String     @id @default(cuid())
+  /// Null only for failed sign-ins against an email that isn't an admin.
+  adminUserId String?
+  /// Restrict, not the optional-relation default of SetNull: deleting an
+  /// admin must not silently strip their name off everything they did.
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+  /// Email at the time of the action, so the record stays readable even if
+  /// the account is later renamed.
+  actorEmail  String?
   action      String
   entityType  String
   entityId    String
+  /// For edits: { field: { from, to } } for changed fields only.
   changes     Json?
-  createdAt   DateTime  @default(now())
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime   @default(now())
 
   @@index([entityType, entityId])
+  @@index([adminUserId, createdAt])
+  @@index([createdAt])
+}
+
+/// What happened to an order, in order — the timeline on the admin order
+/// page. Covers events with no admin behind them (placed by the customer,
+/// paid via the Razorpay webhook), which the admin audit log can't hold.
+model OrderEvent {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// PLACED | PAYMENT_CAPTURED | PAYMENT_FAILED | REFUNDED | STATUS_CHANGED | EMAIL_SENT | NOTE
+  type       String
+  /// CUSTOMER | SYSTEM | ADMIN
+  actorType  String
+  actorEmail String?
+  detail     Json?
+  createdAt  DateTime @default(now())
+
+  @@index([orderId, createdAt])
 }
 
 /// A funnel step, keyed by the same guest session cookie the cart already

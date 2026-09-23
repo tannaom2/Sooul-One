@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
+import { recordOrderEvent } from "@/lib/order-events";
 
 /**
  * Razorpay webhook.
@@ -72,7 +73,18 @@ export async function POST(request: Request) {
         // the first moment the payment is actually known to have cleared.
         // Emailing "thanks for your order" off the browser redirect would
         // mean confirming orders that never got paid for.
-        await sendOrderConfirmation(paid);
+        await recordOrderEvent(order.id, "PAYMENT_CAPTURED", { type: "SYSTEM" }, {
+          razorpayPaymentId: payment.id,
+          amountPaise: payment.amount,
+          method: payment.method ?? null,
+        });
+
+        const sent = await sendOrderConfirmation(paid);
+        await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
+          email: "order_confirmation",
+          delivered: sent.delivered,
+          reason: sent.reason ?? null,
+        });
 
         if (order.sessionId) {
           void recordEvent(order.sessionId, "ORDER_PAID", {
@@ -88,6 +100,10 @@ export async function POST(request: Request) {
         where: { id: order.id },
         data: { status: "FAILED", paymentStatus: "failed" },
       });
+      await recordOrderEvent(order.id, "PAYMENT_FAILED", { type: "SYSTEM" }, {
+        razorpayPaymentId: payment.id,
+        reason: payment.error_description ?? payment.error_reason ?? null,
+      });
       // Stock is deliberately NOT returned here. A failed payment is often
       // retried within minutes, and releasing the reserved batch would let
       // someone else take the last compliant stock mid-retry. Reconciling
@@ -98,6 +114,10 @@ export async function POST(request: Request) {
       await db.order.update({
         where: { id: order.id },
         data: { status: "REFUNDED", paymentStatus: "refunded" },
+      });
+      await recordOrderEvent(order.id, "REFUNDED", { type: "SYSTEM" }, {
+        razorpayRefundId: event?.payload?.refund?.entity?.id ?? null,
+        amountPaise: event?.payload?.refund?.entity?.amount ?? null,
       });
       break;
   }

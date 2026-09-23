@@ -24,7 +24,9 @@ export type Permission =
   | "reviews:moderate"
   /** Revenue figures, analytics, funnel, payment reconciliation. */
   | "finance:view"
-  | "stores:write";
+  | "stores:write"
+  /** The audit log: everyone's actions and IP addresses. */
+  | "audit:view";
 
 const MATRIX: Record<AdminRole, readonly Permission[]> = {
   OWNER: [
@@ -39,6 +41,7 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "reviews:moderate",
     "finance:view",
     "stores:write",
+    "audit:view",
   ],
   MANAGER: [
     "dashboard:view",

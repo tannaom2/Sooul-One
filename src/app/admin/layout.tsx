@@ -31,7 +31,13 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
       { href: "/admin/reconciliation", label: "Reconciliation", permission: "finance:view" },
     ],
   },
-  { group: "Settings", items: [{ href: "/admin/stores", label: "Stores", permission: "stores:write" }] },
+  {
+    group: "Settings",
+    items: [
+      { href: "/admin/stores", label: "Stores", permission: "stores:write" },
+      { href: "/admin/activity", label: "Activity", permission: "audit:view" },
+    ],
+  },
 ];
 
 function isActive(path: string, href: string): boolean {

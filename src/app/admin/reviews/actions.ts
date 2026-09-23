@@ -8,6 +8,9 @@ export async function moderateReview(reviewId: string, decision: "APPROVE" | "RE
   const session = await requirePermission("reviews:moderate");
   if (!session) throw new Error("Not authorized.");
 
+  const review = await db.review.findUnique({ where: { id: reviewId }, select: { productId: true, rating: true } });
+  if (!review) return;
+
   if (decision === "APPROVE") {
     await db.review.update({ where: { id: reviewId }, data: { isApproved: true } });
   } else {
@@ -18,6 +21,9 @@ export async function moderateReview(reviewId: string, decision: "APPROVE" | "RE
     await db.review.delete({ where: { id: reviewId } });
   }
 
-  await audit(session.adminUserId, `REVIEW_${decision}`, "Review", reviewId);
+  // Product and rating only. The reviewer's name and comment are left out on
+  // purpose: a rejected review is deleted to avoid keeping a stranger's text,
+  // and copying it into the permanent, append-only log would undo that.
+  await audit(session, `REVIEW_${decision}`, "Review", reviewId, review);
   revalidatePath("/admin/reviews");
 }

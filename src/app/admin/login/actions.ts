@@ -54,18 +54,28 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
+  const user = await db.adminUser.findUnique({ where: { email } });
+  // The email is attacker-supplied on a failed attempt, so it's truncated.
+  const actor = { adminUserId: user?.id ?? null, email: email.slice(0, 200) || "(blank)" };
+
   if (rateLimited(email || "anonymous")) {
+    await audit(actor, "SIGN_IN_LOCKED", "AdminUser", user?.id ?? "-");
     return { stage: "PASSWORD", error: "Too many attempts. Wait 15 minutes and try again." };
   }
 
-  const user = await db.adminUser.findUnique({ where: { email } });
-
   // One message for both "no such user" and "wrong password", so the form
-  // cannot be used to discover which email addresses are registered.
+  // cannot be used to discover which email addresses are registered. The
+  // audit log (owner-only) does record which it was.
   const generic = { stage: "PASSWORD" as const, error: "That email and password don't match." };
 
-  if (!user || !user.isActive) return generic;
-  if (!(await verifyPassword(password, user.passwordHash))) return generic;
+  if (!user || !user.isActive) {
+    await audit(actor, "SIGN_IN_FAILED", "AdminUser", user?.id ?? "-", { reason: user ? "inactive" : "unknown_email" });
+    return generic;
+  }
+  if (!(await verifyPassword(password, user.passwordHash))) {
+    await audit(actor, "SIGN_IN_FAILED", "AdminUser", user.id, { reason: "wrong_password" });
+    return generic;
+  }
 
   if (!user.mfaSecret) {
     return {
@@ -91,6 +101,7 @@ export async function verifyMfa(_prev: LoginState, formData: FormData): Promise<
 
   if (!session) return { stage: "PASSWORD", error: "That session expired. Sign in again." };
   if (rateLimited(`mfa:${session.email}`)) {
+    await audit(session, "MFA_LOCKED", "AdminUser", session.adminUserId);
     await clearSession();
     return { stage: "PASSWORD", error: "Too many codes tried. Sign in again." };
   }
@@ -98,18 +109,23 @@ export async function verifyMfa(_prev: LoginState, formData: FormData): Promise<
   const user = await db.adminUser.findUnique({ where: { id: session.adminUserId } });
   if (!user?.mfaSecret) return { stage: "PASSWORD", error: "Sign in again." };
 
+  // Worth logging on its own: a wrong code after a right password means
+  // someone has the password.
   if (!verifyTotp(code, user.mfaSecret)) {
+    await audit(session, "MFA_FAILED", "AdminUser", user.id);
     return { stage: "MFA", error: "That code isn't right. Check your authenticator and retry." };
   }
 
   await issueSession({ ...session, mfaVerified: true });
   await db.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-  await audit(user.id, "SIGN_IN", "AdminUser", user.id);
+  await audit(session, "SIGN_IN", "AdminUser", user.id);
 
   redirect("/admin");
 }
 
 export async function signOut() {
+  const session = await readSession();
+  if (session) await audit(session, "SIGN_OUT", "AdminUser", session.adminUserId);
   await clearSession();
   redirect("/admin/login");
 }

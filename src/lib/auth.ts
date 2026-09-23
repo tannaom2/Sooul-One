@@ -19,7 +19,8 @@ import "server-only";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { generateSecret, verifySync } from "otplib";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { can, type AdminRole, type Permission } from "./permissions";
 
@@ -163,15 +164,27 @@ export async function requirePermission(permission: Permission): Promise<AdminSe
  * visible in the server logs.
  */
 export async function audit(
-  adminUserId: string,
+  actor: { adminUserId: string | null; email: string },
   action: string,
   entityType: string,
   entityId: string,
   changes?: unknown,
 ): Promise<void> {
   try {
+    const h = await headers();
     await db.adminAuditLog.create({
-      data: { adminUserId, action, entityType, entityId, changes: changes ?? undefined },
+      data: {
+        adminUserId: actor.adminUserId,
+        actorEmail: actor.email,
+        action,
+        entityType,
+        entityId,
+        changes: (changes ?? undefined) as Prisma.InputJsonValue | undefined,
+        // The whole chain, not just the first entry: the leftmost value can be
+        // supplied by the client, so only the full chain is honest evidence.
+        ipAddress: (h.get("x-forwarded-for") || h.get("x-real-ip"))?.slice(0, 200) ?? null,
+        userAgent: h.get("user-agent")?.slice(0, 400) ?? null,
+      },
     });
   } catch (error) {
     console.error("[audit] failed to record", { action, entityType, entityId }, error);

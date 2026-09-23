@@ -16,7 +16,7 @@ export async function runReconciliation(windowDays: number): Promise<Reconciliat
 
   const result = await reconcilePayments(windowDays);
 
-  await audit(session.adminUserId, "RUN_RECONCILIATION", "PaymentReconciliation", "-", {
+  await audit(session, "RUN_RECONCILIATION", "PaymentReconciliation", "-", {
     windowDays,
     localOrdersChecked: result.localOrdersChecked,
     razorpayPaymentsChecked: result.razorpayPaymentsChecked,

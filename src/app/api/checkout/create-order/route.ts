@@ -8,6 +8,7 @@ import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { checkoutInputSchema } from "@/lib/validation/checkout";
 import { newOrderAccessToken } from "@/lib/order-access";
+import { recordOrderEvent } from "@/lib/order-events";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -157,6 +158,10 @@ export async function POST(request: Request) {
     orderId: order.id,
     metadata: { totalPaise: quote.totalPaise, method: input.paymentMethod },
   });
+  await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email }, {
+    method: input.paymentMethod,
+    totalPaise: quote.totalPaise,
+  });
 
   // --- Cash on delivery needs no gateway -----------------------------------
   if (input.paymentMethod === "COD") {
@@ -179,7 +184,12 @@ export async function POST(request: Request) {
     // sent from here instead. Awaited but non-throwing: sendOrderConfirmation
     // swallows its own failures, so a mail outage cannot turn a placed order
     // into a 500 the customer would reasonably retry.
-    await sendOrderConfirmation(confirmed);
+    const sent = await sendOrderConfirmation(confirmed);
+    await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
+      email: "order_confirmation",
+      delivered: sent.delivered,
+      reason: sent.reason ?? null,
+    });
 
     return NextResponse.json({ orderNumber: order.orderNumber, accessToken: order.accessToken, method: "COD" });
   }

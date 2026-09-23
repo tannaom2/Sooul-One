@@ -13,6 +13,7 @@ const ALL: Permission[] = [
   "reviews:moderate",
   "finance:view",
   "stores:write",
+  "audit:view",
 ];
 
 // The full expected matrix, written out rather than derived, so a change to
@@ -20,7 +21,7 @@ const ALL: Permission[] = [
 // purpose.
 const EXPECTED: Record<AdminRole, Permission[]> = {
   OWNER: ALL,
-  MANAGER: ALL.filter((p) => p !== "finance:view"),
+  MANAGER: ALL.filter((p) => p !== "finance:view" && p !== "audit:view"),
   FULFILMENT: ["dashboard:view", "orders:view", "orders:write", "products:view", "batches:write"],
   CONTENT: ["dashboard:view", "products:view", "products:write", "reviews:moderate"],
   STAFF: ["dashboard:view"],
@@ -43,5 +44,10 @@ describe("permission matrix", () => {
   it("only the owner sees finance", () => {
     const withFinance = (Object.keys(EXPECTED) as AdminRole[]).filter((r) => can(r, "finance:view"));
     expect(withFinance).toEqual(["OWNER"]);
+  });
+
+  it("only the owner sees the audit log", () => {
+    const withAudit = (Object.keys(EXPECTED) as AdminRole[]).filter((r) => can(r, "audit:view"));
+    expect(withAudit).toEqual(["OWNER"]);
   });
 });

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     },
   });
 
-  await audit(session.adminUserId, "UPLOAD_IMAGE", "ProductImage", image.id, { productId });
+  await audit(session, "UPLOAD_IMAGE", "ProductImage", image.id, { productId });
 
   return NextResponse.json({ ok: true, id: image.id, url: image.url });
 }

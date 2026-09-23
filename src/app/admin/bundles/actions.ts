@@ -62,7 +62,14 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
     },
   });
 
-  await audit(session.adminUserId, "CREATE_BUNDLE", "Bundle", bundle.id);
+  await audit(session, "CREATE_BUNDLE", "Bundle", bundle.id, {
+    name,
+    discountType,
+    discountValue,
+    minItems,
+    maxItems,
+    eligibleProductIds,
+  });
   revalidatePath("/admin/bundles");
   revalidatePath("/cart");
 
@@ -74,7 +81,9 @@ export async function toggleBundle(bundleId: string, isActive: boolean): Promise
   if (!session) throw new Error("Not authorized.");
 
   await db.bundle.update({ where: { id: bundleId }, data: { isActive } });
-  await audit(session.adminUserId, isActive ? "ACTIVATE_BUNDLE" : "DEACTIVATE_BUNDLE", "Bundle", bundleId);
+  await audit(session, isActive ? "ACTIVATE_BUNDLE" : "DEACTIVATE_BUNDLE", "Bundle", bundleId, {
+    isActive: { from: !isActive, to: isActive },
+  });
   revalidatePath("/admin/bundles");
   revalidatePath("/cart");
 }
@@ -83,8 +92,23 @@ export async function deleteBundle(bundleId: string): Promise<void> {
   const session = await requirePermission("bundles:write");
   if (!session) throw new Error("Not authorized.");
 
+  // Snapshot before deleting: the log entry is the only record left of what
+  // the bundle was, so it holds enough to recreate it.
+  const bundle = await db.bundle.findUnique({ where: { id: bundleId }, include: { eligibleProducts: true } });
+  if (!bundle) return;
   await db.bundle.delete({ where: { id: bundleId } });
-  await audit(session.adminUserId, "DELETE_BUNDLE", "Bundle", bundleId);
+  await audit(session, "DELETE_BUNDLE", "Bundle", bundleId, {
+    deleted: {
+      name: bundle.name,
+      brandId: bundle.brandId,
+      discountType: bundle.discountType,
+      discountValue: Number(bundle.discountValue),
+      minItems: bundle.minItems,
+      maxItems: bundle.maxItems,
+      isActive: bundle.isActive,
+      eligibleProductIds: bundle.eligibleProducts.map((e) => e.productId),
+    },
+  });
   revalidatePath("/admin/bundles");
   revalidatePath("/cart");
 }

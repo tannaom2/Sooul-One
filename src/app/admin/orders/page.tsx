@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { Empty, NoAccess } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
@@ -12,6 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function Orders() {
   const session = await requirePermission("orders:view");
   if (!session) return <NoAccess />;
+  const canWrite = can(session.role, "orders:write");
 
   let orders: any[] = [];
   try {
@@ -37,7 +40,9 @@ export default async function Orders() {
           return (
             <div key={o.id} className="panel">
               <div className="panel-head flex flex-wrap items-center justify-between gap-2">
-                <span className="tabular">{o.orderNumber}</span>
+                <Link href={`/admin/orders/${o.id}`} className="tabular underline-offset-2 hover:underline">
+                  {o.orderNumber}
+                </Link>
                 <span className="text-micro font-normal text-ink-faint">
                   {formatDate(o.placedAt)} · {o.status.replace(/_/g, " ").toLowerCase()}
                 </span>
@@ -69,9 +74,11 @@ export default async function Orders() {
                 </div>
               </div>
 
-              <div className="border-t border-[--color-rule] p-3.5">
-                <OrderStatusForm orderId={o.id} current={o.status} tracking={o.trackingNumber} />
-              </div>
+              {canWrite && (
+                <div className="border-t border-[--color-rule] p-3.5">
+                  <OrderStatusForm orderId={o.id} current={o.status} tracking={o.trackingNumber} />
+                </div>
+              )}
             </div>
           );
         })}

@@ -5,6 +5,8 @@ import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { audit, requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { diffFields } from "@/lib/audit-diff";
+import { recordOrderEvent } from "@/lib/order-events";
 import { productInputSchema } from "@/lib/validation/product";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { sendShippingNotification } from "@/lib/email";
@@ -122,12 +124,16 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   }
   const input = parsed.data;
 
+  // The stored row as it was before this save — used by the pricing guard,
+  // the supplement sign-off, and the audit diff.
+  const before = id ? await db.product.findUnique({ where: { id } }) : null;
+  if (id && !before) return { ok: false, message: "That product no longer exists." };
+
   // Copy editors (CONTENT) can change words but not money. Checked against
   // the stored row, not the form's claims about what changed.
   if (!can(session.role, "products:pricing")) {
-    const current = id ? await db.product.findUnique({ where: { id } }) : null;
-    if (!current) return { ok: false, message: "Only the owner or a manager can create products, since that sets a price." };
-    if (pricingChanged(current, input)) {
+    if (!before) return { ok: false, message: "Only the owner or a manager can create products, since that sets a price." };
+    if (pricingChanged(before, input)) {
       return { ok: false, message: "You can edit this product's copy, but price, discount and GST changes need a manager." };
     }
   }
@@ -173,11 +179,10 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
      * description changes after approval, the approval is void — otherwise an
      * edit could smuggle new claims in behind an old tick.
      */
-    const existing = id ? await db.product.findUnique({ where: { id } }) : null;
-    const copyChanged = !existing || existing.description !== input.description;
+    const copyChanged = !before || before.description !== input.description;
 
     data.complianceReviewedAt = input.complianceReviewConfirmed && !copyChanged
-      ? (existing?.complianceReviewedAt ?? new Date())
+      ? (before?.complianceReviewedAt ?? new Date())
       : input.complianceReviewConfirmed
         ? new Date()
         : null;
@@ -190,7 +195,18 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     ? await db.product.update({ where: { id }, data: data as Prisma.ProductUpdateInput })
     : await db.product.create({ data: data as Prisma.ProductCreateInput });
 
-  await audit(session.adminUserId, id ? "UPDATE_PRODUCT" : "CREATE_PRODUCT", "Product", saved.id, data);
+  if (before) {
+    // Only what actually changed — and nothing at all for a no-op save, so
+    // the log stays a record of changes rather than of button presses.
+    const changes = diffFields(before as unknown as Record<string, unknown>, data);
+    if (Object.keys(changes).length > 0) await audit(session, "UPDATE_PRODUCT", "Product", saved.id, changes);
+  } else {
+    await audit(session, "CREATE_PRODUCT", "Product", saved.id, {
+      name: input.name,
+      sku: input.sku,
+      basePrice: input.basePrice,
+    });
+  }
 
   revalidatePath("/admin/products");
   revalidatePath(`/product/${input.slug}`);
@@ -245,7 +261,7 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
     data: { stockQuantity: { increment: quantity } },
   });
 
-  await audit(session.adminUserId, "ADD_BATCH", "ProductBatch", batch.id, { batchNumber, quantity });
+  await audit(session, "ADD_BATCH", "ProductBatch", batch.id, { productId, batchNumber, quantity });
   revalidatePath("/admin/batches");
 
   return { ok: true, message: `Batch ${batchNumber} received.` };
@@ -275,7 +291,7 @@ export async function saveStore(_prev: ActionResult, form: FormData): Promise<Ac
     },
   });
 
-  await audit(session.adminUserId, "CREATE_STORE", "StoreLocation", store.id);
+  await audit(session, "CREATE_STORE", "StoreLocation", store.id, { name, city });
   revalidatePath("/admin/stores");
   revalidatePath("/stores");
 
@@ -294,6 +310,7 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
   if (!allowed.includes(status as OrderStatus)) return { ok: false, message: "That status isn't available." };
 
   const previous = await db.order.findUnique({ where: { id: orderId } });
+  if (!previous) return { ok: false, message: "That order no longer exists." };
 
   const updated = await db.order.update({
     where: { id: orderId },
@@ -303,18 +320,50 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
   // Only on the transition INTO shipped, not on every save of an already
   // shipped order — otherwise correcting a typo in the tracking number would
   // email the customer all over again.
+  const changes = diffFields(
+    { status: previous.status, trackingNumber: previous.trackingNumber },
+    { status, trackingNumber: tracking || previous.trackingNumber },
+  );
+  const admin = { type: "ADMIN" as const, email: session.email };
+  if (Object.keys(changes).length > 0) {
+    await recordOrderEvent(orderId, "STATUS_CHANGED", admin, changes);
+    await audit(session, "SET_ORDER_STATUS", "Order", orderId, changes);
+  }
+
   let mailed = "";
-  if (status === "SHIPPED" && previous?.status !== "SHIPPED") {
+  if (status === "SHIPPED" && previous.status !== "SHIPPED") {
     const sent = await sendShippingNotification(updated);
+    await recordOrderEvent(orderId, "EMAIL_SENT", { type: "SYSTEM" }, {
+      email: "shipping_notification",
+      delivered: sent.delivered,
+      reason: sent.reason ?? null,
+    });
     mailed = sent.delivered
       ? " Customer notified."
       : sent.reason === "not_configured"
         ? " Email isn't configured, so the customer wasn't notified."
         : " Couldn't email the customer — check the server log.";
   }
-
-  await audit(session.adminUserId, "SET_ORDER_STATUS", "Order", orderId, { status });
   revalidatePath("/admin/orders");
 
   return { ok: true, message: `Order marked ${status.toLowerCase()}.${mailed}` };
+}
+
+export async function addOrderNote(_prev: ActionResult, form: FormData): Promise<ActionResult> {
+  const session = await requirePermission("orders:write");
+  if (!session) return { ok: false, message: NOT_ALLOWED };
+
+  const orderId = String(form.get("orderId") ?? "");
+  const note = String(form.get("note") ?? "").trim();
+  if (!note) return { ok: false, message: "Write a note first." };
+  if (note.length > 1000) return { ok: false, message: "Keep notes under 1,000 characters." };
+
+  const order = await db.order.findUnique({ where: { id: orderId }, select: { id: true } });
+  if (!order) return { ok: false, message: "That order no longer exists." };
+
+  await recordOrderEvent(orderId, "NOTE", { type: "ADMIN", email: session.email }, { note });
+  await audit(session, "ADD_ORDER_NOTE", "Order", orderId, { note });
+  revalidatePath(`/admin/orders/${orderId}`);
+
+  return { ok: true, message: "Note added." };
 }
