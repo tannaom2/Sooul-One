@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
+import { percentChange } from "@/lib/order-filters";
 import { findNearExpiryBatches } from "@/lib/compliance/fefo";
 import { Empty, NoAccess } from "@/components/ui";
 
@@ -17,20 +18,57 @@ export default async function Dashboard() {
   const canSeeFinance = can(session.role, "finance:view");
   const canSeeOrders = can(session.role, "orders:view");
 
+  const now = new Date();
+  const DAY = 24 * 60 * 60 * 1000;
+  const since30 = new Date(now.getTime() - 30 * DAY);
+  const since60 = new Date(now.getTime() - 60 * DAY);
+  const since24h = new Date(now.getTime() - DAY);
+
+  // Revenue counts orders that were paid for (or are COD and on their way);
+  // abandoned, failed, cancelled and refunded orders are left out.
+  const earning = { status: { in: ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"] as any } };
+  const period = (from: Date, to: Date) => ({ ...earning, placedAt: { gte: from, lt: to } });
+
   let orders: any[] = [];
   let products: any[] = [];
-  let lowStock: any[] = [];
+  let runningLow: any[] = [];
+  let toShip = 0;
+  let pendingReviews = 0;
+  let failedSignIns = 0;
+  let current = { revenue: 0, orders: 0 };
+  let previous = { revenue: 0, orders: 0 };
 
   try {
-    [orders, products, lowStock] = await Promise.all([
+    const [recent, live, low, ship, reviews, failed, cur, prev] = await Promise.all([
       db.order.findMany({ orderBy: { placedAt: "desc" }, take: 8 }),
+      db.product.findMany({ where: { isActive: true }, include: { batches: true } }),
       db.product.findMany({
-        where: { isActive: true },
-        include: { batches: true },
+        where: { isActive: true, stockQuantity: { lte: db.product.fields.lowStockThreshold } },
+        orderBy: { stockQuantity: "asc" },
       }),
-      db.product.findMany({ where: { isActive: true }, take: 100 }),
+      canSeeOrders ? db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }) : 0,
+      can(session.role, "reviews:moderate") ? db.review.count({ where: { isApproved: false } }) : 0,
+      can(session.role, "audit:view")
+        ? db.adminAuditLog.count({
+            where: {
+              action: { in: ["SIGN_IN_FAILED", "SIGN_IN_LOCKED", "MFA_FAILED", "MFA_LOCKED"] },
+              createdAt: { gte: since24h },
+            },
+          })
+        : 0,
+      db.order.aggregate({ where: period(since30, now), _sum: { totalAmount: true }, _count: { _all: true } }),
+      db.order.aggregate({ where: period(since60, since30), _sum: { totalAmount: true }, _count: { _all: true } }),
     ]);
-  } catch {
+    orders = recent;
+    products = live;
+    runningLow = low;
+    toShip = ship;
+    pendingReviews = reviews;
+    failedSignIns = failed;
+    current = { revenue: decimalToPaise(cur._sum.totalAmount), orders: cur._count._all };
+    previous = { revenue: decimalToPaise(prev._sum.totalAmount), orders: prev._count._all };
+  } catch (error) {
+    console.error("[admin/dashboard] query failed", error);
     return (
       <Empty
         title="Can't reach the database"
@@ -39,18 +77,12 @@ export default async function Dashboard() {
     );
   }
 
-  const paid = orders.filter((o) => ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(o.status));
-  const revenuePaise = paid.reduce((sum, o) => sum + decimalToPaise(o.totalAmount), 0);
-
-  const runningLow = lowStock.filter((p) => p.stockQuantity <= p.lowStockThreshold);
-
   /**
    * Near-expiry is a different alert from low stock and is computed against the
    * point a batch stops being SHIPPABLE, not its printed expiry. For a
    * long-dated product those are many weeks apart, and alerting on expiry
    * would fire far too late to do anything about it.
    */
-  const now = new Date();
   const nearExpiry = products.flatMap((p) => {
     if (!p.shelfLifeDays || !p.batches?.length) return [];
     return findNearExpiryBatches(
@@ -66,18 +98,90 @@ export default async function Dashboard() {
     ).map((b) => ({ ...b, productName: p.name, productId: p.id }));
   });
 
+  // Only items this person can act on, and only when there is something to do.
+  const attention = [
+    canSeeOrders && toShip > 0 && {
+      href: "/admin/orders?view=to_ship",
+      text: `${toShip} ${toShip === 1 ? "order" : "orders"} to pack and ship`,
+    },
+    pendingReviews > 0 && {
+      href: "/admin/reviews",
+      text: `${pendingReviews} ${pendingReviews === 1 ? "review" : "reviews"} waiting for approval`,
+    },
+    can(session.role, "batches:write") && nearExpiry.length > 0 && {
+      href: "#expiry",
+      text: `${nearExpiry.length} ${nearExpiry.length === 1 ? "batch" : "batches"} close to unsellable`,
+      warn: true,
+    },
+    can(session.role, "products:view") && runningLow.length > 0 && {
+      href: "#low-stock",
+      text: `${runningLow.length} ${runningLow.length === 1 ? "product" : "products"} running low`,
+    },
+    failedSignIns > 0 && {
+      href: "/admin/activity?area=AdminUser",
+      text: `${failedSignIns} failed sign-in ${failedSignIns === 1 ? "attempt" : "attempts"} in the last 24 hours`,
+      warn: true,
+    },
+  ].filter((a): a is { href: string; text: string; warn?: boolean } => Boolean(a));
+
+  const tiles = [
+    canSeeFinance && {
+      label: "Revenue, last 30 days",
+      value: formatINR(current.revenue),
+      change: percentChange(current.revenue, previous.revenue),
+    },
+    canSeeOrders && {
+      label: "Orders, last 30 days",
+      value: String(current.orders),
+      change: percentChange(current.orders, previous.orders),
+    },
+    { label: "Live products", value: String(products.length), change: undefined },
+  ].filter((t): t is { label: string; value: string; change: number | null | undefined } => Boolean(t));
+
   return (
     <div className="grid gap-10">
+      <section aria-labelledby="attention-heading">
+        <h1 id="attention-heading" className="mb-3 text-h2 font-extrabold">
+          Needs attention
+        </h1>
+        {attention.length === 0 ? (
+          <p className="panel p-4 text-small text-ink-soft">All caught up. Nothing needs you right now.</p>
+        ) : (
+          <ul className="panel">
+            {attention.map((a) => (
+              <li key={a.href} className="border-b border-[--color-rule] last:border-b-0">
+                <Link href={a.href} className="flex items-center justify-between gap-3 px-4 py-3 text-small hover:bg-shelf">
+                  <span className={a.warn ? "font-semibold text-alert" : "font-semibold"}>{a.text}</span>
+                  <span aria-hidden className="text-ink-faint">
+                    →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section className="grid gap-4 sm:grid-cols-3">
-        {[
-          canSeeFinance && ["Recent revenue", formatINR(revenuePaise), `${paid.length} paid orders`],
-          ["Live products", String(products.length), "across all brands"],
-          canSeeOrders && ["Orders awaiting action", String(orders.filter((o) => o.status === "PAID" || o.status === "PROCESSING").length), "paid or packing"],
-        ].filter((tile): tile is string[] => Boolean(tile)).map(([label, value, sub]) => (
-          <div key={label} className="panel p-4">
-            <p className="text-small text-ink-soft">{label}</p>
-            <p className="tabular mt-1 font-display text-h2 font-extrabold">{value}</p>
-            <p className="text-micro text-ink-faint">{sub}</p>
+        {tiles.map((t) => (
+          <div key={t.label} className="panel p-4">
+            <p className="text-small text-ink-soft">{t.label}</p>
+            <p className="tabular mt-1 font-display text-h2 font-extrabold">{t.value}</p>
+            {t.change !== undefined && (
+              <p className="text-micro text-ink-faint">
+                {t.change === null ? (
+                  "No sales in the 30 days before to compare with"
+                ) : (
+                  <>
+                    <span className="tabular" style={{ color: t.change >= 0 ? "var(--color-veg)" : "var(--color-alert)" }}>
+                      {t.change > 0 ? "+" : t.change < 0 ? "−" : ""}
+                      {Math.abs(t.change)}%
+                    </span>{" "}
+                    vs the 30 days before
+                  </>
+                )}
+              </p>
+            )}
           </div>
         ))}
       </section>
@@ -85,7 +189,7 @@ export default async function Dashboard() {
       {/* Two alerts, kept visually distinct because they demand different
           actions: reorder versus move it before it becomes unsellable. */}
       <section className="grid gap-5 lg:grid-cols-2">
-        <div className="panel">
+        <div id="low-stock" className="panel scroll-mt-6">
           <div className="panel-head">Running low</div>
           {runningLow.length === 0 ? (
             <p className="p-3.5 text-small text-ink-soft">Nothing below its reorder threshold.</p>
@@ -101,7 +205,7 @@ export default async function Dashboard() {
           )}
         </div>
 
-        <div className="panel" style={{ borderColor: nearExpiry.length ? "var(--color-caution)" : undefined }}>
+        <div id="expiry" className="panel scroll-mt-6" style={{ borderColor: nearExpiry.length ? "var(--color-caution)" : undefined }}>
           <div className="panel-head" style={{ borderColor: nearExpiry.length ? "var(--color-caution)" : undefined }}>
             Approaching unsellable
           </div>
@@ -148,7 +252,7 @@ export default async function Dashboard() {
         ) : (
           <div className="panel">
             {orders.map((o) => (
-              <div key={o.id} className="panel-row">
+              <Link key={o.id} href={`/admin/orders/${o.id}`} className="panel-row hover:bg-shelf">
                 <span className="tabular">
                   {o.orderNumber}
                   <span className="ml-3 text-ink-faint">{formatDate(o.placedAt)}</span>
@@ -157,7 +261,7 @@ export default async function Dashboard() {
                   <span className="mr-3 text-ink-soft">{o.status.replace(/_/g, " ").toLowerCase()}</span>
                   <span className="tabular font-semibold">{formatINR(decimalToPaise(o.totalAmount))}</span>
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

@@ -345,6 +345,8 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
         : " Couldn't email the customer — check the server log.";
   }
   revalidatePath("/admin/orders");
+  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath("/admin");
 
   return { ok: true, message: `Order marked ${status.toLowerCase()}.${mailed}` };
 }
