@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { sendOrderConfirmation } from "@/lib/email";
+import { recordEvent } from "@/lib/analytics";
 
 /**
  * Razorpay webhook.
@@ -72,6 +73,13 @@ export async function POST(request: Request) {
         // Emailing "thanks for your order" off the browser redirect would
         // mean confirming orders that never got paid for.
         await sendOrderConfirmation(paid);
+
+        if (order.sessionId) {
+          void recordEvent(order.sessionId, "ORDER_PAID", {
+            orderId: order.id,
+            metadata: { totalPaise: payment.amount, method: "RAZORPAY" },
+          });
+        }
       }
       break;
 

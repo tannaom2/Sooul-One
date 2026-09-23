@@ -67,7 +67,14 @@ export function AddToBasket({ productId, productName }: { productId: string; pro
         </a>
       )}
 
-      {error && <p className="text-small text-alert">{error}</p>}
+      {/* Always mounted so assistive tech is already watching this region
+          before the content changes, per Web Interface Guidelines. Separate
+          from the button's own label change, which a screen reader isn't
+          guaranteed to announce on its own. */}
+      <div aria-live="polite" role="status">
+        {error && <p className="text-small text-alert">{error}</p>}
+        {added && !error && <span className="sr-only">{`Added ${productName} to basket.`}</span>}
+      </div>
     </div>
   );
 }

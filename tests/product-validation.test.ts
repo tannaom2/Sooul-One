@@ -261,3 +261,28 @@ describe("requiredFieldsFor", () => {
     }
   });
 });
+
+describe("product discount fields", () => {
+  const ok = (extra: Record<string, unknown>) => productInputSchema.safeParse({ ...validFood, ...extra });
+  const paths = (extra: Record<string, unknown>) => {
+    const r = ok(extra);
+    return r.success ? [] : r.error.issues.map((i) => String(i.path[0]));
+  };
+
+  it("defaults to no discount", () => {
+    const r = ok({});
+    expect(r.success && r.data.discountActive).toBe(false);
+  });
+
+  it("accepts an active discount with a percentage", () => {
+    expect(ok({ discountActive: true, discountPercent: 6 }).success).toBe(true);
+  });
+
+  it("requires a percentage when the discount is active", () => {
+    expect(paths({ discountActive: true })).toContain("discountPercent");
+  });
+
+  it.each([0, 100, 120, -3])("rejects a percentage of %s", (discountPercent) => {
+    expect(paths({ discountActive: true, discountPercent })).toContain("discountPercent");
+  });
+});

@@ -33,7 +33,6 @@
     "cloudinary": "2.11.0",
     "jsonwebtoken": "^9.0.3",
     "next": "^16.3.5",
-    "next-auth": "5.0.0-beta.32",
     "otplib": "^13.5.0",
     "pg": "8.23.0",
     "razorpay": "^2.9.8",
@@ -59,6 +58,10 @@
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vitest": "^5.0.1"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0",
+    "mysql2": "^3.24.4"
   },
   "allowScripts": {
     "@prisma/engines@7.10.0": true,

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import Razorpay from "razorpay";
 import { db } from "@/lib/db";
 import { quoteCart, readSessionId } from "@/server/cart";
 import { orderNumber } from "@/lib/format";
 import { fromPaise } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
+import { recordEvent } from "@/lib/analytics";
+import { checkoutInputSchema } from "@/lib/validation/checkout";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -22,20 +23,6 @@ import { sendOrderConfirmation } from "@/lib/email";
  *      arrives later via the webhook, never from the browser.
  */
 
-const schema = z.object({
-  email: z.string().email("Enter an email we can send the receipt to."),
-  phone: z.string().regex(/^[6-9]\d{9}$/, "Enter a 10-digit Indian mobile number."),
-  name: z.string().min(1, "Enter the delivery name."),
-  line1: z.string().min(1, "Enter the address."),
-  line2: z.string().optional(),
-  city: z.string().min(1, "Enter the city."),
-  state: z.string().min(1, "Enter the state."),
-  postalCode: z.string().regex(/^\d{6}$/, "Enter a 6-digit pincode."),
-  couponCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["RAZORPAY", "COD"]),
-  marketingConsent: z.boolean().default(false),
-});
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export async function POST(request: Request) {
@@ -44,7 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Your basket is empty." }, { status: 400 });
   }
 
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const parsed = checkoutInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
       { message: "Check the highlighted fields.", issues: parsed.error.issues },
@@ -91,10 +78,16 @@ export async function POST(request: Request) {
     const created = await tx.order.create({
       data: {
         orderNumber: orderNumber(),
+        sessionId,
         guestEmail: input.email,
         guestPhone: input.phone,
         status: "PENDING_PAYMENT",
         subtotal: fromPaise(quote.subtotalPaise),
+        productDiscountAmount: fromPaise(quote.productDiscountPaise),
+        bundleDiscountAmount: fromPaise(quote.bundleDiscountPaise),
+        bundleLabel: quote.appliedBundles.length
+          ? quote.appliedBundles.map((b) => b.name).join(", ")
+          : null,
         discountAmount: fromPaise(quote.discountPaise),
         shippingAmount: fromPaise(quote.shippingPaise),
         taxAmount: fromPaise(quote.taxPaise),
@@ -123,6 +116,9 @@ export async function POST(request: Request) {
             productNameSnapshot: line.name,
             unitPriceSnapshot: fromPaise(
               Math.round(line.grossPaise / Math.max(line.quantityAvailable, 1)),
+            ),
+            listUnitPriceSnapshot: fromPaise(
+              Math.round(line.listGrossPaise / Math.max(line.quantityAvailable, 1)),
             ),
             quantity: allocation.quantity,
             lineTotal: fromPaise(
@@ -155,12 +151,26 @@ export async function POST(request: Request) {
     return created;
   });
 
+  void recordEvent(sessionId, "ORDER_PLACED", {
+    orderId: order.id,
+    metadata: { totalPaise: quote.totalPaise, method: input.paymentMethod },
+  });
+
   // --- Cash on delivery needs no gateway -----------------------------------
   if (input.paymentMethod === "COD") {
     const confirmed = await db.order.update({
       where: { id: order.id },
       data: { status: "PROCESSING", paymentStatus: "COD_PENDING" },
       include: { items: true },
+    });
+
+    // COD has no gateway to confirm a later capture, so — unlike RAZORPAY,
+    // where ORDER_PAID waits for the signature-verified webhook — this is the
+    // one path where the funnel's "paid" step means "order confirmed," not
+    // "money verified."
+    void recordEvent(sessionId, "ORDER_PAID", {
+      orderId: order.id,
+      metadata: { totalPaise: quote.totalPaise, method: "COD" },
     });
 
     // A COD order never reaches the Razorpay webhook, so its confirmation is

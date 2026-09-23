@@ -53,6 +53,8 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
     const source = product?.nutritionFacts ?? {};
     return Object.fromEntries(NUTRIENTS.map(([k]) => [k, source[k] ?? ""]));
   });
+  const [discountOn, setDiscountOn] = useState<boolean>(Boolean(product?.discountActive));
+  const [discountPct, setDiscountPct] = useState<string>(product?.discountPercent?.toString() ?? "");
   const [facts, setFacts] = useState(
     product?.supplementFacts ?? [{ ingredient: "", amountPerServing: "", percentRDA: null }],
   );
@@ -187,7 +189,11 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
         {err("description") && <Err>{err("description")}</Err>}
 
         {lint && description.length > 0 && (
-          <div className="mt-2 text-small">
+          // aria-live: this updates live as the admin types, with no submit
+          // action to hang an announcement off — a screen reader user needs
+          // to hear about a claims-linter warning the same way a sighted
+          // admin sees it appear.
+          <div className="mt-2 text-small" aria-live="polite" role="status">
             {lint.findings.length === 0 ? (
               <p className="text-veg">No claim problems found.</p>
             ) : (
@@ -219,6 +225,39 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
         <Field label="Reorder at" name="lowStockThreshold" type="number" defaultValue={String(product?.lowStockThreshold ?? 10)} />
         <Field label="Pack weight (g)" name="weightGrams" type="number" defaultValue={product?.weightGrams?.toString()} optional />
       </div>
+
+      {/* --- Discount promotion --- */}
+      <fieldset className="panel p-4">
+        <legend className="label px-1">Discount</legend>
+        <label className="flex items-center gap-3 text-small">
+          <input
+            type="checkbox"
+            name="discountActive"
+            checked={discountOn}
+            onChange={(e) => setDiscountOn(e.target.checked)}
+          />
+          <span>Discount is active</span>
+        </label>
+        <div className="mt-3 max-w-[16rem]">
+          <label className="label" htmlFor="discountPercent">Discount (%)</label>
+          <input
+            id="discountPercent"
+            name="discountPercent"
+            type="number"
+            step="0.01"
+            min="0"
+            max="99.99"
+            className="field tabular"
+            value={discountPct}
+            onChange={(e) => setDiscountPct(e.target.value)}
+          />
+          {err("discountPercent") && <Err>{err("discountPercent")}</Err>}
+        </div>
+        <p className="mt-3 text-micro text-ink-faint">
+          The price above is the undiscounted price. When active, shoppers see it struck through
+          next to the discounted price, e.g. 500/- then 470/- at 6%.
+        </p>
+      </fieldset>
 
       {/* --- Required for every type --- */}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -376,11 +415,13 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
         <button className="btn btn-solid" disabled={pending}>
           {pending ? "Saving…" : product?.id ? "Save changes" : "Create product"}
         </button>
-        {state.message && (
-          <p className="text-small" style={{ color: state.ok ? "var(--color-veg)" : "var(--color-alert)" }}>
-            {state.message}
-          </p>
-        )}
+        <div aria-live="polite" role="status">
+          {state.message && (
+            <p className="text-small" style={{ color: state.ok ? "var(--color-veg)" : "var(--color-alert)" }}>
+              {state.message}
+            </p>
+          )}
+        </div>
       </div>
     </form>
   );

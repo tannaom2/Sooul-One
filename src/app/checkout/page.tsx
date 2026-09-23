@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatINR } from "@/lib/money";
+import { checkoutInputSchema } from "@/lib/validation/checkout";
 
 /**
  * Checkout.
@@ -33,15 +34,47 @@ const EMPTY = {
   couponCode: "",
 };
 
+// The same schema create-order/route.ts validates against, not a hand-copied
+// regex set — a rule change there now can't silently fall out of sync with
+// what this page checks before the round trip.
+const REQUIRED_FIELDS_SCHEMA = checkoutInputSchema.pick({
+  name: true,
+  email: true,
+  phone: true,
+  line1: true,
+  city: true,
+  state: true,
+  postalCode: true,
+});
+
+function validate(form: typeof EMPTY): Record<string, string> {
+  const result = REQUIRED_FIELDS_SCHEMA.safeParse(form);
+  if (result.success) return {};
+  const errors: Record<string, string> = {};
+  for (const issue of result.error.issues) {
+    const key = String(issue.path[0]);
+    if (!errors[key]) errors[key] = issue.message;
+  }
+  return errors;
+}
+
 export default function Checkout() {
   const [form, setForm] = useState(EMPTY);
   const [quote, setQuote] = useState<any>(null);
   const [blocked, setBlocked] = useState<{ name: string; reason?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [method, setMethod] = useState<"RAZORPAY" | "COD">("RAZORPAY");
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+
+  // Once per mount, not on every re-quote below — this page is where
+  // CHECKOUT_STARTED lives in the funnel, and it needs to fire exactly once
+  // per visit to this page for the drop-off rate to mean anything.
+  useEffect(() => {
+    fetch("/api/analytics/checkout-started", { method: "POST" }).catch(() => {});
+  }, []);
 
   // Re-quote whenever something that affects price or compliance changes.
   useEffect(() => {
@@ -75,6 +108,16 @@ export default function Checkout() {
   }
 
   async function submit() {
+    // Stays enabled at all times (per Web Interface Guidelines) — validation
+    // happens on click, pointed at the specific field that's wrong, rather
+    // than leaving the shopper guessing why the button won't respond.
+    const errors = validate(form);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      document.getElementById(Object.keys(errors)[0])?.focus();
+      return;
+    }
+    setFieldErrors({});
     setBusy(true);
     setError(null);
     setBlocked([]);
@@ -93,6 +136,16 @@ export default function Checkout() {
         return;
       }
       if (!response.ok) {
+        if (Array.isArray(body.issues)) {
+          const serverErrors: Record<string, string> = {};
+          for (const issue of body.issues) {
+            const key = String(issue.path?.[0] ?? "");
+            if (key && !serverErrors[key]) serverErrors[key] = issue.message;
+          }
+          setFieldErrors(serverErrors);
+          const firstKey = Object.keys(serverErrors)[0];
+          if (firstKey) document.getElementById(firstKey)?.focus();
+        }
         setError(body.message ?? "That didn't go through. Check your details and try again.");
         return;
       }
@@ -126,9 +179,6 @@ export default function Checkout() {
     }
   }
 
-  const ready =
-    form.name && form.email && form.phone && form.line1 && form.city && form.state && form.postalCode;
-
   return (
     <>
       <script src="https://checkout.razorpay.com/v1/checkout.js" async />
@@ -141,39 +191,106 @@ export default function Checkout() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="label" htmlFor="name">Full name</label>
-              <input id="name" className="field" value={form.name} onChange={(e) => set("name", e.target.value)} />
+              <input
+                id="name"
+                className="field"
+                autoComplete="name"
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+              />
+              {fieldErrors.name && <p className="mt-1 text-micro text-alert">{fieldErrors.name}</p>}
             </div>
             <div>
               <label className="label" htmlFor="email">Email</label>
-              <input id="email" type="email" className="field" value={form.email} onChange={(e) => set("email", e.target.value)} />
+              <input
+                id="email"
+                type="email"
+                className="field"
+                autoComplete="email"
+                spellCheck={false}
+                value={form.email}
+                onChange={(e) => set("email", e.target.value)}
+              />
+              {fieldErrors.email && <p className="mt-1 text-micro text-alert">{fieldErrors.email}</p>}
             </div>
             <div>
               <label className="label" htmlFor="phone">Mobile number</label>
-              <input id="phone" inputMode="numeric" className="field tabular" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+              <input
+                id="phone"
+                type="tel"
+                inputMode="numeric"
+                className="field tabular"
+                autoComplete="tel"
+                value={form.phone}
+                onChange={(e) => set("phone", e.target.value)}
+              />
+              {fieldErrors.phone && <p className="mt-1 text-micro text-alert">{fieldErrors.phone}</p>}
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="line1">Address</label>
-              <input id="line1" className="field" value={form.line1} onChange={(e) => set("line1", e.target.value)} />
+              <input
+                id="line1"
+                className="field"
+                autoComplete="address-line1"
+                value={form.line1}
+                onChange={(e) => set("line1", e.target.value)}
+              />
+              {fieldErrors.line1 && <p className="mt-1 text-micro text-alert">{fieldErrors.line1}</p>}
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="line2">Apartment, landmark (optional)</label>
-              <input id="line2" className="field" value={form.line2} onChange={(e) => set("line2", e.target.value)} />
+              <input
+                id="line2"
+                className="field"
+                autoComplete="address-line2"
+                value={form.line2}
+                onChange={(e) => set("line2", e.target.value)}
+              />
             </div>
             <div>
               <label className="label" htmlFor="city">City</label>
-              <input id="city" className="field" value={form.city} onChange={(e) => set("city", e.target.value)} />
+              <input
+                id="city"
+                className="field"
+                autoComplete="address-level2"
+                value={form.city}
+                onChange={(e) => set("city", e.target.value)}
+              />
+              {fieldErrors.city && <p className="mt-1 text-micro text-alert">{fieldErrors.city}</p>}
             </div>
             <div>
               <label className="label" htmlFor="state">State</label>
-              <input id="state" className="field" value={form.state} onChange={(e) => set("state", e.target.value)} />
+              <input
+                id="state"
+                className="field"
+                autoComplete="address-level1"
+                value={form.state}
+                onChange={(e) => set("state", e.target.value)}
+              />
+              {fieldErrors.state && <p className="mt-1 text-micro text-alert">{fieldErrors.state}</p>}
             </div>
             <div>
               <label className="label" htmlFor="postalCode">Pincode</label>
-              <input id="postalCode" inputMode="numeric" className="field tabular" value={form.postalCode} onChange={(e) => set("postalCode", e.target.value)} />
+              <input
+                id="postalCode"
+                inputMode="numeric"
+                className="field tabular"
+                autoComplete="postal-code"
+                value={form.postalCode}
+                onChange={(e) => set("postalCode", e.target.value)}
+              />
+              {fieldErrors.postalCode && <p className="mt-1 text-micro text-alert">{fieldErrors.postalCode}</p>}
             </div>
             <div>
               <label className="label" htmlFor="couponCode">Discount code (optional)</label>
-              <input id="couponCode" className="field" value={form.couponCode} onChange={(e) => set("couponCode", e.target.value.toUpperCase())} />
+              <input
+                id="couponCode"
+                className="field"
+                autoComplete="off"
+                spellCheck={false}
+                value={form.couponCode}
+                onChange={(e) => set("couponCode", e.target.value.toUpperCase())}
+              />
             </div>
           </div>
 
@@ -198,20 +315,26 @@ export default function Checkout() {
             <span>Send me occasional offers and new product news. You can stop this at any time.</span>
           </label>
 
-          {error && (
-            <div className="mt-6 border-l-4 border-alert bg-shelf px-4 py-3">
-              <p className="text-small font-semibold">{error}</p>
-              {blocked.length > 0 && (
-                <ul className="mt-2 grid gap-1 text-small">
-                  {blocked.map((b) => (
-                    <li key={b.name}>
-                      <strong>{b.name}</strong> — {b.reason}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          {/* Always mounted, not just when `error` is truthy — a live region has
+              to already be present for assistive tech to announce a change
+              into it; mounting it at the same time as the content would mean
+              the announcement can be missed. */}
+          <div aria-live="polite" role="status">
+            {error && (
+              <div className="mt-6 border-l-4 border-alert bg-shelf px-4 py-3">
+                <p className="text-small font-semibold">{error}</p>
+                {blocked.length > 0 && (
+                  <ul className="mt-2 grid gap-1 text-small">
+                    {blocked.map((b) => (
+                      <li key={b.name}>
+                        <strong>{b.name}</strong> — {b.reason}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
@@ -221,8 +344,20 @@ export default function Checkout() {
               <dl>
                 <div className="panel-row">
                   <dt>Items</dt>
-                  <dd>{formatINR(quote.subtotalPaise)}</dd>
+                  <dd>{formatINR(quote.listSubtotalPaise)}</dd>
                 </div>
+                {quote.productDiscountPaise > 0 && (
+                  <div className="panel-row">
+                    <dt>Product discounts</dt>
+                    <dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd>
+                  </div>
+                )}
+                {quote.bundleDiscountPaise > 0 && (
+                  <div className="panel-row">
+                    <dt>Bundle offer ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt>
+                    <dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd>
+                  </div>
+                )}
                 {quote.discountPaise > 0 && (
                   <div className="panel-row">
                     <dt>Discount</dt>
@@ -243,11 +378,22 @@ export default function Checkout() {
                 </div>
               </dl>
             ) : (
-              <p className="p-3.5 text-small text-ink-soft">Working out your total…</p>
+              // A skeleton shaped like the real total, not bare "Loading…" text —
+              // the re-quote is frequent enough (every pincode/coupon keystroke)
+              // that a shape-shifting panel would be more distracting than this.
+              <div className="grid gap-2 p-3.5" aria-live="polite" role="status">
+                <span className="sr-only">Working out your total…</span>
+                {[60, 45, 40, 70].map((width, i) => (
+                  <div key={i} className="flex justify-between">
+                    <div className="h-3 animate-pulse bg-shelf" style={{ width: `${width}%`, borderRadius: "var(--radius-panel)" }} />
+                    <div className="h-3 w-14 animate-pulse bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} />
+                  </div>
+                ))}
+              </div>
             )}
 
             <div className="p-3.5">
-              <button onClick={submit} disabled={!ready || busy} className="btn btn-solid w-full">
+              <button onClick={submit} disabled={busy} className="btn btn-solid w-full">
                 {busy ? "Working…" : method === "COD" ? "Place order" : "Pay now"}
               </button>
               <p className="mt-3 text-micro text-ink-faint">

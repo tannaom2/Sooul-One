@@ -163,7 +163,13 @@ h4 {
   font-weight: 600;
   font-size: var(--text-base);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+/* A physical push on press, not just a colour change on hover — the one
+   interactive-state gap in an otherwise deliberate, restrained system. */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn-solid {

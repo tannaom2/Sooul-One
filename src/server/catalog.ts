@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
+import { resolveUnitPrice } from "@/lib/pricing";
 
 /**
  * Catalog reads.
@@ -16,8 +17,12 @@ export interface ProductSummary {
   slug: string;
   name: string;
   shortDescription: string;
+  /** What the shopper pays — product discount already applied. */
   pricePaise: number;
+  /** Struck-through price: the undiscounted price when a discount is live, else the manual was-price. */
   comparePaise: number | null;
+  /** Percentage off when a discount is live. */
+  percentOff: number | null;
   regulatoryType: "PACKAGED_FOOD" | "HEALTH_SUPPLEMENT" | "BEVERAGE";
   isVeg: boolean | null;
   allergens: string[];
@@ -30,14 +35,27 @@ export interface ProductSummary {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+export function displayPrice(p: any) {
+  const resolved = resolveUnitPrice(decimalToPaise(p.basePrice), {
+    active: Boolean(p.discountActive),
+    percent: p.discountPercent == null ? null : Number(p.discountPercent.toString()),
+  });
+  const comparePaise =
+    resolved.percentOff !== null
+      ? resolved.listPaise
+      : p.compareAtPrice
+        ? decimalToPaise(p.compareAtPrice)
+        : null;
+  return { pricePaise: resolved.pricePaise, comparePaise, percentOff: resolved.percentOff };
+}
+
 function toSummary(p: any): ProductSummary {
   return {
     id: p.id,
     slug: p.slug,
     name: p.name,
     shortDescription: p.shortDescription,
-    pricePaise: decimalToPaise(p.basePrice),
-    comparePaise: p.compareAtPrice ? decimalToPaise(p.compareAtPrice) : null,
+    ...displayPrice(p),
     regulatoryType: p.regulatoryType,
     isVeg: p.isVeg,
     allergens: p.allergens ?? [],
@@ -98,6 +116,17 @@ export async function getFeatured(limit = 6): Promise<ProductSummary[]> {
   return rows.map(toSummary);
 }
 
+/**
+ * generateMetadata() and the page component both call this, so it runs twice
+ * per page view. Deliberately NOT wrapped in React's cache() to dedupe that:
+ * cache() memoizes the promise itself, including a rejected one, and it
+ * doesn't reliably reset per-request outside of a full production Next.js
+ * render — verified live, wrapping this broke the page permanently (500 on
+ * every request) after a single transient database hiccup, until the dev
+ * server was restarted. One extra identical query per page view is a far
+ * smaller cost than a route that silently wedges itself broken after one
+ * bad network blip.
+ */
 export async function getProductBySlug(slug: string) {
   return db.product.findUnique({
     where: { slug },

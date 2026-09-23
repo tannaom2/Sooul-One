@@ -114,6 +114,10 @@ model Product {
   description      String
   basePrice        Decimal        @db.Decimal(10, 2)
   compareAtPrice   Decimal?       @db.Decimal(10, 2)
+  /// [ADDED] Percentage-off promotion. `basePrice` stays the undiscounted price;
+  /// the shopper pays basePrice less `discountPercent` while `discountActive`.
+  discountActive   Boolean        @default(false)
+  discountPercent  Decimal?       @db.Decimal(5, 2)
   hsnCode          String?
   taxRatePercent   Decimal        @default(18) @db.Decimal(4, 2)
   /// ONLINE stock only. Retail superstore stock is deliberately out of scope
@@ -303,7 +307,14 @@ model Order {
   guestPhone      String?
   status          OrderStatus @default(PENDING_PAYMENT)
   items           OrderItem[]
+  /// Sum of lines at the price paid, after product-level discounts.
   subtotal        Decimal     @db.Decimal(10, 2)
+  /// [ADDED] Saved through product-level discounts (list price minus price paid).
+  productDiscountAmount Decimal @default(0) @db.Decimal(10, 2)
+  /// [ADDED] Saved through bundle / combination offers.
+  bundleDiscountAmount  Decimal @default(0) @db.Decimal(10, 2)
+  bundleLabel     String?
+  /// Coupon discount only.
   discountAmount  Decimal     @default(0) @db.Decimal(10, 2)
   shippingAmount  Decimal     @default(0) @db.Decimal(10, 2)
   taxAmount       Decimal     @default(0) @db.Decimal(10, 2)
@@ -314,6 +325,12 @@ model Order {
   paymentGateway  String?
   paymentId       String?
   paymentStatus   String?
+  /// The guest cart session this order was placed from (src/server/cart.ts).
+  /// Nothing reads it for order fulfilment — it exists so the Razorpay
+  /// webhook, which arrives as a server-to-server call with no session cookie
+  /// of its own, can still record ORDER_PAID against the same funnel session
+  /// that recorded PRODUCT_VIEW / ADD_TO_CART / CHECKOUT_STARTED earlier.
+  sessionId       String?
   trackingNumber  String?
   courierPartner  String?
   placedAt        DateTime    @default(now())
@@ -341,6 +358,8 @@ model OrderItem {
 
   productNameSnapshot String
   unitPriceSnapshot   Decimal @db.Decimal(10, 2)
+  /// [ADDED] Undiscounted unit price at purchase, so the bill can show the saving.
+  listUnitPriceSnapshot Decimal? @db.Decimal(10, 2)
   quantity            Int
   lineTotal           Decimal @db.Decimal(10, 2)
 }
@@ -448,4 +467,35 @@ model AdminAuditLog {
   createdAt   DateTime  @default(now())
 
   @@index([entityType, entityId])
+}
+
+/// A funnel step, keyed by the same guest session cookie the cart already
+/// uses (see src/server/cart.ts) rather than a new identifier — one fewer
+/// cookie, and it means a session's cart activity and its funnel events are
+/// already joined by construction.
+enum AnalyticsEventType {
+  VISIT
+  PRODUCT_VIEW
+  ADD_TO_CART
+  CHECKOUT_STARTED
+  ORDER_PLACED
+  ORDER_PAID
+}
+
+/// Funnel and abandonment tracking (Section: analytics). Write-heavy,
+/// read-rarely — admin-only aggregate reads, so no relation load is attached
+/// to Product/Order; a raw id is enough to join when a report needs to.
+model AnalyticsEvent {
+  id        String             @id @default(cuid())
+  sessionId String
+  type      AnalyticsEventType
+  productId String?
+  orderId   String?
+  /// Free-form context — e.g. { value: totalPaise } on ORDER_PAID, so revenue
+  /// can be read off the funnel without a join back to Order.
+  metadata  Json?
+  createdAt DateTime           @default(now())
+
+  @@index([type, createdAt])
+  @@index([sessionId, type])
 }

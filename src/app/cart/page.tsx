@@ -2,7 +2,7 @@ import Link from "next/link";
 import { quoteCart, readSessionId } from "@/server/cart";
 import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
-import { formatINR } from "@/lib/money";
+import { formatINR, formatPriceTag } from "@/lib/money";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +79,15 @@ export default async function CartPage() {
                     <div className="mt-3 flex flex-wrap items-center gap-4">
                       <CartQuantity itemId={item?.id ?? ""} quantity={line.quantityRequested} />
                       <span className="tabular text-small">
-                        {formatINR(line.grossPaise)}
+                        {line.productDiscountPaise > 0 && (
+                          <s className="mr-2 text-ink-faint">{formatPriceTag(line.listGrossPaise)}</s>
+                        )}
+                        {formatPriceTag(line.grossPaise)}
+                        {line.bundleDiscountPaise > 0 && (
+                          <span className="ml-2 text-veg">
+                            −{formatINR(line.bundleDiscountPaise)} {line.bundleName}
+                          </span>
+                        )}
                         {line.discountPaise > 0 && (
                           <span className="ml-2 text-veg">−{formatINR(line.discountPaise)}</span>
                         )}
@@ -105,8 +113,20 @@ export default async function CartPage() {
             <dl>
               <div className="panel-row">
                 <dt>Items</dt>
-                <dd>{formatINR(quote.subtotalPaise)}</dd>
+                <dd>{formatINR(quote.listSubtotalPaise)}</dd>
               </div>
+              {quote.productDiscountPaise > 0 && (
+                <div className="panel-row">
+                  <dt>Product discounts</dt>
+                  <dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd>
+                </div>
+              )}
+              {quote.bundleDiscountPaise > 0 && (
+                <div className="panel-row">
+                  <dt>Bundle offer ({quote.appliedBundles.map((b) => b.name).join(", ")})</dt>
+                  <dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd>
+                </div>
+              )}
               {quote.discountPaise > 0 && (
                 <div className="panel-row">
                   <dt>Discount {quote.appliedCouponCode && `(${quote.appliedCouponCode})`}</dt>

@@ -6,6 +6,8 @@ import { decimalToPaise } from "@/lib/format";
 import { buildQuote, type QuoteLineInput } from "@/lib/checkout/quote";
 import { estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
 import type { GstTreatment } from "@/lib/money";
+import { resolveUnitPrice } from "@/lib/pricing";
+import type { BundleRule } from "@/lib/checkout/bundles";
 
 /**
  * Cart persistence and quoting.
@@ -16,7 +18,7 @@ import type { GstTreatment } from "@/lib/money";
  * customer can edit.
  */
 
-const SESSION_COOKIE = "soulone_cart";
+export const SESSION_COOKIE = "soulone_cart";
 
 /**
  * The state SooulOne is registered in. Decides CGST+SGST versus IGST.
@@ -137,25 +139,50 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   const gstTreatment: GstTreatment =
     context.state && context.state.toLowerCase() === SELLER_STATE ? "INTRA_STATE" : "INTER_STATE";
 
-  const lines: QuoteLineInput[] = cart.items.map((item: any) => ({
-    productId: item.productId,
-    variantId: item.variantId ?? undefined,
-    name: item.product.name,
-    regulatoryType: item.product.regulatoryType,
-    unitPricePaise: item.variant?.priceOverride
+  const lines: QuoteLineInput[] = cart.items.map((item: any) => {
+    // A variant's own price replaces the base; the product's discount then
+    // applies on top of whichever it is.
+    const listPaise = item.variant?.priceOverride
       ? decimalToPaise(item.variant.priceOverride)
-      : decimalToPaise(item.product.basePrice),
-    quantity: item.quantity,
-    taxRatePercent: Number(item.product.taxRatePercent?.toString?.() ?? 18),
-    shelfLifeDays: item.product.shelfLifeDays ?? undefined,
-    batches: (item.product.batches ?? []).map((b: any) => ({
-      id: b.id,
-      batchNumber: b.batchNumber,
-      expiresOn: new Date(b.expiresOn),
-      quantityRemaining: b.quantityRemaining,
-    })),
-    stockQuantity: item.product.stockQuantity,
-    retailOnly: item.product.retailOnly,
+      : decimalToPaise(item.product.basePrice);
+    const price = resolveUnitPrice(listPaise, {
+      active: Boolean(item.product.discountActive),
+      percent: item.product.discountPercent == null ? null : Number(item.product.discountPercent.toString()),
+    });
+
+    return {
+      productId: item.productId,
+      variantId: item.variantId ?? undefined,
+      name: item.product.name,
+      regulatoryType: item.product.regulatoryType,
+      unitPricePaise: price.pricePaise,
+      listPricePaise: price.listPaise,
+      quantity: item.quantity,
+      taxRatePercent: Number(item.product.taxRatePercent?.toString?.() ?? 18),
+      shelfLifeDays: item.product.shelfLifeDays ?? undefined,
+      batches: (item.product.batches ?? []).map((b: any) => ({
+        id: b.id,
+        batchNumber: b.batchNumber,
+        expiresOn: new Date(b.expiresOn),
+        quantityRemaining: b.quantityRemaining,
+      })),
+      stockQuantity: item.product.stockQuantity,
+      retailOnly: item.product.retailOnly,
+    };
+  });
+
+  const bundleRows = await db.bundle.findMany({
+    where: { isActive: true },
+    include: { eligibleProducts: true },
+  });
+  const bundles: BundleRule[] = bundleRows.map((b: any) => ({
+    id: b.id,
+    name: b.name,
+    minItems: b.minItems,
+    maxItems: b.maxItems,
+    discountType: b.discountType,
+    discountValue: Number(b.discountValue.toString()),
+    eligibleProductIds: b.eligibleProducts.map((e: any) => e.productId),
   }));
 
   let coupon;
@@ -177,7 +204,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     }
   }
 
-  const quote = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon });
+  const quote = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon, bundles });
 
   return {
     quote,

@@ -22,15 +22,14 @@ const STATUS_COPY: Record<string, string> = {
 export default async function OrderPage({ params }: { params: Promise<{ orderNumber: string }> }) {
   const { orderNumber } = await params;
 
-  let order: any = null;
-  try {
-    order = await db.order.findUnique({
-      where: { orderNumber },
-      include: { items: true },
-    });
-  } catch {
-    notFound();
-  }
+  // A database error propagates to the nearest error.tsx rather than showing
+  // "order not found" — a shopper landing here right after paying should
+  // never be told their order doesn't exist because of a transient outage
+  // that a retry would clear.
+  const order: any = await db.order.findUnique({
+    where: { orderNumber },
+    include: { items: true },
+  });
   if (!order) notFound();
 
   const address = order.shippingAddress as any;

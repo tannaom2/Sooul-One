@@ -20,9 +20,7 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: NEXTAUTH_SECRET
-        generateValue: true
-      - key: NEXTAUTH_URL
+      - key: SITE_URL
         sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
@@ -44,3 +42,26 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
+      - key: CRON_SECRET
+        generateValue: true
+
+  # Fires the near-expiry owner alert once a day (Section 7.6). The email
+  # logic has existed since phase 7; this is what actually calls it on a
+  # schedule instead of leaving it dormant. Needs the same CRON_SECRET as the
+  # web service above so Render's generated value matches what the route
+  # checks — copy it over manually in the dashboard after first deploy if the
+  # two services don't share generated env vars automatically.
+  - type: cron
+    name: soulone-near-expiry-alert
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "0 3 * * *" # 08:30 IST daily
+    buildCommand: "true" # nothing to build — the request just hits the already-deployed web service
+    startCommand: >-
+      node -e "fetch(process.env.TARGET_URL+'?secret='+process.env.CRON_SECRET).then(r=>r.text()).then(t=>{console.log(t);if(!t)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+    envVars:
+      - key: TARGET_URL
+        value: https://soulone-app.onrender.com/api/cron/near-expiry-alert
+      - key: CRON_SECRET
+        sync: false

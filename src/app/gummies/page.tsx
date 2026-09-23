@@ -45,7 +45,10 @@ export default async function Gummies() {
         </div>
 
         {products.length > 0 ? (
-          <ProductGrid products={products} />
+          <>
+            <h2 className="sr-only">Products</h2>
+            <ProductGrid products={products} />
+          </>
         ) : (
           <Empty
             title="No gummies listed yet"

@@ -37,6 +37,9 @@ const baseProduct = z.object({
   description: z.string().min(1, "Description is required"),
   basePrice: rupees,
   compareAtPrice: rupees.optional(),
+  /** Percentage-off promotion. `basePrice` stays the undiscounted price. */
+  discountActive: z.boolean().default(false),
+  discountPercent: z.number().gt(0, "Enter a percentage above 0").lt(100, "Must be below 100").optional(),
   hsnCode: z.string().regex(/^\d{4,8}$/, "HSN code is 4–8 digits").optional(),
   taxRatePercent: z.number().min(0).max(28),
   stockQuantity: z.number().int().min(0),
@@ -212,6 +215,14 @@ export const productInputSchema = z
         code: "custom",
         path: ["compareAtPrice"],
         message: "Compare-at price must be higher than the selling price, or left blank.",
+      });
+    }
+
+    if (input.discountActive && input.discountPercent === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["discountPercent"],
+        message: "Enter the discount percentage, or switch the discount off.",
       });
     }
 

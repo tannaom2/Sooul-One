@@ -65,7 +65,9 @@ export default function AdminLogin() {
         </form>
       )}
 
-      {error && <p className="mt-4 text-small text-alert">{error}</p>}
+      <div aria-live="polite" role="status">
+        {error && <p className="mt-4 text-small text-alert">{error}</p>}
+      </div>
     </div>
   );
 }

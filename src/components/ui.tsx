@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { formatINR } from "@/lib/money";
+import { formatPriceTag } from "@/lib/money";
+import { formatPercent } from "@/lib/pricing";
 import type { ProductSummary } from "@/server/catalog";
 
 /**
@@ -35,15 +36,27 @@ export function VegMark({ isVeg, showText = false }: { isVeg: boolean | null; sh
   );
 }
 
-export function Price({ pricePaise, comparePaise }: { pricePaise: number; comparePaise?: number | null }) {
+export function Price({
+  pricePaise,
+  comparePaise,
+  percentOff,
+}: {
+  pricePaise: number;
+  comparePaise?: number | null;
+  percentOff?: number | null;
+}) {
+  const struck = comparePaise && comparePaise > pricePaise ? comparePaise : null;
   return (
-    <span className="flex items-baseline gap-2">
-      <span className="tabular font-display text-lead font-bold">{formatINR(pricePaise)}</span>
-      {comparePaise && comparePaise > pricePaise && (
-        <span className="tabular text-small text-ink-faint line-through">
-          {formatINR(comparePaise)}
-        </span>
+    <span className="flex flex-wrap items-baseline gap-x-2">
+      {struck && (
+        <s className="tabular text-small text-ink-faint" aria-label={`Original price ${formatPriceTag(struck)}`}>
+          {formatPriceTag(struck)}
+        </s>
       )}
+      <span className="tabular font-display text-lead font-bold">{formatPriceTag(pricePaise)}</span>
+      {struck && percentOff ? (
+        <span className="text-micro font-semibold text-veg">{formatPercent(percentOff)}% off</span>
+      ) : null}
     </span>
   );
 }
@@ -61,7 +74,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
   return (
     <Link
       href={`/product/${product.slug}`}
-      className="group flex flex-col gap-3 border border-[--color-rule] p-4 transition-colors hover:border-ink"
+      className="group flex flex-col gap-3 border border-[--color-rule] p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-ink"
       style={{ borderRadius: "var(--radius-panel)" }}
     >
       {product.imageUrl ? (
@@ -100,7 +113,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <Price pricePaise={product.pricePaise} comparePaise={product.comparePaise} />
+        <Price pricePaise={product.pricePaise} comparePaise={product.comparePaise} percentOff={product.percentOff} />
         {product.retailOnly ? (
           <span className="text-micro font-semibold text-caution">In stores only</span>
         ) : (

@@ -116,8 +116,7 @@ that you actually use:
 |---|---|
 | `DATABASE_URL` | Neon or Supabase |
 | `JWT_SECRET` | Render can generate this — click "Generate" |
-| `NEXTAUTH_SECRET` | Render can generate this |
-| `NEXTAUTH_URL` | Your live URL, e.g. `https://soulone.onrender.com` |
+| `SITE_URL` | Your live URL, e.g. `https://soulone.onrender.com` — used for the sitemap and page metadata |
 | `ADMIN_PATH` | Anything non-obvious |
 | `RAZORPAY_KEY_ID` / `_SECRET` | Razorpay dashboard, **live** keys |
 | `RAZORPAY_WEBHOOK_SECRET` | You choose it; must match Razorpay's webhook config |
@@ -159,16 +158,35 @@ Without this, payments will succeed at Razorpay and your orders will sit at
 `PENDING_PAYMENT` forever — the app treats the webhook as the only proof of
 payment, and the browser redirect as a convenience.
 
-### 6. Custom domain
+### 6. Near-expiry alert cron job
+
+`render.yaml` declares a second service, `soulone-near-expiry-alert`, that
+hits `/api/cron/near-expiry-alert` once a day. The email itself (Section 7.6)
+has existed since phase 7 — this is what actually triggers it, so short-dated
+stock gets flagged to `OWNER_ALERT_EMAIL` before it becomes unsellable rather
+than sitting unnoticed.
+
+Render creates it automatically from `render.yaml` on next deploy. It needs:
+
+- `OWNER_ALERT_EMAIL` set on the **web** service (already required for the
+  email to send at all)
+- `CRON_SECRET` set to the **same value** on both the web service and the cron
+  job — Render generates one for the web service; copy it into the cron job's
+  environment tab, since generated values aren't automatically shared across
+  services
+
+Without a matching `CRON_SECRET` on both sides, the route returns 401 and the
+alert never sends — check the cron job's run logs if batches seem to be
+falling through unnoticed.
+
+### 7. Custom domain
 
 **Settings → Custom Domain** in Render, then add the CNAME record it gives you
 at your registrar. TLS is issued automatically and free.
 
-Then update, in your repository:
-
-- `sitemap.xml` — replace `https://www.example.com`
-- `robots.txt` — same
-- `NEXTAUTH_URL` in Render
+Then update `SITE_URL` in Render to the custom domain. The sitemap and
+`robots.txt` are generated from it at request time (`src/app/sitemap.ts`,
+`src/app/robots.ts`), so there's no file to hand-edit.
 
 ---
 

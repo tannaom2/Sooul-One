@@ -24,7 +24,13 @@ export default async function TrueStore() {
       />
       <section className="mx-auto max-w-6xl px-5 py-12">
         {products.length > 0 ? (
-          <ProductGrid products={products} />
+          <>
+            {/* Visually hidden — keeps the heading hierarchy h1→h2→h3 intact
+                (ProductCard uses h3) without adding a visible section title
+                this page doesn't need. */}
+            <h2 className="sr-only">Products</h2>
+            <ProductGrid products={products} />
+          </>
         ) : (
           <Empty
             title="The shelf is empty"

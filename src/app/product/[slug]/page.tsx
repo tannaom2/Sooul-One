@@ -1,16 +1,36 @@
 import { notFound } from "next/navigation";
-import { getProductBySlug } from "@/server/catalog";
+import { displayPrice, getProductBySlug } from "@/server/catalog";
 import { VegMark, Price } from "@/components/ui";
 import { AddToBasket } from "@/components/add-to-basket";
-import { decimalToPaise, formatBestBefore } from "@/lib/format";
+import { formatBestBefore, formatDate } from "@/lib/format";
 import { SUPPLEMENT_DISCLAIMER } from "@/lib/compliance/claims";
 import {
   assessShippability,
   evaluateBatchForDelivery,
 } from "@/lib/compliance/shelf-life";
 import { estimateDeliveryDate } from "@/lib/checkout/delivery";
+import { getOrCreateSessionId } from "@/server/cart";
+import { recordEvent } from "@/lib/analytics";
+import { ReviewForm } from "@/components/review-form";
 
 export const dynamic = "force-dynamic";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const product: any = await getProductBySlug(slug);
+  if (!product || !product.isActive) return {};
+
+  const title = `${product.name} — ${product.brand?.name ?? "SooulOne"}`;
+  const description = product.shortDescription;
+
+  return {
+    title,
+    description,
+    openGraph: { title, description, images: product.images?.[0]?.url ? [product.images[0].url] : undefined },
+  };
+}
 
 const NUTRIENT_LABELS: Record<string, string> = {
   energyKcal: "Energy",
@@ -29,21 +49,25 @@ const NUTRIENT_UNITS: Record<string, string> = {
   sodiumMg: "mg",
 };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  let product: any = null;
-  try {
-    product = await getProductBySlug(slug);
-  } catch {
-    notFound();
-  }
+  // A database error propagates to the nearest error.tsx rather than being
+  // disguised as "product doesn't exist" — an outage and a bad slug need
+  // different responses, and only one of them is this page's job to detect.
+  const product: any = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
+  // Fire-and-forget: a funnel miss must never be the reason a product page
+  // fails to render. getOrCreateSessionId() also assigns the guest session
+  // cookie for a shopper who hasn't touched the cart yet, so it's the same
+  // identity the cart and checkout events below join against.
+  getOrCreateSessionId()
+    .then((sessionId) => recordEvent(sessionId, "PRODUCT_VIEW", { productId: product.id }))
+    .catch(() => {});
+
   const isSupplement = product.regulatoryType === "HEALTH_SUPPLEMENT";
-  const pricePaise = decimalToPaise(product.basePrice);
+  const price = displayPrice(product);
 
   /**
    * Show the shopper the earliest best-before date they could actually be sent,
@@ -118,7 +142,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="panel">
             <div className="panel-head flex items-center justify-between">
-              <Price pricePaise={pricePaise} comparePaise={product.compareAtPrice ? decimalToPaise(product.compareAtPrice) : null} />
+              <Price pricePaise={price.pricePaise} comparePaise={price.comparePaise} percentOff={price.percentOff} />
               <span className="text-micro font-normal text-ink-faint">incl. GST</span>
             </div>
 
@@ -240,6 +264,35 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </dl>
         </section>
       )}
+
+      <section className="mt-16 max-w-[68ch] border-t border-[--color-rule] pt-8">
+        <h2 className="text-h2 font-extrabold">Reviews</h2>
+
+        {product.reviews?.length > 0 ? (
+          <div className="mt-6 grid gap-5">
+            {product.reviews.map((r: any) => (
+              <div key={r.id} className="border-b border-[--color-rule] pb-5">
+                <div className="flex items-center gap-2">
+                  <span aria-hidden style={{ color: "var(--color-caution)" }}>
+                    {"★".repeat(r.rating)}
+                    {"☆".repeat(5 - r.rating)}
+                  </span>
+                  <span className="text-small font-semibold">{r.customerName}</span>
+                  <span className="text-micro text-ink-faint">{formatDate(r.createdAt)}</span>
+                </div>
+                <p className="mt-2 text-small text-ink-soft">{r.comment}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-small text-ink-faint">No reviews yet — be the first.</p>
+        )}
+
+        <div className="mt-8">
+          <h3 className="mb-4 text-h3 font-bold">Write a review</h3>
+          <ReviewForm productId={product.id} />
+        </div>
+      </section>
     </article>
   );
 }

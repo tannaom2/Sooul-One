@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { Empty } from "@/components/ui";
 import { ProductForm } from "../product-form";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,10 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
       }),
     ]);
   } catch {
-    notFound();
+    // Distinct from "no such product": this is "can't tell if it exists,"
+    // and treating the two the same way risks an admin deleting a product
+    // that's actually fine, purely because the database blipped.
+    return <Empty title="Can't reach the database" detail="Check DATABASE_URL and that migrations have run." />;
   }
   if (!product) notFound();
 

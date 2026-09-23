@@ -40,11 +40,13 @@ export function BatchForm({ products }: { products: { id: string; name: string }
         <button className="btn btn-solid" disabled={pending}>
           {pending ? "Saving…" : "Receive batch"}
         </button>
-        {state.message && (
-          <p className="text-small" style={{ color: state.ok ? "var(--color-veg)" : "var(--color-alert)" }}>
-            {state.message}
-          </p>
-        )}
+        <div aria-live="polite" role="status">
+          {state.message && (
+            <p className="text-small" style={{ color: state.ok ? "var(--color-veg)" : "var(--color-alert)" }}>
+              {state.message}
+            </p>
+          )}
+        </div>
       </div>
     </form>
   );

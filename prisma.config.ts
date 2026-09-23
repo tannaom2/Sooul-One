@@ -7,13 +7,18 @@
  * Prisma CLI reads for `migrate`, `generate`, `studio` and `db seed`; the
  * running application never imports it (see src/lib/db.ts for that side).
  *
- * `dotenv/config` is imported explicitly because this file runs as a
- * standalone CLI script, outside Next.js's own env loading — without it,
- * DATABASE_URL would be undefined here even though it works fine inside the
- * app itself.
+ * dotenv is loaded explicitly because this file runs as a standalone CLI
+ * script, outside Next.js's own env loading — without it, DATABASE_URL would
+ * be undefined here even though it works fine inside the app itself. Next.js
+ * reads `.env.local` first among the dev-only files; `dotenv`'s default
+ * export only reads `.env`, so it has to be told about `.env.local`
+ * explicitly or every local run fails to find DATABASE_URL.
  */
-import "dotenv/config";
+import { config } from "dotenv";
 import { defineConfig, env } from "prisma/config";
+
+config({ path: ".env.local" });
+config(); // .env, for values .env.local doesn't set (e.g. CI/production)
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

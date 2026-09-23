@@ -66,6 +66,8 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     description: String(form.get("description") ?? "").trim(),
     basePrice: String(form.get("basePrice") ?? "").trim(),
     compareAtPrice: form.get("compareAtPrice") ? String(form.get("compareAtPrice")) : undefined,
+    discountActive: form.get("discountActive") === "on",
+    discountPercent: num(form, "discountPercent"),
     hsnCode: form.get("hsnCode") ? String(form.get("hsnCode")) : undefined,
     taxRatePercent: num(form, "taxRatePercent") ?? 18,
     stockQuantity: num(form, "stockQuantity") ?? 0,
@@ -113,6 +115,9 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     description: input.description,
     basePrice: input.basePrice,
     compareAtPrice: input.compareAtPrice ?? null,
+    discountActive: input.discountActive,
+    // Kept when switched off so re-enabling a promotion doesn't need retyping.
+    discountPercent: input.discountPercent ?? null,
     hsnCode: input.hsnCode ?? null,
     taxRatePercent: input.taxRatePercent,
     stockQuantity: input.stockQuantity,

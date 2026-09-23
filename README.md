@@ -23,8 +23,8 @@ that later phases depend on. Phases 2–10 are not started.
 | 3 — Admin CRUD | ✅ products (type-aware form), batches, stores, orders, audit log |
 | 4 — Storefront | ✅ home, True Store, gummies hub + brand pages, PDP, store locator |
 | 5 — Cart & checkout | ✅ persisted cart, live re-quote, FEFO reservation in a transaction, Razorpay + COD, signature-verified webhook |
-| 6 — Security hardening | 🟡 CSP and security headers set in `next.config.ts`; full OWASP pass outstanding |
-| 7 — Automation | 🟡 Order confirmation + shipping emails wired; near-expiry alert composed but not scheduled |
+| 6 — Security hardening | ✅ CSP and security headers set in `next.config.ts`; full OWASP pass done — admin auth, checkout/webhook, uploads, dependencies all clean |
+| 7 — Automation | ✅ Order confirmation + shipping emails wired; near-expiry alert scheduled via Render Cron Job |
 | 8 — Testing | 🟡 146 unit tests green, lint + typecheck + build green; Playwright E2E outstanding |
 | 9 — Deployment | ⬜ |
 | 10 — Handover | ✅ `RUNNING.md`, `DEPLOYING.md`, `OWNERS-GUIDE.md`, this file |
@@ -284,8 +284,7 @@ four policy pages Razorpay requires before it will activate a live account.
 
 **Still missing, and not launch-blocking.** Customer accounts, the gummies
 quiz, review submission and moderation, bundles and hampers, referrals and
-loyalty points, Playwright E2E tests, and a scheduler to actually deliver the
-near-expiry alert (the email is written; nothing calls it on a timer yet).
+loyalty points, Playwright E2E tests.
 
 **The policy pages are deliberately unfinished.** They ship with the right
 sections and a prompt describing what belongs in each, plus a banner saying so.

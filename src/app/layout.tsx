@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers, cookies } from "next/headers";
+import { getOrCreateSessionId, SESSION_COOKIE } from "@/server/cart";
+import { recordEvent } from "@/lib/analytics";
 import "./globals.css";
 
 /**
@@ -19,6 +22,10 @@ import "./globals.css";
  */
 
 export const metadata: Metadata = {
+  // Required for Next.js to resolve relative canonical/OG URLs to absolute
+  // ones. Falls back to localhost in dev; set SITE_URL before going live or
+  // every canonical and Open Graph image resolves to the wrong domain.
+  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
   title: "SooulOne — nutrition, honestly labelled",
   description:
     "Healthy namkeen, sweets and snacks from The True Store, and daily gummies from Woman Axis, Kids Vault and Man Rituals. Every label, in full, before you buy.",
@@ -141,7 +148,30 @@ function Footer() {
   );
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Top of the funnel: recorded once per new visitor, not once per page view.
+  // A cookie that already exists means either a returning visitor or a
+  // session this same request cycle already assigned — either way, no DB
+  // write needed, which keeps this cheap for every request after the first.
+  // Skipped for /admin and API routes: this funnel is about shoppers, not
+  // owner traffic or the app's own internal calls.
+  const path = (await headers()).get("x-invoke-path") ?? "";
+  if (!path.startsWith("/admin") && !path.startsWith("/api")) {
+    try {
+      const hadSessionAlready = Boolean((await cookies()).get(SESSION_COOKIE)?.value);
+      if (!hadSessionAlready) {
+        const sessionId = await getOrCreateSessionId();
+        void recordEvent(sessionId, "VISIT", { metadata: { path } });
+      }
+    } catch {
+      // Next refuses to set a cookie while statically prerendering a page —
+      // the four policy pages under /policies/[policy] use
+      // generateStaticParams and hit this layout at build time, outside any
+      // real request. No visitor to record there; every other route in the
+      // app is force-dynamic and hits the branch above instead.
+    }
+  }
+
   return (
     <html lang="en">
       <head>

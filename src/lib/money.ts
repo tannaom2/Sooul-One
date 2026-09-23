@@ -46,6 +46,46 @@ export function formatINR(paise: Paise): string {
   return `${negative ? "-" : ""}₹${grouped}.${fraction}`;
 }
 
+/**
+ * Storefront price tag: whole rupees read "₹470/-", with paise only when there
+ * are any ("₹470.50/-"). Display only; invoices and totals use `formatINR`.
+ */
+export function formatPriceTag(paise: Paise): string {
+  const full = formatINR(paise);
+  return `${full.endsWith(".00") ? full.slice(0, -3) : full}/-`;
+}
+
+/**
+ * Split a discount across lines proportionally to their gross.
+ *
+ * Uses largest-remainder so the parts sum to the whole exactly. Allocating each
+ * line independently with rounding leaves the sum a paisa or two off the
+ * headline discount, and a customer who is shown "₹200 off" and charged ₹199.98
+ * off is right to complain.
+ */
+export function distributeDiscount(grossByLine: readonly Paise[], totalDiscount: Paise): Paise[] {
+  const total = grossByLine.reduce((sum, g) => sum + g, 0);
+  if (total === 0 || totalDiscount === 0) return grossByLine.map(() => 0);
+
+  const exact = grossByLine.map((g) => (g * totalDiscount) / total);
+  const floors = exact.map(Math.floor);
+  let remainder = totalDiscount - floors.reduce((sum, f) => sum + f, 0);
+
+  // Hand the leftover paise to the lines with the largest fractional parts.
+  const order = exact
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction);
+
+  const result = [...floors];
+  for (const { index } of order) {
+    if (remainder <= 0) break;
+    result[index] += 1;
+    remainder -= 1;
+  }
+
+  return result;
+}
+
 export interface TaxSplit {
   /** Pre-tax taxable value. */
   readonly netPaise: Paise;

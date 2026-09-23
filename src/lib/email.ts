@@ -1,7 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
-import { formatINR } from "./money";
-import { decimalToPaise, formatDate } from "./format";
+import { buildOrderBill } from "./order-bill";
+import { renderOrderConfirmation } from "./email-templates";
 
 /**
  * Transactional email.
@@ -102,18 +102,6 @@ function wrap(heading: string, bodyHtml: string): string {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function itemRows(items: any[]): string {
-  return items
-    .map(
-      (i) =>
-        `<tr>
-          <td style="padding:6px 0;border-bottom:1px solid #f0ebe3;font-size:14px">${i.productNameSnapshot} &times; ${i.quantity}</td>
-          <td style="padding:6px 0;border-bottom:1px solid #f0ebe3;font-size:14px;text-align:right">${formatINR(decimalToPaise(i.lineTotal))}</td>
-        </tr>`,
-    )
-    .join("");
-}
-
 /* ----------------------------------------------------------------- senders */
 
 export async function sendOrderConfirmation(order: any): Promise<Sent> {
@@ -123,52 +111,8 @@ export async function sendOrderConfirmation(order: any): Promise<Sent> {
     return { delivered: false, reason: "no_recipient" };
   }
 
-  const address = order.shippingAddress ?? {};
-  const total = formatINR(decimalToPaise(order.totalAmount));
-  const cod = order.paymentGateway === "COD";
-
-  const html = wrap(
-    "Thanks — we've got your order",
-    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">
-       Order <strong>${order.orderNumber}</strong>, placed ${formatDate(order.placedAt)}.
-       ${cod ? "You'll pay the courier when it arrives." : "Your payment has gone through."}
-     </p>
-     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px">
-       ${itemRows(order.items ?? [])}
-       <tr>
-         <td style="padding:10px 0 0;font-size:15px;font-weight:700">Total</td>
-         <td style="padding:10px 0 0;font-size:15px;font-weight:700;text-align:right">${total}</td>
-       </tr>
-     </table>
-     <p style="margin:0 0 4px;font-size:13px;font-weight:700">Delivering to</p>
-     <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#5b4f45">
-       ${address.name ?? ""}, ${address.line1 ?? ""}${address.line2 ? `, ${address.line2}` : ""},
-       ${address.city ?? ""}, ${address.state ?? ""} ${address.postalCode ?? ""}
-     </p>
-     <p style="margin:0;font-size:13px;color:#8c7f73">
-       We send the longest-dated stock that meets the delivery freshness rule, so what arrives
-       will have plenty of life left on it. We'll email again the moment it ships.
-     </p>`,
-  );
-
-  const text = [
-    `Thanks — we've got your order.`,
-    ``,
-    `Order ${order.orderNumber}, placed ${formatDate(order.placedAt)}.`,
-    cod ? `You'll pay the courier when it arrives.` : `Your payment has gone through.`,
-    ``,
-    ...(order.items ?? []).map(
-      (i: any) => `  ${i.productNameSnapshot} x ${i.quantity}  ${formatINR(decimalToPaise(i.lineTotal))}`,
-    ),
-    ``,
-    `Total: ${total}`,
-    ``,
-    `Delivering to: ${address.name ?? ""}, ${address.line1 ?? ""}, ${address.city ?? ""}, ${address.state ?? ""} ${address.postalCode ?? ""}`,
-    ``,
-    `We'll email again the moment it ships.`,
-  ].join("\n");
-
-  return send(to, `Your SooulOne order ${order.orderNumber}`, html, text);
+  const { subject, html, text } = renderOrderConfirmation(buildOrderBill(order));
+  return send(to, subject, html, text);
 }
 
 export async function sendShippingNotification(order: any): Promise<Sent> {

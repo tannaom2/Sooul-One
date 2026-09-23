@@ -10,18 +10,26 @@ const ACCENT: Record<string, string> = {
   "man-rituals": "var(--color-manrituals)",
 };
 
+export async function generateMetadata({ params }: { params: Promise<{ brand: string }> }) {
+  const { brand: slug } = await params;
+  if (!ACCENT[slug]) return {};
+
+  const brand = await getBrandBySlug(slug);
+  const name = brand?.name ?? slug.replace(/-/g, " ");
+  const description = brand?.description ?? `Daily gummies from ${name}, with full supplement facts and dosage guidance.`;
+
+  return { title: `${name} — SooulOne Gummies`, description, openGraph: { title: name, description } };
+}
+
 export default async function BrandPage({ params }: { params: Promise<{ brand: string }> }) {
   const { brand: slug } = await params;
   if (!ACCENT[slug]) notFound();
 
-  let brand = null;
-  let products: Awaited<ReturnType<typeof getProductsByBrand>> = [];
-  try {
-    brand = await getBrandBySlug(slug);
-    products = await getProductsByBrand(slug);
-  } catch {
-    /* unseeded database renders an empty brand rather than failing */
-  }
+  // A database error propagates to the nearest error.tsx rather than being
+  // swallowed into "empty brand" — the two look identical to a shopper but
+  // mean very different things to whoever has to notice and fix an outage.
+  const brand = await getBrandBySlug(slug);
+  const products = await getProductsByBrand(slug);
 
   const name = brand?.name ?? slug.replace(/-/g, " ");
 
@@ -47,7 +55,10 @@ export default async function BrandPage({ params }: { params: Promise<{ brand: s
 
       <section className="mx-auto max-w-6xl px-5 py-12">
         {products.length > 0 ? (
-          <ProductGrid products={products} />
+          <>
+            <h2 className="sr-only">Products</h2>
+            <ProductGrid products={products} />
+          </>
         ) : (
           <Empty
             title={`Nothing listed under ${name} yet`}

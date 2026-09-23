@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { addToCart, getOrCreateSessionId, quoteCart, updateQuantity } from "@/server/cart";
+import { recordEvent } from "@/lib/analytics";
 
 const addSchema = z.object({
   productId: z.string().min(1),
@@ -27,6 +28,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  void recordEvent(sessionId, "ADD_TO_CART", {
+    productId: parsed.data.productId,
+    metadata: { quantity: parsed.data.quantity },
+  });
 
   const result = await quoteCart(sessionId);
   return NextResponse.json({ ok: true, itemCount: result?.cartItems.length ?? 0 });
