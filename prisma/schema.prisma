@@ -26,9 +26,14 @@ datasource db {
   provider = "postgresql"
 }
 
+/// What each role may do lives in src/lib/permissions.ts. STAFF predates the
+/// finer roles and is kept as the least-privileged default: view-only.
 enum AdminRole {
   OWNER
   STAFF
+  MANAGER
+  FULFILMENT
+  CONTENT
 }
 
 enum OrderStatus {
@@ -331,6 +336,11 @@ model Order {
   /// of its own, can still record ORDER_PAID against the same funnel session
   /// that recorded PRODUCT_VIEW / ADD_TO_CART / CHECKOUT_STARTED earlier.
   sessionId       String?
+  /// Unguessable secret required to view /order/[orderNumber]. The order
+  /// number alone is a timestamp plus ~1,300 combinations — enumerable — and
+  /// that page shows the customer's name and address. Null on orders placed
+  /// before this existed; those pages simply stop being viewable.
+  accessToken     String?     @unique
   trackingNumber  String?
   courierPartner  String?
   placedAt        DateTime    @default(now())

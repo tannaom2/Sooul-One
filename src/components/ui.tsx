@@ -141,6 +141,15 @@ export function ProductGrid({ products }: { products: ProductSummary[] }) {
  * Empty states are an invitation to act, not an apology. Each one says what is
  * missing and what to do about it.
  */
+export function NoAccess() {
+  return (
+    <Empty
+      title="You don't have access to this page"
+      detail="Your role doesn't include this area. Ask the owner if you need it."
+    />
+  );
+}
+
 export function Empty({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) {
   return (
     <div className="border border-dashed border-[--color-rule] p-10 text-center">

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { OrderStatusForm } from "./status-form";
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function Orders() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("orders:view");
+  if (!session) return <NoAccess />;
 
   let orders: any[] = [];
   try {

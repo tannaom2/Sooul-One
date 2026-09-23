@@ -151,7 +151,7 @@ export default function Checkout() {
       }
 
       if (body.method === "COD") {
-        router.push(`/order/${body.orderNumber}`);
+        router.push(`/order/${body.orderNumber}?t=${body.accessToken}`);
         return;
       }
 
@@ -169,7 +169,7 @@ export default function Checkout() {
         name: "SooulOne",
         order_id: body.razorpayOrderId,
         prefill: { name: form.name, email: form.email, contact: form.phone },
-        handler: () => router.push(`/order/${body.orderNumber}`),
+        handler: () => router.push(`/order/${body.orderNumber}?t=${body.accessToken}`),
         modal: { ondismiss: () => setBusy(false) },
       }).open();
     } catch {

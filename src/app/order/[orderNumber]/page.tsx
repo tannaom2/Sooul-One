@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
+import { orderTokenMatches } from "@/lib/order-access";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,15 @@ const STATUS_COPY: Record<string, string> = {
   FAILED: "Payment didn't go through. Nothing has been charged.",
 };
 
-export default async function OrderPage({ params }: { params: Promise<{ orderNumber: string }> }) {
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orderNumber: string }>;
+  searchParams: Promise<{ t?: string }>;
+}) {
   const { orderNumber } = await params;
+  const { t } = await searchParams;
 
   // A database error propagates to the nearest error.tsx rather than showing
   // "order not found" — a shopper landing here right after paying should
@@ -30,7 +38,9 @@ export default async function OrderPage({ params }: { params: Promise<{ orderNum
     where: { orderNumber },
     include: { items: true },
   });
-  if (!order) notFound();
+  // A wrong or missing token gets the same 404 as a nonexistent order, so the
+  // page can't be used to confirm which order numbers exist.
+  if (!order || !orderTokenMatches(t, order.accessToken)) notFound();
 
   const address = order.shippingAddress as any;
 

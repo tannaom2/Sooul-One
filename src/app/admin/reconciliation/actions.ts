@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin, audit } from "@/lib/auth";
+import { requirePermission, audit } from "@/lib/auth";
 import { reconcilePayments, type ReconciliationResult } from "@/lib/reconciliation";
 
 /**
@@ -11,7 +11,7 @@ import { reconcilePayments, type ReconciliationResult } from "@/lib/reconciliati
  * when" survives even if the finding itself doesn't get acted on immediately.
  */
 export async function runReconciliation(windowDays: number): Promise<ReconciliationResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("finance:view");
   if (!session) throw new Error("Not authorized.");
 
   const result = await reconcilePayments(windowDays);

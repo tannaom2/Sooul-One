@@ -7,6 +7,7 @@ import { fromPaise } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { checkoutInputSchema } from "@/lib/validation/checkout";
+import { newOrderAccessToken } from "@/lib/order-access";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -78,6 +79,7 @@ export async function POST(request: Request) {
     const created = await tx.order.create({
       data: {
         orderNumber: orderNumber(),
+        accessToken: newOrderAccessToken(),
         sessionId,
         guestEmail: input.email,
         guestPhone: input.phone,
@@ -179,7 +181,7 @@ export async function POST(request: Request) {
     // into a 500 the customer would reasonably retry.
     await sendOrderConfirmation(confirmed);
 
-    return NextResponse.json({ orderNumber: order.orderNumber, method: "COD" });
+    return NextResponse.json({ orderNumber: order.orderNumber, accessToken: order.accessToken, method: "COD" });
   }
 
   // --- 4: hosted checkout --------------------------------------------------
@@ -211,6 +213,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     orderNumber: order.orderNumber,
+    accessToken: order.accessToken,
     method: "RAZORPAY",
     razorpayOrderId: rzpOrder.id,
     keyId,

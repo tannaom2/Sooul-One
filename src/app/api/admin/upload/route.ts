@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { audit, requireAdmin } from "@/lib/auth";
+import { audit, requirePermission } from "@/lib/auth";
 import { uploadProductImage } from "@/lib/cloudinary";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  * someone else's Cloudinary bill.
  */
 export async function POST(request: Request) {
-  const session = await requireAdmin();
+  const session = await requirePermission("products:write");
   if (!session) {
     return NextResponse.json({ message: "Sign in again." }, { status: 401 });
   }

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess } from "@/components/ui";
 import { ProductForm } from "../product-form";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function EditProduct({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("products:write");
+  if (!session) return <NoAccess />;
 
   const { id } = await params;
 

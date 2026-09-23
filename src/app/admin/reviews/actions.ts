@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireAdmin, audit } from "@/lib/auth";
+import { requirePermission, audit } from "@/lib/auth";
 
 export async function moderateReview(reviewId: string, decision: "APPROVE" | "REJECT"): Promise<void> {
-  const session = await requireAdmin();
+  const session = await requirePermission("reviews:moderate");
   if (!session) throw new Error("Not authorized.");
 
   if (decision === "APPROVE") {

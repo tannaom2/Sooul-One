@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess } from "@/components/ui";
 import { StoreForm } from "./store-form";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function AdminStores() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("stores:write");
+  if (!session) return <NoAccess />;
 
   let stores: any[] = [];
   try {

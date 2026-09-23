@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { findNearExpiryBatches } from "@/lib/compliance/fefo";
-import { Empty } from "@/components/ui";
+import { Empty, NoAccess } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function Dashboard() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("dashboard:view");
+  if (!session) return <NoAccess />;
+  const canSeeFinance = can(session.role, "finance:view");
+  const canSeeOrders = can(session.role, "orders:view");
 
   let orders: any[] = [];
   let products: any[] = [];
@@ -67,10 +70,10 @@ export default async function Dashboard() {
     <div className="grid gap-10">
       <section className="grid gap-4 sm:grid-cols-3">
         {[
-          ["Recent revenue", formatINR(revenuePaise), `${paid.length} paid orders`],
+          canSeeFinance && ["Recent revenue", formatINR(revenuePaise), `${paid.length} paid orders`],
           ["Live products", String(products.length), "across all brands"],
-          ["Orders awaiting action", String(orders.filter((o) => o.status === "PAID" || o.status === "PROCESSING").length), "paid or packing"],
-        ].map(([label, value, sub]) => (
+          canSeeOrders && ["Orders awaiting action", String(orders.filter((o) => o.status === "PAID" || o.status === "PROCESSING").length), "paid or packing"],
+        ].filter((tile): tile is string[] => Boolean(tile)).map(([label, value, sub]) => (
           <div key={label} className="panel p-4">
             <p className="text-small text-ink-soft">{label}</p>
             <p className="tabular mt-1 font-display text-h2 font-extrabold">{value}</p>
@@ -132,6 +135,7 @@ export default async function Dashboard() {
         </div>
       </section>
 
+      {canSeeOrders && (
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-h3 font-bold">Recent orders</h2>
@@ -158,6 +162,7 @@ export default async function Dashboard() {
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

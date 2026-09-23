@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { audit, requireAdmin } from "@/lib/auth";
+import { audit, requirePermission } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { productInputSchema } from "@/lib/validation/product";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { sendShippingNotification } from "@/lib/email";
@@ -48,9 +49,26 @@ function json<T>(form: FormData, key: string): T | undefined {
   }
 }
 
+const NOT_ALLOWED = "You don't have access to do that. Sign in again, or ask the owner for access.";
+
+/** True when any price-bearing field differs from what's stored. */
+function pricingChanged(
+  existing: { basePrice: unknown; compareAtPrice: unknown; discountActive: boolean; discountPercent: unknown; taxRatePercent: unknown },
+  input: { basePrice: unknown; compareAtPrice?: unknown; discountActive: boolean; discountPercent?: unknown; taxRatePercent: unknown },
+): boolean {
+  const n = (v: unknown) => (v == null ? null : Number(String(v)));
+  return (
+    n(existing.basePrice) !== n(input.basePrice) ||
+    n(existing.compareAtPrice) !== n(input.compareAtPrice) ||
+    existing.discountActive !== input.discountActive ||
+    n(existing.discountPercent) !== n(input.discountPercent) ||
+    n(existing.taxRatePercent) !== n(input.taxRatePercent)
+  );
+}
+
 export async function saveProduct(_prev: ActionResult, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
-  if (!session) return { ok: false, message: "Your session expired. Sign in again." };
+  const session = await requirePermission("products:write");
+  if (!session) return { ok: false, message: NOT_ALLOWED };
 
   const id = form.get("id") ? String(form.get("id")) : null;
   const regulatoryType = String(form.get("regulatoryType"));
@@ -103,6 +121,16 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     };
   }
   const input = parsed.data;
+
+  // Copy editors (CONTENT) can change words but not money. Checked against
+  // the stored row, not the form's claims about what changed.
+  if (!can(session.role, "products:pricing")) {
+    const current = id ? await db.product.findUnique({ where: { id } }) : null;
+    if (!current) return { ok: false, message: "Only the owner or a manager can create products, since that sets a price." };
+    if (pricingChanged(current, input)) {
+      return { ok: false, message: "You can edit this product's copy, but price, discount and GST changes need a manager." };
+    }
+  }
 
   const data: Record<string, unknown> = {
     sku: input.sku,
@@ -181,8 +209,8 @@ export async function checkCopy(_prev: unknown, form: FormData) {
 }
 
 export async function addBatch(_prev: ActionResult, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
-  if (!session) return { ok: false, message: "Your session expired. Sign in again." };
+  const session = await requirePermission("batches:write");
+  if (!session) return { ok: false, message: NOT_ALLOWED };
 
   const productId = String(form.get("productId") ?? "");
   const batchNumber = String(form.get("batchNumber") ?? "").trim();
@@ -224,8 +252,8 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
 }
 
 export async function saveStore(_prev: ActionResult, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
-  if (!session) return { ok: false, message: "Your session expired. Sign in again." };
+  const session = await requirePermission("stores:write");
+  if (!session) return { ok: false, message: NOT_ALLOWED };
 
   const name = String(form.get("name") ?? "").trim();
   const city = String(form.get("city") ?? "").trim();
@@ -255,8 +283,8 @@ export async function saveStore(_prev: ActionResult, form: FormData): Promise<Ac
 }
 
 export async function setOrderStatus(_prev: ActionResult, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
-  if (!session) return { ok: false, message: "Your session expired. Sign in again." };
+  const session = await requirePermission("orders:write");
+  if (!session) return { ok: false, message: NOT_ALLOWED };
 
   const orderId = String(form.get("orderId") ?? "");
   const status = String(form.get("status") ?? "");

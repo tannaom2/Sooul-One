@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { DiscountType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { audit, requireAdmin } from "@/lib/auth";
+import { audit, requirePermission } from "@/lib/auth";
 import type { ActionResult } from "../actions";
 
 /**
@@ -25,7 +25,7 @@ function slugify(name: string): string {
 }
 
 export async function saveBundle(_prev: ActionResult, form: FormData): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const session = await requirePermission("bundles:write");
   if (!session) return { ok: false, message: "Your session expired. Sign in again." };
 
   const name = String(form.get("name") ?? "").trim();
@@ -70,7 +70,7 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
 }
 
 export async function toggleBundle(bundleId: string, isActive: boolean): Promise<void> {
-  const session = await requireAdmin();
+  const session = await requirePermission("bundles:write");
   if (!session) throw new Error("Not authorized.");
 
   await db.bundle.update({ where: { id: bundleId }, data: { isActive } });
@@ -80,7 +80,7 @@ export async function toggleBundle(bundleId: string, isActive: boolean): Promise
 }
 
 export async function deleteBundle(bundleId: string): Promise<void> {
-  const session = await requireAdmin();
+  const session = await requirePermission("bundles:write");
   if (!session) throw new Error("Not authorized.");
 
   await db.bundle.delete({ where: { id: bundleId } });

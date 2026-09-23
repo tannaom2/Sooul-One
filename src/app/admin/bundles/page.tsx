@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 import { BundleForm } from "./bundle-form";
@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function BundlesPage() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("bundles:write");
+  if (!session) return <NoAccess />;
 
   let bundles: any[] = [];
   let brands: any[] = [];

@@ -1,11 +1,12 @@
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
+import { NoAccess } from "@/components/ui";
 import { ReconciliationPanel } from "./reconciliation-panel";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReconciliationPage() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("finance:view");
+  if (!session) return <NoAccess />;
 
   return (
     <div>

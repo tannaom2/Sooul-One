@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { ReviewActions } from "./review-actions";
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function ReviewsPage() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("reviews:moderate");
+  if (!session) return <NoAccess />;
 
   let pending: any[] = [];
   try {

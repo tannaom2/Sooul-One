@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { buildFunnel, findAbandonedCarts } from "@/lib/funnel";
 import { formatDate } from "@/lib/format";
-import { Empty } from "@/components/ui";
+import { Empty, NoAccess } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +15,8 @@ export default async function FunnelPage({
 }: {
   searchParams: Promise<{ days?: string }>;
 }) {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("finance:view");
+  if (!session) return <NoAccess />;
 
   const { days: daysParam } = await searchParams;
   const days = Math.max(1, Math.min(365, Number(daysParam) || 30));

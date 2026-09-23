@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { requiredRemainingDays, wholeDaysBetween } from "@/lib/compliance/shelf-life";
 import { BatchForm } from "./batch-form";
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function Batches() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("batches:write");
+  if (!session) return <NoAccess />;
 
   let products: any[] = [];
   try {

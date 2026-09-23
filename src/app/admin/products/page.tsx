@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { Empty, VegMark } from "@/components/ui";
+import { requirePermission } from "@/lib/auth";
+import { Empty, NoAccess, VegMark } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function AdminProducts() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("products:view");
+  if (!session) return <NoAccess />;
 
   let products: any[] = [];
   try {

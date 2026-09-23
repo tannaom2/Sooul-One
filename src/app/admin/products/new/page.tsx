@@ -1,13 +1,13 @@
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { ProductForm } from "../product-form";
-import { Empty } from "@/components/ui";
+import { Empty, NoAccess } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewProduct() {
-  const session = await requireAdmin();
-  if (!session) return null;
+  const session = await requirePermission("products:write");
+  if (!session) return <NoAccess />;
 
   let brands: any[] = [];
   try {

@@ -1,27 +1,32 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
+import { can, type Permission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
-const NAV = [
-  ["/admin", "Overview"],
-  ["/admin/products", "Products"],
-  ["/admin/bundles", "Bundles"],
-  ["/admin/batches", "Stock batches"],
-  ["/admin/orders", "Orders"],
-  ["/admin/reviews", "Reviews"],
-  ["/admin/analytics", "Analytics"],
-  ["/admin/funnel", "Funnel"],
-  ["/admin/reconciliation", "Reconciliation"],
-  ["/admin/stores", "Stores"],
+// Hiding a link is convenience only — each page and action enforces its own
+// permission server-side, so a typed-in URL gets "no access", not the page.
+const NAV: [string, string, Permission][] = [
+  ["/admin", "Overview", "dashboard:view"],
+  ["/admin/products", "Products", "products:view"],
+  ["/admin/bundles", "Bundles", "bundles:write"],
+  ["/admin/batches", "Stock batches", "batches:write"],
+  ["/admin/orders", "Orders", "orders:view"],
+  ["/admin/reviews", "Reviews", "reviews:moderate"],
+  ["/admin/analytics", "Analytics", "finance:view"],
+  ["/admin/funnel", "Funnel", "finance:view"],
+  ["/admin/reconciliation", "Reconciliation", "finance:view"],
+  ["/admin/stores", "Stores", "stores:write"],
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // The login page renders inside this layout too, so it must not redirect.
   const path = (await headers()).get("x-invoke-path") ?? "";
-  const session = await requireAdmin();
+  // Every active role has dashboard:view, so this is "signed in, active, and
+  // MFA-verified" — with the role read fresh from the database.
+  const session = await requirePermission("dashboard:view");
 
   if (!session && !path.includes("/admin/login")) {
     // Server-side verification is the real gate; middleware only bounces
@@ -41,7 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </p>
         </div>
         <nav className="flex flex-wrap gap-4 text-small font-medium">
-          {NAV.map(([href, label]) => (
+          {NAV.filter(([, , permission]) => can(session.role, permission)).map(([href, label]) => (
             <Link key={href} href={href} className="hover:underline">
               {label}
             </Link>

@@ -21,6 +21,7 @@ import jwt from "jsonwebtoken";
 import { generateSecret, verifySync } from "otplib";
 import { cookies } from "next/headers";
 import { db } from "./db";
+import { can, type AdminRole, type Permission } from "./permissions";
 
 const COOKIE = "soulone_admin";
 const TTL_SECONDS = 60 * 60 * 8; // one working day
@@ -29,7 +30,7 @@ const BCRYPT_ROUNDS = 12;
 export interface AdminSession {
   readonly adminUserId: string;
   readonly email: string;
-  readonly role: "OWNER" | "STAFF";
+  readonly role: AdminRole;
   /** False until the TOTP code has been accepted this session. */
   readonly mfaVerified: boolean;
 }
@@ -130,6 +131,28 @@ export async function requireAdmin(): Promise<AdminSession | null> {
   const session = await readSession();
   if (!session || !session.mfaVerified) return null;
   return session;
+}
+
+/**
+ * Session for an authenticated admin whose role grants `permission`, or null.
+ *
+ * Every admin page and every mutation calls this — never requireAdmin alone —
+ * so being signed in is not the same as being allowed. The role is read from
+ * the database rather than trusted from the session token, so demoting
+ * someone takes effect on their next request, not when their 8-hour session
+ * happens to expire.
+ */
+export async function requirePermission(permission: Permission): Promise<AdminSession | null> {
+  const session = await requireAdmin();
+  if (!session) return null;
+
+  const user = await db.adminUser.findUnique({
+    where: { id: session.adminUserId },
+    select: { role: true, isActive: true },
+  });
+  if (!user?.isActive || !can(user.role, permission)) return null;
+
+  return { ...session, role: user.role };
 }
 
 /**
