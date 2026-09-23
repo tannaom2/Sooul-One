@@ -60,46 +60,52 @@
    Base
    -------------------------------------------------------------------------- */
 
-/* In @layer base so utilities like border-alert can override it. Unlayered,
-   this beat every border-colour utility on the site — including the red
-   edge on the allergen warning. */
+/* LAYERING — why everything below sits in @layer base or @layer components.
+   In Tailwind v4, unlayered CSS beats every utility class regardless of
+   specificity. These rules used to be unlayered, so utilities written to
+   override them silently did nothing: `border-alert` on the allergen warning
+   rendered beige, `font-extrabold` headings rendered at 700, `px-3 py-1.5`
+   small buttons rendered full-size, `w-20` inputs stretched to 100%, and
+   `text-lead` order totals rendered as small text. Layered, a utility on the
+   element wins, as its author intended. */
 @layer base {
   * {
     border-color: var(--color-rule);
   }
-}
 
-html {
-  -webkit-text-size-adjust: 100%;
-}
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
 
-body {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-body);
-  font-size: var(--text-base);
-  line-height: 1.6;
-  font-feature-settings: "tnum" 0;
-}
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    font-feature-settings: "tnum" 0;
+  }
 
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  /* In base (not unlayered) so .field:focus below still wins for text inputs. */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
 }
 
 /* Numbers in prices, weights and nutrient tables must align in columns. */
 .tabular {
   font-variant-numeric: tabular-nums;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-ink);
-  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -117,6 +123,7 @@ h4 {
    Structural, not decorative: it groups a row into a shelf.
    -------------------------------------------------------------------------- */
 
+@layer components {
 .shelf-row {
   border-bottom: 1px solid var(--color-rule);
 }
@@ -256,3 +263,4 @@ h4 {
 .panel-row dd {
   font-variant-numeric: tabular-nums;
 }
+} /* end @layer components */
