@@ -78,13 +78,25 @@ function billRows(bill: OrderBill): string {
     </tr>`;
 }
 
+/**
+ * An email button built as a table cell with a background colour, so it still
+ * renders as a button in Outlook, which ignores most CSS on links.
+ */
+export function emailButton(href: string, label: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr>
+    <td style="background:${INK};border-radius:4px">
+      <a href="${esc(href)}" style="display:inline-block;padding:12px 20px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none">${esc(label)}</a>
+    </td></tr></table>`;
+}
+
 export interface RenderedEmail {
   subject: string;
   html: string;
   text: string;
 }
 
-export function renderOrderConfirmation(bill: OrderBill): RenderedEmail {
+/** `orderUrl` is the customer's private order link; null for orders without one. */
+export function renderOrderConfirmation(bill: OrderBill, orderUrl?: string | null): RenderedEmail {
   const subject = `Your SooulOne order ${bill.orderNumber} is confirmed`;
   const statusLine = bill.cod
     ? "You'll pay the courier when it arrives."
@@ -126,6 +138,7 @@ export function renderOrderConfirmation(bill: OrderBill): RenderedEmail {
             Order <strong style="color:${INK}">${esc(bill.orderNumber)}</strong>, placed ${esc(formatDate(bill.placedAt))}. ${statusLine}
           </p>
           ${savings}
+          ${orderUrl ? emailButton(orderUrl, "View your order") : ""}
           <p style="margin:0 0 4px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${MUTED}">Your bill</p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px">
             ${billRows(bill)}
@@ -153,6 +166,7 @@ export function renderOrderConfirmation(bill: OrderBill): RenderedEmail {
     ``,
     `Order ${bill.orderNumber}, placed ${formatDate(bill.placedAt)}.`,
     statusLine,
+    ...(orderUrl ? [``, `View your order: ${orderUrl}`] : []),
     ``,
     `YOUR BILL`,
     ...bill.lines.map((l) => {

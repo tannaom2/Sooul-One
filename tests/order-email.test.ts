@@ -144,4 +144,18 @@ describe("renderOrderConfirmation", () => {
     expect(evil.html).toContain("&lt;script&gt;");
     expect(esc("\"'&")).toBe("&quot;&#39;&amp;");
   });
+
+  it("links to the customer's private order page, in HTML and plain text", () => {
+    const url = "https://soulone.example/order/SO-1?t=abc_123";
+    const withLink = renderOrderConfirmation(buildOrderBill(order()), url);
+    expect(withLink.html).toContain('href="https://soulone.example/order/SO-1?t=abc_123"');
+    expect(withLink.html).toContain("View your order");
+    expect(withLink.text).toContain(`View your order: ${url}`);
+  });
+
+  it("leaves the link out for orders that have no access token", () => {
+    const noLink = renderOrderConfirmation(buildOrderBill(order()), null);
+    expect(noLink.html).not.toContain("View your order");
+    expect(noLink.text).not.toContain("View your order");
+  });
 });

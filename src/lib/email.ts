@@ -1,7 +1,8 @@
 import "server-only";
 import { Resend } from "resend";
 import { buildOrderBill } from "./order-bill";
-import { renderOrderConfirmation } from "./email-templates";
+import { emailButton, esc, renderOrderConfirmation } from "./email-templates";
+import { orderStatusUrl } from "./order-access";
 import { reportError } from "@/lib/observability";
 
 /**
@@ -112,7 +113,10 @@ export async function sendOrderConfirmation(order: any): Promise<Sent> {
     return { delivered: false, reason: "no_recipient" };
   }
 
-  const { subject, html, text } = renderOrderConfirmation(buildOrderBill(order));
+  const { subject, html, text } = renderOrderConfirmation(
+    buildOrderBill(order),
+    orderStatusUrl(order.orderNumber, order.accessToken),
+  );
   return send(to, subject, html, text);
 }
 
@@ -121,22 +125,26 @@ export async function sendShippingNotification(order: any): Promise<Sent> {
   if (!to) return { delivered: false, reason: "no_recipient" };
 
   const tracking = order.trackingNumber;
+  const orderUrl = orderStatusUrl(order.orderNumber, order.accessToken);
 
+  // Tracking number and courier are typed by staff, so they're escaped like
+  // any other text that ends up in HTML.
   const html = wrap(
     "Your order is on its way",
     `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">
-       Order <strong>${order.orderNumber}</strong> has left us.
+       Order <strong>${esc(order.orderNumber)}</strong> has left us.
      </p>
      ${
        tracking
          ? `<p style="margin:0 0 16px;font-size:15px">
-              Tracking number: <strong>${tracking}</strong>
-              ${order.courierPartner ? `<br><span style="color:#5b4f45;font-size:14px">via ${order.courierPartner}</span>` : ""}
+              Tracking number: <strong>${esc(tracking)}</strong>
+              ${order.courierPartner ? `<br><span style="color:#5b4f45;font-size:14px">via ${esc(order.courierPartner)}</span>` : ""}
             </p>`
          : `<p style="margin:0 0 16px;font-size:14px;color:#5b4f45">
               We'll add a tracking number here as soon as the courier provides one.
             </p>`
      }
+     ${orderUrl ? emailButton(orderUrl, "Track your order") : ""}
      <p style="margin:0;font-size:13px;color:#8c7f73">
        If anything arrives damaged or isn't what you expected, reply to this email and we'll sort it.
      </p>`,
@@ -147,6 +155,7 @@ export async function sendShippingNotification(order: any): Promise<Sent> {
     ``,
     `Order ${order.orderNumber} has left us.`,
     tracking ? `Tracking number: ${tracking}` : `We'll add tracking as soon as we have it.`,
+    ...(orderUrl ? [`Track your order: ${orderUrl}`] : []),
     ``,
     `If anything arrives damaged, reply to this email and we'll sort it.`,
   ].join("\n");

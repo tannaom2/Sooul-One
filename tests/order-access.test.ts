@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { newOrderAccessToken, orderTokenMatches } from "../src/lib/order-access";
+import { newOrderAccessToken, orderStatusUrl, orderTokenMatches } from "../src/lib/order-access";
+
+describe("orderStatusUrl", () => {
+  it("builds the private order link from the site URL", () => {
+    expect(orderStatusUrl("SO-MU66-0T", "abc_-1", "https://soulone.example/")).toBe(
+      "https://soulone.example/order/SO-MU66-0T?t=abc_-1",
+    );
+  });
+
+  it("encodes anything unexpected in the order number", () => {
+    expect(orderStatusUrl("SO 1/2", "t", "https://x.example")).toBe("https://x.example/order/SO%201%2F2?t=t");
+  });
+
+  it("returns null for orders placed before tokens existed", () => {
+    expect(orderStatusUrl("SO-1", null, "https://x.example")).toBeNull();
+    expect(orderStatusUrl("SO-1", "", "https://x.example")).toBeNull();
+  });
+});
 
 describe("order access tokens", () => {
   it("generates distinct, URL-safe, 128-bit tokens", () => {
