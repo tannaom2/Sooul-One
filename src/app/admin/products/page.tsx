@@ -43,7 +43,8 @@ export default async function AdminProducts({
 }) {
   const session = await requirePermission("products:view");
   if (!session) return <NoAccess />;
-  const canWrite = can(session.role, "products:write");
+  // Creating a product sets its price, so it needs pricing rights too.
+  const canCreate = can(session.role, "products:write") && can(session.role, "products:pricing");
 
   let brands: { id: string; name: string }[] = [];
   let products: any[] = [];
@@ -89,7 +90,7 @@ export default async function AdminProducts({
 
   const { view, q, brand, page } = filters;
   const pages = Math.max(1, Math.ceil(total / PRODUCTS_PAGE_SIZE));
-  const addButton = canWrite && (
+  const addButton = canCreate && (
     <Link href="/admin/products/new" className="btn btn-solid">
       Add a product
     </Link>

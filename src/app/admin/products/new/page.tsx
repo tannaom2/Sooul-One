@@ -7,7 +7,9 @@ import { reportError } from "@/lib/observability";
 export const dynamic = "force-dynamic";
 
 export default async function NewProduct() {
-  const session = await requirePermission("products:write");
+  // A new product needs a price, so creating one takes pricing rights
+  // (saveProduct refuses it otherwise); copy editors only edit existing ones.
+  const session = await requirePermission("products:pricing");
   if (!session) return <NoAccess />;
 
   let brands: any[] = [];

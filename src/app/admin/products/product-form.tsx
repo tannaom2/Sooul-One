@@ -42,7 +42,17 @@ const NUTRIENTS: [key: string, label: string, unit: string][] = [
 
 const INITIAL: ActionResult = { ok: false };
 
-export function ProductForm({ brands, product }: { brands: Brand[]; product?: any }) {
+export function ProductForm({
+  brands,
+  product,
+  canEditPricing = true,
+}: {
+  brands: Brand[];
+  product?: any;
+  /** False for copy editors: prices show read-only (still submitted, so the server can confirm they didn't change). */
+  canEditPricing?: boolean;
+}) {
+  const locked = !canEditPricing;
   const [state, submit, pending] = useActionState(saveProduct, INITIAL);
 
   const [type, setType] = useState<Type>(product?.regulatoryType ?? "PACKAGED_FOOD");
@@ -217,10 +227,15 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
       </div>
 
       {/* --- Pricing and stock --- */}
+      {locked && (
+        <p className="border-l-4 border-caution bg-shelf p-3 text-small">
+          Price, was-price, GST and discount can only be changed by the owner or a manager.
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Price (₹, incl. GST)" name="basePrice" defaultValue={product?.basePrice?.toString()} error={err("basePrice")} />
-        <Field label="Was-price (₹)" name="compareAtPrice" defaultValue={product?.compareAtPrice?.toString()} error={err("compareAtPrice")} optional />
-        <Field label="GST rate (%)" name="taxRatePercent" type="number" defaultValue={product?.taxRatePercent?.toString() ?? "18"} error={err("taxRatePercent")} />
+        <Field label="Price (₹, incl. GST)" name="basePrice" defaultValue={product?.basePrice?.toString()} error={err("basePrice")} readOnly={locked} />
+        <Field label="Was-price (₹)" name="compareAtPrice" defaultValue={product?.compareAtPrice?.toString()} error={err("compareAtPrice")} optional readOnly={locked} />
+        <Field label="GST rate (%)" name="taxRatePercent" type="number" defaultValue={product?.taxRatePercent?.toString() ?? "18"} error={err("taxRatePercent")} readOnly={locked} />
         <Field label="Online stock" name="stockQuantity" type="number" defaultValue={String(product?.stockQuantity ?? 0)} />
         <Field label="Reorder at" name="lowStockThreshold" type="number" defaultValue={String(product?.lowStockThreshold ?? 10)} />
         <Field label="Pack weight (g)" name="weightGrams" type="number" defaultValue={product?.weightGrams?.toString()} optional />
@@ -235,7 +250,10 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
             name="discountActive"
             checked={discountOn}
             onChange={(e) => setDiscountOn(e.target.checked)}
+            disabled={locked}
           />
+          {/* A disabled checkbox isn't submitted, so carry its value. */}
+          {locked && discountOn && <input type="hidden" name="discountActive" value="on" />}
           <span>Discount is active</span>
         </label>
         <div className="mt-3 max-w-[16rem]">
@@ -250,6 +268,8 @@ export function ProductForm({ brands, product }: { brands: Brand[]; product?: an
             className="field tabular"
             value={discountPct}
             onChange={(e) => setDiscountPct(e.target.value)}
+            readOnly={locked}
+            aria-readonly={locked || undefined}
           />
           {err("discountPercent") && <Err>{err("discountPercent")}</Err>}
         </div>
@@ -435,6 +455,7 @@ function Field({
   error,
   hint,
   optional,
+  readOnly,
 }: {
   label: string;
   name: string;
@@ -443,6 +464,7 @@ function Field({
   error?: string;
   hint?: string;
   optional?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <div>
@@ -450,7 +472,14 @@ function Field({
         {label}
         {optional && <span className="ml-1 font-normal text-ink-faint">(optional)</span>}
       </label>
-      <input id={name} name={name} type={type} defaultValue={defaultValue} className="field" />
+      <input
+        id={name}
+        name={name}
+        type={type}
+        defaultValue={defaultValue}
+        readOnly={readOnly}
+        className={readOnly ? "field cursor-not-allowed bg-shelf text-ink-soft" : "field"}
+      />
       {hint && <p className="mt-1 text-micro text-ink-faint">{hint}</p>}
       {error && <Err>{error}</Err>}
     </div>

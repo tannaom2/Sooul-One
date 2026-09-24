@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { Empty, NoAccess } from "@/components/ui";
 import { ProductForm } from "../product-form";
 import { reportError } from "@/lib/observability";
@@ -38,7 +39,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
   return (
     <div>
       <h1 className="mb-6 text-h2 font-extrabold">{product.name}</h1>
-      <ProductForm brands={brands} product={product} />
+      <ProductForm brands={brands} product={product} canEditPricing={can(session.role, "products:pricing")} />
     </div>
   );
 }
