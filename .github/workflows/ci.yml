@@ -11,6 +11,11 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      # prisma.config.ts requires DATABASE_URL even for `generate` and
+      # `validate`, which never connect. Without this, every run since the
+      # Prisma 7 move failed at its first step.
+      DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
     steps:
       - uses: actions/checkout@v4
         with:
