@@ -14,8 +14,8 @@ import { OUTSIDE_AREA_MESSAGE, isServiceable } from "@/lib/checkout/service-area
 import { lookupPincode } from "@/server/pincode";
 import { newOrderAccessToken } from "@/lib/order-access";
 import { recordOrderEvent } from "@/lib/order-events";
-import { onlinePaymentsEnabled } from "@/lib/payments-config";
-import { ordersOpen } from "@/server/launch-readiness";
+
+import { getCheckoutState } from "@/server/store-settings";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import { reportError } from "@/lib/observability";
 
@@ -62,17 +62,22 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  // The launch gate (src/lib/launch-readiness.ts): on the public site, no
-  // orders until every blocking checklist item is done.
-  if (!(await ordersOpen())) {
-    return NextResponse.json({ message: "We're not taking orders just yet. Please check back soon." }, { status: 503 });
+  // Same decision the checkout page made (src/lib/store-controls.ts): the
+  // launch gate, the owner's pause, and which payment methods are on.
+  // Checked before anything is reserved.
+  const checkout = await getCheckoutState();
+  if (!checkout.open) {
+    return NextResponse.json({ message: checkout.message }, { status: 503 });
   }
-
-  // Checked before anything is reserved: an order that can't be paid for
-  // would otherwise hold stock until the expiry sweep closed it.
-  if (input.paymentMethod !== "COD" && !onlinePaymentsEnabled()) {
+  const method = input.paymentMethod === "COD" ? "COD" : "ONLINE";
+  if (!checkout.methods.includes(method)) {
     return NextResponse.json(
-      { message: "Online payment isn't available yet. Choose cash on delivery." },
+      {
+        message:
+          method === "COD"
+            ? "Cash on delivery isn't available right now. Choose another way to pay."
+            : "Online payment isn't available yet. Choose cash on delivery.",
+      },
       { status: 400 },
     );
   }

@@ -26,6 +26,8 @@ export interface ActionResult {
   ok: boolean;
   message?: string;
   fieldErrors?: Record<string, string[]>;
+  /** After a product save: its new version, which the form carries into the next save. */
+  version?: string;
 }
 
 function collect(issues: { path: PropertyKey[]; message: string }[]): Record<string, string[]> {
@@ -61,6 +63,9 @@ function json<T>(form: FormData, key: string): T | undefined {
 }
 
 const NOT_ALLOWED = "You don't have access to do that. Sign in again, or ask the owner for access.";
+
+const STALE_PRODUCT =
+  "Someone else saved this product while you were editing, so your save was stopped to avoid overwriting their change. Copy anything you need from the form, then reload to see the latest version.";
 
 /** True when any price-bearing field differs from what's stored. */
 function pricingChanged(
@@ -162,6 +167,14 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   const before = id ? await db.product.findUnique({ where: { id } }) : null;
   if (id && !before) return { ok: false, message: "That product no longer exists." };
 
+  // Edit locking: refuse to overwrite a change someone else saved after this
+  // form was opened. Checked here for a clear message, and again atomically
+  // in the update below, in case both saves land at the same moment.
+  const loadedVersion = String(form.get("loadedVersion") ?? "");
+  if (before && loadedVersion && before.updatedAt.toISOString() !== loadedVersion) {
+    return { ok: false, message: STALE_PRODUCT };
+  }
+
   // Copy editors (CONTENT) can change words but not money. Checked against
   // the stored row, not the form's claims about what changed.
   if (!can(session.role, "products:pricing")) {
@@ -234,9 +247,18 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
 
   // `data` is built up field-by-field across the branches above, so its
   // static type is a loose Record — zod already validated its actual shape.
-  const saved = id
-    ? await db.product.update({ where: { id }, data: data as Prisma.ProductUpdateInput })
-    : await db.product.create({ data: data as Prisma.ProductCreateInput });
+  let saved: { id: string; updatedAt: Date };
+  if (id && before) {
+    // Applies only if the product is still the version read above.
+    const { count } = await db.product.updateMany({
+      where: { id, updatedAt: before.updatedAt },
+      data: data as Prisma.ProductUncheckedUpdateManyInput,
+    });
+    if (count === 0) return { ok: false, message: STALE_PRODUCT };
+    saved = await db.product.findUniqueOrThrow({ where: { id }, select: { id: true, updatedAt: true } });
+  } else {
+    saved = await db.product.create({ data: data as Prisma.ProductCreateInput });
+  }
 
   if (before) {
     // Only what actually changed — and nothing at all for a no-op save, so
@@ -254,7 +276,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   revalidatePath("/admin/products");
   expireTag(CATALOG_TAG);
 
-  return { ok: true, message: id ? "Product updated." : "Product created." };
+  return { ok: true, message: id ? "Product updated." : "Product created.", version: saved.updatedAt.toISOString() };
 }
 
 /** Live preview of the claims check, so the writer sees it before saving. */

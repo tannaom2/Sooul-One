@@ -1,14 +1,14 @@
 import { connection } from "next/server";
-import { onlinePaymentsEnabled } from "@/lib/payments-config";
-import { ordersOpen } from "@/server/launch-readiness";
+import { getCheckoutState } from "@/server/store-settings";
 import { CheckoutClient } from "./checkout-client";
 
 /**
- * Server entry for checkout: decides at request time (not build time) which
- * payment methods this deployment can actually complete, so UPI and card only
- * appear once Razorpay is fully configured. create-order enforces the same rule.
+ * Server entry for checkout: decides at request time (not build time) whether
+ * checkout is open (launch gate, owner's pause) and which payment methods it
+ * can take (Razorpay set up, cash on delivery switched on). create-order
+ * enforces the same rules (src/lib/store-controls.ts).
  */
 export default async function CheckoutPage() {
   await connection();
-  return <CheckoutClient onlinePayments={onlinePaymentsEnabled()} ordersOpen={await ordersOpen()} />;
+  return <CheckoutClient state={await getCheckoutState()} />;
 }

@@ -99,6 +99,11 @@ export function ProductForm({
   return (
     <form onSubmit={keepFormValues(submit)} className="grid max-w-3xl gap-6">
       {product?.id && <input type="hidden" name="id" value={product.id} />}
+      {/* Which version of the product this form was loaded from, so a save
+          can't silently overwrite someone else's change made in the meantime. */}
+      {product?.id && (
+        <input type="hidden" name="loadedVersion" value={state.version ?? new Date(product.updatedAt).toISOString()} />
+      )}
       <input type="hidden" name="nutritionFacts" value={JSON.stringify(
         Object.fromEntries(
           Object.entries(nutrition)

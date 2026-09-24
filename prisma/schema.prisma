@@ -655,3 +655,18 @@ model ConsentRecord {
 
   @@index([email, purpose, createdAt])
 }
+
+/// Owner's switches for the live store (Settings → Store controls), so an
+/// RTO spike, a stock problem or a holiday doesn't need a code change. One
+/// row (id "default"); every change is in the activity log.
+model StoreSettings {
+  id             String   @id @default("default")
+  /// Stops new orders at checkout, showing pauseMessage.
+  ordersPaused   Boolean  @default(false)
+  pauseMessage   String?
+  /// Cash on delivery offered at checkout.
+  codEnabled     Boolean  @default(true)
+  /// Bundle offers applied in the basket and checkout.
+  bundlesEnabled Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}

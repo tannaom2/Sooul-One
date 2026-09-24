@@ -7,6 +7,7 @@ import { formatINR } from "@/lib/money";
 import { formatDate } from "@/lib/format";
 import { track } from "@/lib/track";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
+import type { CheckoutState, PaymentMethod } from "@/lib/store-controls";
 import { STEPS, normalise, stepSummary, validateStep, type CheckoutStep } from "@/lib/checkout/steps";
 import { useCheckout } from "./use-checkout";
 import { useQuote } from "./use-quote";
@@ -48,14 +49,14 @@ const noop = () => () => {};
  * The form restores a draft from sessionStorage, which only exists in the
  * browser, so it renders after hydration; the server sends the page frame.
  */
-export function CheckoutClient({ onlinePayments, ordersOpen = true }: { onlinePayments: boolean; ordersOpen?: boolean }) {
+export function CheckoutClient({ state }: { state: CheckoutState }) {
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
-  // Before launch the public site takes no orders (src/lib/launch-readiness.ts).
-  if (!ordersOpen) {
+  // Closed before launch, or paused by the owner (src/lib/store-controls.ts).
+  if (!state.open) {
     return (
       <div className="mx-auto max-w-xl px-5 py-16">
-        <h1 className="text-h1 font-extrabold">Opening soon</h1>
-        <p className="mt-2 text-ink-soft">We&rsquo;re not taking orders just yet. Your basket is saved, so check back soon.</p>
+        <h1 className="text-h1 font-extrabold">{state.title}</h1>
+        <p className="mt-2 text-ink-soft">{state.message}</p>
         <Link href="/" className="btn btn-outline mt-6">
           Keep browsing
         </Link>
@@ -70,17 +71,19 @@ export function CheckoutClient({ onlinePayments, ordersOpen = true }: { onlinePa
       </div>
     );
   }
-  return <CheckoutForm onlinePayments={onlinePayments} />;
+  return <CheckoutForm methods={state.methods} />;
 }
 
-function CheckoutForm({ onlinePayments }: { onlinePayments: boolean }) {
+function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
   const router = useRouter();
   const { form, step, errors, setErrors, set, setForm, next, edit, clearDraft } = useCheckout();
   const { quote, couponRejected, empty } = useQuote(form.postalCode, form.state, form.couponCode);
   const place = usePincode(form.postalCode);
-  // Until Razorpay is fully configured (payments-config.ts), cash on delivery is the only option.
-  const payOptions = onlinePayments ? PAY_OPTIONS : PAY_OPTIONS.filter((o) => o.value === "COD");
-  const [pay, setPay] = useState<PayChoice>(onlinePayments ? "UPI" : "COD");
+  // Only what this deployment can take right now: UPI and card once Razorpay
+  // is set up, cash on delivery unless the owner has switched it off.
+  const onlinePayments = methods.includes("ONLINE");
+  const payOptions = PAY_OPTIONS.filter((o) => (o.value === "COD" ? methods.includes("COD") : onlinePayments));
+  const [pay, setPay] = useState<PayChoice>(payOptions[0]?.value ?? "COD");
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [blocked, setBlocked] = useState<{ name: string; reason?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);

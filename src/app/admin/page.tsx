@@ -9,6 +9,7 @@ import { findNearExpiryBatches } from "@/lib/compliance/fefo";
 import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
 import { getReadiness } from "@/server/launch-readiness";
+import { getStoreControls } from "@/server/store-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -107,8 +108,20 @@ export default async function Dashboard() {
         .catch(() => 0)
     : 0;
 
+  // A paused store is the first thing anyone signing in should see.
+  const controls = await getStoreControls();
+
   // Only items this person can act on, and only when there is something to do.
   const attention = [
+    controls.ordersPaused && {
+      href: can(session.role, "settings:manage") ? "/admin/controls" : "/admin",
+      text: "Orders are paused: shoppers can't check out",
+      warn: true,
+    },
+    !controls.codEnabled && {
+      href: can(session.role, "settings:manage") ? "/admin/controls#cod" : "/admin#cod",
+      text: "Cash on delivery is switched off",
+    },
     launchBlockers > 0 && {
       href: "/admin/launch",
       text: `${launchBlockers} ${launchBlockers === 1 ? "item" : "items"} left before the site can take orders`,

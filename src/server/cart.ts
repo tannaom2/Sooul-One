@@ -17,6 +17,7 @@ import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib
 import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
+import { getStoreControls } from "@/server/store-settings";
 
 /**
  * Cart persistence and quoting.
@@ -143,9 +144,13 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   // every sequential round trip costs a full trip to the database. The items
   // query starts at CartItem (filtered by the cart's session) to save a level
   // of relation loading compared with going through Cart.
+  // The owner can switch bundle offers off (Store controls); cached, so no extra round trip.
+  const controls = await getStoreControls();
   const [items, bundleRows, found] = await Promise.all([
     db.cartItem.findMany({ where: { cart: { sessionId } }, include: CART_ITEM_INCLUDE }),
-    db.bundle.findMany({ where: { isActive: true }, include: { eligibleProducts: true } }),
+    controls.bundlesEnabled
+      ? db.bundle.findMany({ where: { isActive: true }, include: { eligibleProducts: true } })
+      : Promise.resolve([]),
     context.couponCode
       ? db.coupon.findUnique({ where: { code: context.couponCode.toUpperCase() } })
       : Promise.resolve(null),
