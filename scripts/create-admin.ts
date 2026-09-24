@@ -5,11 +5,17 @@
  * control or in a shared document, and this account can change every price on
  * the site. Run with `npm run admin:create`.
  */
+import { config } from "dotenv";
 import { createInterface } from "node:readline/promises";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { generateSecret, generateURI } from "otplib";
+
+// Runs outside Next.js, so env files aren't loaded for it: .env.local first,
+// as in prisma.config.ts, then .env for anything it doesn't set.
+config({ path: ".env.local" });
+config();
 
 // Prisma 7 requires an explicit driver adapter — see src/lib/db.ts.
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
