@@ -61,6 +61,13 @@ export default async function OrderPage({
       <p className="mt-3 text-lead text-ink-soft">{STATUS_COPY[order.status] ?? order.status}</p>
 
       <OrderTracker progress={orderProgress(order, order.events)} />
+      {order.invoiceNumber && (
+        <p className="mt-4 text-small">
+          <Link href={`/order/${order.orderNumber}/invoice?t=${encodeURIComponent(t ?? "")}`} className="underline">
+            Tax invoice {order.invoiceNumber}
+          </Link>
+        </p>
+      )}
 
       <div className="panel mt-8">
         <div className="panel-head flex items-center justify-between">

@@ -6,6 +6,7 @@ import { quoteCart, readSessionId, writeBasketCount } from "@/server/cart";
 import { takeStock } from "@/server/order-stock";
 import { orderNumber } from "@/lib/format";
 import { fromPaise } from "@/lib/money";
+import { apportion } from "@/lib/invoice";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { checkoutInputSchema } from "@/lib/validation/checkout";
@@ -121,12 +122,19 @@ export async function POST(request: Request) {
 
   // One OrderItem per batch drawn, so recall traceability survives a line
   // that was filled from two different lots.
+  // Tax facts are recorded as charged, for the GST invoice (src/lib/invoice.ts):
+  // the HSN and rate of the day, and each row's share of the line's taxable
+  // value and tax after every discount, split exactly across its batches.
+  const hsnByProduct = new Map(result.cartItems.map((i) => [i.productId, i.product.hsnCode ?? null]));
   const itemRows = quote.lines.flatMap((line) => {
     const unit = line.grossPaise / Math.max(line.quantityAvailable, 1);
     const allocations: { batchId: string | null; quantity: number }[] = line.allocations.length
       ? line.allocations.map((a) => ({ batchId: a.batchId, quantity: a.quantity }))
       : [{ batchId: null, quantity: line.quantityAvailable }];
-    return allocations.map((allocation) => ({
+    const weights = allocations.map((a) => a.quantity);
+    const taxable = apportion(line.taxablePaise, weights);
+    const tax = apportion(line.taxPaise, weights);
+    return allocations.map((allocation, i) => ({
       productId: line.productId,
       variantId: line.variantId ?? null,
       batchId: allocation.batchId,
@@ -135,8 +143,13 @@ export async function POST(request: Request) {
       listUnitPriceSnapshot: fromPaise(Math.round(line.listGrossPaise / Math.max(line.quantityAvailable, 1))),
       quantity: allocation.quantity,
       lineTotal: fromPaise(Math.round(unit * allocation.quantity)),
+      hsnCode: hsnByProduct.get(line.productId) ?? null,
+      taxRatePercent: line.taxRatePercent,
+      taxableAmount: fromPaise(taxable[i]),
+      taxAmount: fromPaise(tax[i]),
     }));
   });
+  const shippingTaxPaise = quote.taxPaise - quote.lines.reduce((sum, l) => sum + l.taxPaise, 0);
   const batchTakes = quote.lines.flatMap((line) =>
     line.allocations.map((a) => ({ id: a.batchId, qty: a.quantity, name: line.name })),
   );
@@ -178,6 +191,8 @@ export async function POST(request: Request) {
             paymentGateway: isCod ? "COD" : "RAZORPAY",
             // What the shopper was shown, for measuring on-time delivery later.
             promisedDeliveryDate: result.estimatedDeliveryDate,
+            shippingTaxAmount: fromPaise(shippingTaxPaise),
+            gstTreatment: result.gstTreatment,
           },
         });
         // A separate createMany rather than a nested write: nesting costs an

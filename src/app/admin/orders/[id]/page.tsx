@@ -202,6 +202,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               <div className="panel-row"><dt>Status</dt><dd>{order.paymentStatus ?? "—"}</dd></div>
               {order.paymentId && <div className="panel-row"><dt>Razorpay order</dt><dd className="truncate text-micro">{order.paymentId}</dd></div>}
               {order.trackingNumber && <div className="panel-row"><dt>Tracking</dt><dd className="tabular">{order.trackingNumber}</dd></div>}
+              {order.invoiceNumber && (
+                <div className="panel-row">
+                  <dt>Tax invoice</dt>
+                  <dd>
+                    <Link href={`/admin/orders/${order.id}/invoice`} className="tabular underline">
+                      {order.invoiceNumber}
+                    </Link>
+                  </dd>
+                </div>
+              )}
             </dl>
           </section>
         </aside>

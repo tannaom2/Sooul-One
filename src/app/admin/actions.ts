@@ -12,6 +12,7 @@ import { productInputSchema } from "@/lib/validation/product";
 import { sendShippingNotification } from "@/lib/email";
 import { STATUS_LABELS, checkMove, isClosing, releasesStock } from "@/lib/order-lifecycle";
 import { releaseStock } from "@/server/order-stock";
+import { issueInvoiceNumber } from "@/server/invoice-number";
 
 /**
  * Admin write actions.
@@ -367,10 +368,16 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
     ...(statusChanges && isClosing(status) && { closeReason: reason, closedAt: now }),
   };
 
+  let invoiceNumber: string | null = null;
   const applied = await db.$transaction(async (tx) => {
     const { count } = await tx.order.updateMany({ where: { id: orderId, status: previous.status }, data });
     if (count === 1 && statusChanges && releasesStock(status)) {
       await releaseStock(tx, { id: orderId, couponCode: previous.couponCode });
+    }
+    // The GST invoice is issued when the goods leave, so orders cancelled
+    // before dispatch never take a number and the series has no gaps.
+    if (count === 1 && statusChanges && status === "SHIPPED" && !previous.invoiceNumber) {
+      invoiceNumber = await issueInvoiceNumber(tx, orderId);
     }
     return count === 1;
   });
@@ -412,7 +419,8 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
 
   if (!statusChanges) return { ok: true, message: Object.keys(changes).length ? "Tracking details saved." : "No change." };
   const restocked = releasesStock(status) ? " Its stock is back on sale." : "";
-  return { ok: true, message: `Status now: ${STATUS_LABELS[status as keyof typeof STATUS_LABELS]}.${restocked}${mailed}` };
+  const invoiced = invoiceNumber ? ` Invoice ${invoiceNumber} issued.` : "";
+  return { ok: true, message: `Status now: ${STATUS_LABELS[status as keyof typeof STATUS_LABELS]}.${invoiced}${restocked}${mailed}` };
 }
 
 export async function addOrderNote(_prev: ActionResult, form: FormData): Promise<ActionResult> {

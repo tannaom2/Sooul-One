@@ -224,6 +224,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   return {
     quote,
     cartItems: cart.items,
+    gstTreatment,
     bundles,
     estimatedDeliveryDate,
     couponRejected: Boolean(context.couponCode) && !quote.appliedCouponCode,

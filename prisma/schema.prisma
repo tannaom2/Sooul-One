@@ -383,6 +383,10 @@ model Order {
   /// year, so orders cancelled before dispatch leave no gaps in the series.
   invoiceNumber   String?     @unique
   invoiceDate     DateTime?
+  /// GST on the delivery charge, and whether tax was CGST+SGST (INTRA_STATE)
+  /// or IGST (INTER_STATE), as charged at checkout.
+  shippingTaxAmount Decimal?  @db.Decimal(10, 2)
+  gstTreatment    String?
   placedAt        DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -416,6 +420,10 @@ model OrderItem {
   /// rate or HSN may change later, and the invoice must not.
   hsnCode             String?
   taxRatePercent      Decimal? @db.Decimal(4, 2)
+  /// This row's share of the line's value after every discount, split into
+  /// taxable value and GST exactly as checkout charged it.
+  taxableAmount       Decimal? @db.Decimal(10, 2)
+  taxAmount           Decimal? @db.Decimal(10, 2)
 }
 
 model Coupon {
