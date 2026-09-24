@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { recordOrderEvent } from "@/lib/order-events";
 import { clearCart } from "@/server/cart";
 import { reportError } from "@/lib/observability";
+import { parseRazorpayWebhook, paymentTransition, verifyRazorpaySignature } from "@/lib/payment-webhook";
 
 /**
  * Razorpay webhook.
@@ -17,8 +17,11 @@ import { reportError } from "@/lib/observability";
  * client callback is how people end up shipping against payments that never
  * completed. Only this endpoint, with a verified signature, changes status.
  *
- * Signature verification uses a timing-safe comparison: a plain `===` on an
- * HMAC leaks information through how long the comparison takes.
+ * Which status each event may move, and from what, is decided in
+ * src/lib/payment-webhook.ts (tested there). Here it's applied as a single
+ * conditional update: gateways retry and can deliver twice at once, and only
+ * the delivery whose update actually changed the row goes on to email the
+ * customer and empty the basket.
  */
 
 export async function POST(request: Request) {
@@ -28,104 +31,80 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Webhook not configured." }, { status: 503 });
   }
 
-  // The raw body is required — re-serialising parsed JSON changes the bytes
-  // and the signature will never match.
+  // The raw body is required: the signature covers its exact bytes.
   const raw = await request.text();
-  const signature = request.headers.get("x-razorpay-signature") ?? "";
-
-  const expected = crypto.createHmac("sha256", secret).update(raw).digest("hex");
-  const a = Buffer.from(expected, "utf8");
-  const b = Buffer.from(signature, "utf8");
-
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  if (!verifyRazorpaySignature(raw, request.headers.get("x-razorpay-signature"), secret)) {
     return NextResponse.json({ message: "Invalid signature." }, { status: 401 });
   }
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  let event: any;
-  try {
-    event = JSON.parse(raw);
-  } catch {
-    return NextResponse.json({ message: "Malformed payload." }, { status: 400 });
-  }
+  const webhook = parseRazorpayWebhook(raw);
+  if (!webhook) return NextResponse.json({ message: "Malformed payload." }, { status: 400 });
 
-  const payment = event?.payload?.payment?.entity;
-  const razorpayOrderId: string | undefined = payment?.order_id;
-  if (!razorpayOrderId) return NextResponse.json({ received: true });
+  const transition = paymentTransition(webhook.event);
+  const payment = webhook.payment;
+  if (!transition || !payment) return NextResponse.json({ received: true });
 
-  const order = await db.order.findFirst({ where: { paymentId: razorpayOrderId } });
+  const order = await db.order.findFirst({ where: { paymentId: payment.razorpayOrderId }, select: { id: true, sessionId: true } });
   if (!order) {
-    console.warn("[razorpay] no local order for", razorpayOrderId);
+    console.warn("[razorpay] no local order for", payment.razorpayOrderId);
     return NextResponse.json({ received: true });
   }
 
-  switch (event.event) {
-    case "payment.captured":
-      // Idempotent: gateways retry, and a retry must not double-process.
-      // The status guard also means the confirmation email is sent exactly
-      // once — a retried webhook finds the order already PAID and skips both.
-      if (order.status === "PENDING_PAYMENT") {
-        const paid = await db.order.update({
-          where: { id: order.id },
-          data: { status: "PAID", paymentStatus: "captured" },
-          include: { items: true },
+  const { count } = await db.order.updateMany({
+    where: { id: order.id, status: { in: [...transition.from] } },
+    data: { status: transition.to, paymentStatus: transition.paymentStatus },
+  });
+  // Already moved by an earlier delivery, or not allowed from where the order
+  // is now (a late failure for a paid order): nothing more to do.
+  if (count === 0) return NextResponse.json({ received: true });
+
+  switch (webhook.event) {
+    case "payment.captured": {
+      await recordOrderEvent(order.id, "PAYMENT_CAPTURED", { type: "SYSTEM" }, {
+        razorpayPaymentId: payment.id,
+        amountPaise: payment.amountPaise,
+        method: payment.method,
+      });
+
+      // Paid, so the basket it came from empties. Never fails the webhook:
+      // Razorpay would retry, and the order is already correctly PAID.
+      if (order.sessionId) {
+        await clearCart(order.sessionId).catch((error) => reportError("webhook/clear-cart", error, { orderId: order.id }));
+      }
+
+      // Sent here, not at checkout: this is the first moment the payment is
+      // known to have cleared.
+      const paid = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+      const sent = await sendOrderConfirmation(paid);
+      await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
+        email: "order_confirmation",
+        delivered: sent.delivered,
+        reason: sent.reason ?? null,
+      });
+
+      if (order.sessionId) {
+        void recordEvent(order.sessionId, "ORDER_PAID", {
+          orderId: order.id,
+          metadata: { totalPaise: payment.amountPaise, method: "RAZORPAY" },
         });
-
-        // Confirmation is sent HERE rather than at checkout, because this is
-        // the first moment the payment is actually known to have cleared.
-        // Emailing "thanks for your order" off the browser redirect would
-        // mean confirming orders that never got paid for.
-        await recordOrderEvent(order.id, "PAYMENT_CAPTURED", { type: "SYSTEM" }, {
-          razorpayPaymentId: payment.id,
-          amountPaise: payment.amount,
-          method: payment.method ?? null,
-        });
-
-        // Paid, so the basket it came from empties. Never fails the webhook:
-        // Razorpay would retry, and the order is already correctly PAID.
-        if (paid.sessionId) {
-          await clearCart(paid.sessionId).catch((error) => reportError("webhook/clear-cart", error, { orderId: order.id }));
-        }
-
-        const sent = await sendOrderConfirmation(paid);
-        await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
-          email: "order_confirmation",
-          delivered: sent.delivered,
-          reason: sent.reason ?? null,
-        });
-
-        if (order.sessionId) {
-          void recordEvent(order.sessionId, "ORDER_PAID", {
-            orderId: order.id,
-            metadata: { totalPaise: payment.amount, method: "RAZORPAY" },
-          });
-        }
       }
       break;
+    }
 
     case "payment.failed":
-      await db.order.update({
-        where: { id: order.id },
-        data: { status: "FAILED", paymentStatus: "failed" },
-      });
+      // The shopper may still retry in the same window; a later capture moves
+      // the order to PAID (see paymentTransition). Stock stays reserved so a
+      // retry can't lose the last compliant batch mid-payment.
       await recordOrderEvent(order.id, "PAYMENT_FAILED", { type: "SYSTEM" }, {
         razorpayPaymentId: payment.id,
-        reason: payment.error_description ?? payment.error_reason ?? null,
+        reason: payment.errorReason,
       });
-      // Stock is deliberately NOT returned here. A failed payment is often
-      // retried within minutes, and releasing the reserved batch would let
-      // someone else take the last compliant stock mid-retry. Reconciling
-      // abandoned PENDING/FAILED orders belongs in a scheduled sweep.
       break;
 
     case "refund.processed":
-      await db.order.update({
-        where: { id: order.id },
-        data: { status: "REFUNDED", paymentStatus: "refunded" },
-      });
       await recordOrderEvent(order.id, "REFUNDED", { type: "SYSTEM" }, {
-        razorpayRefundId: event?.payload?.refund?.entity?.id ?? null,
-        amountPaise: event?.payload?.refund?.entity?.amount ?? null,
+        razorpayRefundId: webhook.refund?.id ?? null,
+        amountPaise: webhook.refund?.amountPaise ?? null,
       });
       break;
   }

@@ -66,13 +66,18 @@ export function compareOrderToRazorpay(
     });
   }
 
-  if (order.status === "PENDING_PAYMENT" && rzpOrder.status === "paid") {
+  // Not just PENDING_PAYMENT: a capture after a failed attempt used to leave
+  // orders FAILED, and a cancelled order Razorpay still holds money for needs
+  // a refund. Either way the customer has paid for something we don't show as paid.
+  if (["PENDING_PAYMENT", "FAILED", "CANCELLED"].includes(order.status) && rzpOrder.status === "paid") {
     findings.push({
       kind: "LOCAL_PENDING_RAZORPAY_PAID",
       orderNumber: order.orderNumber,
       razorpayOrderId: rzpOrderId,
       detail:
-        "Razorpay shows this order as paid, but it's still PENDING_PAYMENT locally — likely a missed or failed webhook delivery.",
+        order.status === "CANCELLED"
+          ? "Razorpay shows this order as paid, but it's CANCELLED locally. Refund the customer or reinstate the order."
+          : `Razorpay shows this order as paid, but it's ${order.status} locally. Likely a missed webhook: mark it paid.`,
     });
   }
 

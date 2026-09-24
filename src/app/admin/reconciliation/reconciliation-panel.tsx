@@ -7,7 +7,7 @@ import type { ReconciliationResult } from "@/lib/reconciliation";
 const KIND_LABEL: Record<string, string> = {
   AMOUNT_MISMATCH: "Amount mismatch",
   LOCAL_PAID_RAZORPAY_DISAGREES: "We say paid, Razorpay disagrees",
-  LOCAL_PENDING_RAZORPAY_PAID: "Razorpay paid, we say pending",
+  LOCAL_PENDING_RAZORPAY_PAID: "Razorpay paid, we say not paid",
   RAZORPAY_ORDER_NOT_FOUND: "Order not found at Razorpay",
   PAYMENT_WITHOUT_LOCAL_ORDER: "Payment with no local order",
 };

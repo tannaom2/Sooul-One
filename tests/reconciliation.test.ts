@@ -55,6 +55,13 @@ describe("compareOrderToRazorpay", () => {
     });
     expect(findings).toEqual([]);
   });
+
+  it("flags a failed or cancelled order that Razorpay shows as paid", () => {
+    for (const status of ["FAILED", "CANCELLED"]) {
+      const findings = compareOrderToRazorpay(order({ status }), "order_1", { status: "paid", amount_paid: 50000 });
+      expect(findings.map((f) => f.kind)).toEqual(["LOCAL_PENDING_RAZORPAY_PAID"]);
+    }
+  });
 });
 
 describe("checkPaymentHasLocalOrder", () => {
