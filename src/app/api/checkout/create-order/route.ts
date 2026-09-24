@@ -22,13 +22,25 @@ import { recordOrderEvent } from "@/lib/order-events";
  *      batch data at the moment of payment, not at the moment of browsing.
  *   2. Refuse outright if any line is blocked. A blocked line means the
  *      shelf-life rule would be breached, and that is not a "warn and proceed".
- *   3. Write the order and decrement batch stock in one transaction, so two
- *      simultaneous checkouts cannot both claim the last compliant batch.
+ *   3. Write the order and decrement batch stock in one transaction. Each
+ *      decrement is conditional on enough stock remaining (and a database
+ *      CHECK backs it), so two simultaneous checkouts cannot both claim the
+ *      last compliant batch: the second one rolls back and is told it sold out.
  *   4. Create the Razorpay order and return its id. Payment confirmation
  *      arrives later via the webhook, never from the browser.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/** Another checkout took the stock between the quote and this transaction. */
+class SoldOut extends Error {
+  constructor(readonly productName: string) {
+    super(`Sold out: ${productName}`);
+  }
+}
+
+/** The coupon reached its maxUses between the quote and this transaction. */
+class CouponUsedUp extends Error {}
 
 export async function POST(request: Request) {
   const sessionId = await readSessionId();
@@ -145,28 +157,65 @@ export async function POST(request: Request) {
         });
 
         if (allocation.batchId) {
-          await tx.productBatch.update({
-            where: { id: allocation.batchId },
+          // Conditional: the quote was read outside this transaction, so
+          // another checkout may have taken the stock since. Throwing rolls
+          // back the whole order.
+          const taken = await tx.productBatch.updateMany({
+            where: { id: allocation.batchId, quantityRemaining: { gte: allocation.quantity } },
             data: { quantityRemaining: { decrement: allocation.quantity } },
           });
+          if (taken.count === 0) throw new SoldOut(line.name);
         }
       }
 
-      await tx.product.update({
-        where: { id: line.productId },
-        data: { stockQuantity: { decrement: line.quantityAvailable } },
-      });
+      if (line.allocations.length) {
+        // Batch-tracked: batches above are the stock record; this count only mirrors them.
+        await tx.product.update({
+          where: { id: line.productId },
+          data: { stockQuantity: { decrement: line.quantityAvailable } },
+        });
+      } else {
+        // Not batch-tracked: this count is the stock record, so it gets the same guard.
+        const taken = await tx.product.updateMany({
+          where: { id: line.productId, stockQuantity: { gte: line.quantityAvailable } },
+          data: { stockQuantity: { decrement: line.quantityAvailable } },
+        });
+        if (taken.count === 0) throw new SoldOut(line.name);
+      }
     }
 
     if (quote.appliedCouponCode) {
-      await tx.coupon.update({
-        where: { code: quote.appliedCouponCode },
+      const redeemed = await tx.coupon.updateMany({
+        where: {
+          code: quote.appliedCouponCode,
+          OR: [{ maxUses: null }, { usedCount: { lt: db.coupon.fields.maxUses } }],
+        },
         data: { usedCount: { increment: 1 } },
       });
+      if (redeemed.count === 0) throw new CouponUsedUp();
     }
 
     return created;
+  }).catch((error: unknown) => {
+    if (error instanceof SoldOut || error instanceof CouponUsedUp) return error;
+    throw error;
   });
+
+  if (order instanceof SoldOut) {
+    return NextResponse.json(
+      {
+        message: "Some items in your basket can't be sent right now.",
+        blocked: [{ name: order.productName, reason: "Just sold out while you were checking out." }],
+      },
+      { status: 409 },
+    );
+  }
+  if (order instanceof CouponUsedUp) {
+    return NextResponse.json(
+      { message: "That discount code has just been used up. Remove it to place your order." },
+      { status: 409 },
+    );
+  }
 
   void recordEvent(sessionId, "ORDER_PLACED", {
     orderId: order.id,
