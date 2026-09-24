@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import Razorpay from "razorpay";
 import { db } from "@/lib/db";
 import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
-import { clearCart, quoteCart, readSessionId, writeBasketCount } from "@/server/cart";
+import { quoteCart, readSessionId, writeBasketCount } from "@/server/cart";
+import { takeStock } from "@/server/order-stock";
 import { orderNumber } from "@/lib/format";
 import { fromPaise } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
@@ -31,7 +32,6 @@ import { onlinePaymentsEnabled } from "@/lib/payments-config";
  *      arrives later via the webhook, never from the browser.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Another checkout took the stock between the quote and this transaction. */
 class SoldOut extends Error {
@@ -111,107 +111,110 @@ export async function POST(request: Request) {
     phone: input.phone,
   };
 
-  // --- 3: persist order and consume batch stock atomically -----------------
-  const order = await db.$transaction(async (tx: any) => {
-    const created = await tx.order.create({
-      data: {
-        orderNumber: orderNumber(),
-        accessToken: newOrderAccessToken(),
-        sessionId,
-        guestEmail: input.email,
-        guestPhone: input.phone,
-        status: "PENDING_PAYMENT",
-        subtotal: fromPaise(quote.subtotalPaise),
-        productDiscountAmount: fromPaise(quote.productDiscountPaise),
-        bundleDiscountAmount: fromPaise(quote.bundleDiscountPaise),
-        bundleLabel: quote.appliedBundles.length
-          ? quote.appliedBundles.map((b) => b.name).join(", ")
-          : null,
-        discountAmount: fromPaise(quote.discountPaise),
-        shippingAmount: fromPaise(quote.shippingPaise),
-        taxAmount: fromPaise(quote.taxPaise),
-        totalAmount: fromPaise(quote.totalPaise),
-        couponCode: quote.appliedCouponCode ?? null,
-        shippingAddress: address,
-        billingAddress: address,
-        paymentGateway: input.paymentMethod === "COD" ? "COD" : "RAZORPAY",
-        // What the shopper was shown, for measuring on-time delivery later.
-        promisedDeliveryDate: result.estimatedDeliveryDate,
-      },
-    });
+  // --- 3: persist order and consume stock atomically -----------------------
+  // Everything is worked out before the transaction opens, so it holds its
+  // connection for as few round trips as possible: each one is a full trip to
+  // the database, and a long transaction is what failed under load.
+  const isCod = input.paymentMethod === "COD";
 
-    for (const line of quote.lines) {
-      // One OrderItem per batch drawn, so recall traceability survives a line
-      // that was filled from two different lots.
-      const allocations = line.allocations.length
-        ? line.allocations
-        : [{ batchId: null, quantity: line.quantityAvailable }];
+  // One OrderItem per batch drawn, so recall traceability survives a line
+  // that was filled from two different lots.
+  const itemRows = quote.lines.flatMap((line) => {
+    const unit = line.grossPaise / Math.max(line.quantityAvailable, 1);
+    const allocations: { batchId: string | null; quantity: number }[] = line.allocations.length
+      ? line.allocations.map((a) => ({ batchId: a.batchId, quantity: a.quantity }))
+      : [{ batchId: null, quantity: line.quantityAvailable }];
+    return allocations.map((allocation) => ({
+      productId: line.productId,
+      variantId: line.variantId ?? null,
+      batchId: allocation.batchId,
+      productNameSnapshot: line.name,
+      unitPriceSnapshot: fromPaise(Math.round(unit)),
+      listUnitPriceSnapshot: fromPaise(Math.round(line.listGrossPaise / Math.max(line.quantityAvailable, 1))),
+      quantity: allocation.quantity,
+      lineTotal: fromPaise(Math.round(unit * allocation.quantity)),
+    }));
+  });
+  const batchTakes = quote.lines.flatMap((line) =>
+    line.allocations.map((a) => ({ id: a.batchId, qty: a.quantity, name: line.name })),
+  );
+  // Batch-tracked products: the batches are the stock record and this count
+  // only mirrors them. Untracked products: this count is the record, so it
+  // gets the same no-oversell guard as a batch.
+  const productTakes = quote.lines.map((line) => ({
+    id: line.productId,
+    qty: line.quantityAvailable,
+    guarded: line.allocations.length === 0,
+    name: line.name,
+  }));
 
-      for (const allocation of allocations as { batchId: string | null; quantity: number }[]) {
-        await tx.orderItem.create({
+  const order = await db
+    .$transaction(
+      async (tx) => {
+        const created = await tx.order.create({
           data: {
-            orderId: created.id,
-            productId: line.productId,
-            variantId: line.variantId ?? null,
-            batchId: allocation.batchId,
-            productNameSnapshot: line.name,
-            unitPriceSnapshot: fromPaise(
-              Math.round(line.grossPaise / Math.max(line.quantityAvailable, 1)),
-            ),
-            listUnitPriceSnapshot: fromPaise(
-              Math.round(line.listGrossPaise / Math.max(line.quantityAvailable, 1)),
-            ),
-            quantity: allocation.quantity,
-            lineTotal: fromPaise(
-              Math.round((line.grossPaise / Math.max(line.quantityAvailable, 1)) * allocation.quantity),
-            ),
+            orderNumber: orderNumber(),
+            accessToken: newOrderAccessToken(),
+            sessionId,
+            guestEmail: input.email,
+            guestPhone: input.phone,
+            // Cash on delivery is confirmed the moment it's placed; online
+            // orders wait for the webhook.
+            status: isCod ? "PROCESSING" : "PENDING_PAYMENT",
+            paymentStatus: isCod ? "COD_PENDING" : null,
+            subtotal: fromPaise(quote.subtotalPaise),
+            productDiscountAmount: fromPaise(quote.productDiscountPaise),
+            bundleDiscountAmount: fromPaise(quote.bundleDiscountPaise),
+            bundleLabel: quote.appliedBundles.length ? quote.appliedBundles.map((b) => b.name).join(", ") : null,
+            discountAmount: fromPaise(quote.discountPaise),
+            shippingAmount: fromPaise(quote.shippingPaise),
+            taxAmount: fromPaise(quote.taxPaise),
+            totalAmount: fromPaise(quote.totalPaise),
+            couponCode: quote.appliedCouponCode ?? null,
+            shippingAddress: address,
+            billingAddress: address,
+            paymentGateway: isCod ? "COD" : "RAZORPAY",
+            // What the shopper was shown, for measuring on-time delivery later.
+            promisedDeliveryDate: result.estimatedDeliveryDate,
           },
         });
+        // A separate createMany rather than a nested write: nesting costs an
+        // extra statement per relation plus a re-read of the order.
+        await tx.orderItem.createMany({ data: itemRows.map((row) => ({ ...row, orderId: created.id })) });
 
-        if (allocation.batchId) {
-          // Conditional: the quote was read outside this transaction, so
-          // another checkout may have taken the stock since. Throwing rolls
-          // back the whole order.
-          const taken = await tx.productBatch.updateMany({
-            where: { id: allocation.batchId, quantityRemaining: { gte: allocation.quantity } },
-            data: { quantityRemaining: { decrement: allocation.quantity } },
+        // A COD order is final once placed, so its basket empties with it.
+        // (Online payments empty it in the webhook, once the payment has
+        // cleared, so a dismissed payment window leaves the basket intact.)
+        if (isCod) await tx.cartItem.deleteMany({ where: { cart: { sessionId } } });
+
+        // Shared rows last. The coupon and stock rows are what concurrent
+        // checkouts queue for, and each is locked from its update until
+        // COMMIT, so updating them at the end keeps that wait as short as it
+        // can be.
+        if (quote.appliedCouponCode) {
+          const redeemed = await tx.coupon.updateMany({
+            where: {
+              code: quote.appliedCouponCode,
+              OR: [{ maxUses: null }, { usedCount: { lt: db.coupon.fields.maxUses } }],
+            },
+            data: { usedCount: { increment: 1 } },
           });
-          if (taken.count === 0) throw new SoldOut(line.name);
+          if (redeemed.count === 0) throw new CouponUsedUp();
         }
-      }
 
-      if (line.allocations.length) {
-        // Batch-tracked: batches above are the stock record; this count only mirrors them.
-        await tx.product.update({
-          where: { id: line.productId },
-          data: { stockQuantity: { decrement: line.quantityAvailable } },
-        });
-      } else {
-        // Not batch-tracked: this count is the stock record, so it gets the same guard.
-        const taken = await tx.product.updateMany({
-          where: { id: line.productId, stockQuantity: { gte: line.quantityAvailable } },
-          data: { stockQuantity: { decrement: line.quantityAvailable } },
-        });
-        if (taken.count === 0) throw new SoldOut(line.name);
-      }
-    }
+        const shortOf = await takeStock(tx, batchTakes, productTakes);
+        if (shortOf) throw new SoldOut(shortOf);
 
-    if (quote.appliedCouponCode) {
-      const redeemed = await tx.coupon.updateMany({
-        where: {
-          code: quote.appliedCouponCode,
-          OR: [{ maxUses: null }, { usedCount: { lt: db.coupon.fields.maxUses } }],
-        },
-        data: { usedCount: { increment: 1 } },
-      });
-      if (redeemed.count === 0) throw new CouponUsedUp();
-    }
-
-    return created;
-  }).catch((error: unknown) => {
-    if (error instanceof SoldOut || error instanceof CouponUsedUp) return error;
-    throw error;
-  });
+        return created;
+      },
+      // Explicit, not Prisma's 2 s / 5 s defaults, which failed a third of
+      // orders when 20 shoppers checked out at once against a distant database.
+      { maxWait: 10_000, timeout: 20_000 },
+    )
+    .catch((error: unknown) => {
+      if (error instanceof SoldOut || error instanceof CouponUsedUp) return error;
+      throw error;
+    });
 
   if (order instanceof SoldOut) {
     return NextResponse.json(
@@ -229,49 +232,41 @@ export async function POST(request: Request) {
     );
   }
 
-  void recordEvent(sessionId, "ORDER_PLACED", {
-    orderId: order.id,
-    metadata: { totalPaise: quote.totalPaise, method: input.paymentMethod },
-  });
   // Stock just moved, so "Only N left" and availability must refresh.
   expireTag(CATALOG_TAG);
-  await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email }, {
-    method: input.paymentMethod,
-    totalPaise: quote.totalPaise,
-  });
 
-  // --- Cash on delivery needs no gateway -----------------------------------
-  if (input.paymentMethod === "COD") {
-    const confirmed = await db.order.update({
-      where: { id: order.id },
-      data: { status: "PROCESSING", paymentStatus: "COD_PENDING" },
-      include: { items: true },
+  // Analytics and the confirmation email run after the response is sent: the
+  // order is already safely stored, and the shopper shouldn't wait on them.
+  after(async () => {
+    await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email }, {
+      method: input.paymentMethod,
+      totalPaise: quote.totalPaise,
     });
-
+    await recordEvent(sessionId, "ORDER_PLACED", {
+      orderId: order.id,
+      metadata: { totalPaise: quote.totalPaise, method: input.paymentMethod },
+    });
+    if (!isCod) return;
     // COD has no gateway to confirm a later capture, so — unlike RAZORPAY,
     // where ORDER_PAID waits for the signature-verified webhook — this is the
     // one path where the funnel's "paid" step means "order confirmed," not
     // "money verified."
-    void recordEvent(sessionId, "ORDER_PAID", {
+    await recordEvent(sessionId, "ORDER_PAID", {
       orderId: order.id,
       metadata: { totalPaise: quote.totalPaise, method: "COD" },
     });
-
     // A COD order never reaches the Razorpay webhook, so its confirmation is
-    // sent from here instead. Awaited but non-throwing: sendOrderConfirmation
-    // swallows its own failures, so a mail outage cannot turn a placed order
-    // into a 500 the customer would reasonably retry.
-    const sent = await sendOrderConfirmation(confirmed);
+    // sent from here. sendOrderConfirmation swallows its own failures.
+    const sent = await sendOrderConfirmation({ ...order, items: itemRows });
     await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
       email: "order_confirmation",
       delivered: sent.delivered,
       reason: sent.reason ?? null,
     });
+  });
 
-    // A COD order is final once placed, so the basket empties now. (Online
-    // payments empty it in the webhook, once the payment has actually cleared,
-    // so a dismissed payment window leaves the basket intact.)
-    await clearCart(sessionId);
+  // --- Cash on delivery needs no gateway -----------------------------------
+  if (isCod) {
     await writeBasketCount(0);
     return NextResponse.json({ orderNumber: order.orderNumber, accessToken: order.accessToken, method: "COD" });
   }

@@ -53,23 +53,21 @@ export async function readSessionId(): Promise<string | null> {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+const CART_ITEM_INCLUDE = {
+  product: {
+    include: {
+      brand: true,
+      batches: { orderBy: { expiresOn: "asc" as const } },
+      images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
+    },
+  },
+  variant: true,
+};
+
 export async function getCart(sessionId: string) {
   return db.cart.findUnique({
     where: { sessionId },
-    include: {
-      items: {
-        include: {
-          product: {
-            include: {
-              brand: true,
-              batches: { orderBy: { expiresOn: "asc" } },
-              images: { orderBy: { sortOrder: "asc" }, take: 1 },
-            },
-          },
-          variant: true,
-        },
-      },
-    },
+    include: { items: { include: CART_ITEM_INCLUDE } },
   });
 }
 
@@ -122,8 +120,8 @@ export async function updateQuantity(sessionId: string, itemId: string, quantity
 }
 
 export async function clearCart(sessionId: string) {
-  const cart = await db.cart.findUnique({ where: { sessionId } });
-  if (cart) await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+  // One statement (filtered through the cart relation), not a lookup then a delete.
+  await db.cartItem.deleteMany({ where: { cart: { sessionId } } });
 }
 
 export interface QuoteContext {
@@ -141,8 +139,19 @@ export interface QuoteContext {
  * below the shelf-life threshold.
  */
 export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
-  const cart = await getCart(sessionId);
-  if (!cart || cart.items.length === 0) return null;
+  // Independent reads, so they run in parallel on separate pooled connections:
+  // every sequential round trip costs a full trip to the database. The items
+  // query starts at CartItem (filtered by the cart's session) to save a level
+  // of relation loading compared with going through Cart.
+  const [items, bundleRows, found] = await Promise.all([
+    db.cartItem.findMany({ where: { cart: { sessionId } }, include: CART_ITEM_INCLUDE }),
+    db.bundle.findMany({ where: { isActive: true }, include: { eligibleProducts: true } }),
+    context.couponCode
+      ? db.coupon.findUnique({ where: { code: context.couponCode.toUpperCase() } })
+      : Promise.resolve(null),
+  ]);
+  if (items.length === 0) return null;
+  const cart = { items };
 
   const zone = context.pincode ? zoneForPincode(context.pincode) : SLOWEST_SERVED_ZONE;
   const estimatedDeliveryDate = estimateDeliveryDate(new Date(), zone);
@@ -182,10 +191,6 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     };
   });
 
-  const bundleRows = await db.bundle.findMany({
-    where: { isActive: true },
-    include: { eligibleProducts: true },
-  });
   const bundles: BundleRule[] = bundleRows.map((b: any) => ({
     id: b.id,
     name: b.name,
@@ -198,7 +203,6 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
 
   let coupon;
   if (context.couponCode) {
-    const found = await db.coupon.findUnique({ where: { code: context.couponCode.toUpperCase() } });
     const now = new Date();
     if (
       found &&
