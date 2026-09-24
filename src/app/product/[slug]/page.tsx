@@ -15,6 +15,9 @@ import { recordEvent } from "@/lib/analytics";
 import { ReviewForm } from "@/components/review-form";
 import { ageLabel, allergenLabel, sugarLabel } from "@/lib/label-facts";
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
+import { getBusinessProfile } from "@/server/business";
+import { formatINR } from "@/lib/money";
+import { decimalToPaise } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +104,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     | null;
 
   const arrivesBy = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
-  const fssai = process.env.NEXT_PUBLIC_FSSAI_LICENCE_NUMBER;
+  const business = await getBusinessProfile();
+  const fssai = business.fssaiLicence;
+  // Label declarations an online listing must show; only what's been entered.
+  const declarations = [
+    ["Ingredients", product.ingredients],
+    ["Net quantity", product.netQuantity],
+    ["MRP", product.mrp != null ? `${formatINR(decimalToPaise(product.mrp))} (incl. of all taxes)` : null],
+    ["Manufactured by", [product.manufacturerName, product.manufacturerAddress].filter(Boolean).join(", ") || null],
+    ["Packed or marketed by", product.packerDetails],
+    ["Country of origin", product.countryOfOrigin],
+    ["Customer care", [business.customerCarePhone, business.customerCareEmail].filter(Boolean).join(" · ") || null],
+    ["FSSAI licence", fssai],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
   const accent = BRAND_ACCENT[product.brand?.slug] ?? "var(--color-ink)";
   const buyable = availability.state === "in" || availability.state === "low";
   const age = ageLabel(product.suitableFromAge, product.suitableToAge);
@@ -283,6 +298,22 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <p className="text-small font-semibold">Allergen information</p>
               <p className="mt-1 text-small">Contains {product.allergens.join(", ")}.</p>
             </div>
+          )}
+
+          {declarations.length > 0 && (
+            <section className="panel mt-8 max-w-[68ch]" aria-labelledby="label-info">
+              <h2 id="label-info" className="panel-head">
+                Label information
+              </h2>
+              <dl>
+                {declarations.map(([term, value]) => (
+                  <div key={term} className="grid gap-1 border-t border-[--color-rule] px-3.5 py-2.5 text-small first:border-t-0 sm:grid-cols-[11rem_1fr]">
+                    <dt className="font-semibold">{term}</dt>
+                    <dd className="whitespace-pre-line text-ink-soft">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
           )}
 
           {isSupplement && (

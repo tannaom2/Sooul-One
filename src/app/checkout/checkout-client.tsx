@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatINR } from "@/lib/money";
 import { formatDate } from "@/lib/format";
 import { track } from "@/lib/track";
+import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import { STEPS, normalise, stepSummary, validateStep, type CheckoutStep } from "@/lib/checkout/steps";
 import { useCheckout } from "./use-checkout";
 import { useQuote } from "./use-quote";
@@ -384,7 +385,7 @@ function CheckoutForm({ onlinePayments }: { onlinePayments: boolean }) {
                           given for delivery updates is not permission to send offers. */}
                       <label className="flex items-start gap-3 text-small">
                         <input type="checkbox" className="mt-1" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} />
-                        <span>Send me occasional offers and new product news. You can stop this at any time.</span>
+                        <span>{MARKETING_CONSENT_TEXT}</span>
                       </label>
 
                       <button onClick={submit} disabled={busy || !quote?.canProceed} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">

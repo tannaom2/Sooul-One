@@ -13,11 +13,13 @@ import { revalidateTag } from "next/cache";
  */
 export const CATALOG_TAG = "catalog";
 export const STORES_TAG = "stores";
+/** The seller's business details: footer, product pages, invoices. */
+export const BUSINESS_TAG = "business";
 
 /**
  * Expire a tag immediately, from a Server Action or a route handler, so the
  * next shopper sees the change, not the one after.
  */
-export function expireTag(tag: typeof CATALOG_TAG | typeof STORES_TAG): void {
+export function expireTag(tag: typeof CATALOG_TAG | typeof STORES_TAG | typeof BUSINESS_TAG): void {
   revalidateTag(tag, { expire: 0 });
 }

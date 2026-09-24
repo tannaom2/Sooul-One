@@ -43,6 +43,12 @@ function num(form: FormData, key: string): number | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+/** A trimmed text field, or undefined when left blank. */
+function text(form: FormData, key: string): string | undefined {
+  const value = String(form.get(key) ?? "").trim();
+  return value || undefined;
+}
+
 function json<T>(form: FormData, key: string): T | undefined {
   const raw = form.get(key);
   if (!raw) return undefined;
@@ -57,12 +63,13 @@ const NOT_ALLOWED = "You don't have access to do that. Sign in again, or ask the
 
 /** True when any price-bearing field differs from what's stored. */
 function pricingChanged(
-  existing: { basePrice: unknown; compareAtPrice: unknown; discountActive: boolean; discountPercent: unknown; taxRatePercent: unknown },
-  input: { basePrice: unknown; compareAtPrice?: unknown; discountActive: boolean; discountPercent?: unknown; taxRatePercent: unknown },
+  existing: { basePrice: unknown; compareAtPrice: unknown; discountActive: boolean; discountPercent: unknown; taxRatePercent: unknown; mrp: unknown },
+  input: { basePrice: unknown; compareAtPrice?: unknown; discountActive: boolean; discountPercent?: unknown; taxRatePercent: unknown; mrp?: unknown },
 ): boolean {
   const n = (v: unknown) => (v == null ? null : Number(String(v)));
   return (
     n(existing.basePrice) !== n(input.basePrice) ||
+    n(existing.mrp) !== n(input.mrp) ||
     n(existing.compareAtPrice) !== n(input.compareAtPrice) ||
     existing.discountActive !== input.discountActive ||
     n(existing.discountPercent) !== n(input.discountPercent) ||
@@ -106,6 +113,13 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
       .split(",")
       .map((a) => a.trim())
       .filter(Boolean),
+    manufacturerName: text(form, "manufacturerName"),
+    manufacturerAddress: text(form, "manufacturerAddress"),
+    packerDetails: text(form, "packerDetails"),
+    countryOfOrigin: text(form, "countryOfOrigin"),
+    netQuantity: text(form, "netQuantity"),
+    mrp: text(form, "mrp"),
+    ingredients: text(form, "ingredients"),
   };
 
   if (regulatoryType === "PACKAGED_FOOD" || regulatoryType === "BEVERAGE") {
@@ -183,6 +197,13 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     suitableFromAge: input.suitableFromAge ?? null,
     suitableToAge: input.suitableToAge ?? null,
     allergens: input.allergens,
+    manufacturerName: input.manufacturerName ?? null,
+    manufacturerAddress: input.manufacturerAddress ?? null,
+    packerDetails: input.packerDetails ?? null,
+    countryOfOrigin: input.countryOfOrigin ?? null,
+    netQuantity: input.netQuantity ?? null,
+    mrp: input.mrp ?? null,
+    ingredients: input.ingredients ?? null,
   };
 
   if (input.regulatoryType === "PACKAGED_FOOD" || input.regulatoryType === "BEVERAGE") {

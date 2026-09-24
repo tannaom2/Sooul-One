@@ -143,7 +143,7 @@ export function ProductForm({
         <Field label="Product name" name="name" defaultValue={product?.name} error={err("name")} />
         <Field label="Web address (slug)" name="slug" defaultValue={product?.slug} error={err("slug")} />
         <Field label="SKU" name="sku" defaultValue={product?.sku} error={err("sku")} />
-        <Field label="HSN code" name="hsnCode" defaultValue={product?.hsnCode} error={err("hsnCode")} optional />
+        <Field label="HSN code" name="hsnCode" defaultValue={product?.hsnCode} error={err("hsnCode")} hint="Required to go live; printed on the GST invoice." />
 
         <div>
           <label className="label" htmlFor="brandId">Brand</label>
@@ -234,6 +234,7 @@ export function ProductForm({
         </p>
       )}
       <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="MRP (₹, as printed)" name="mrp" defaultValue={product?.mrp?.toString()} error={err("mrp")} hint="Required to go live. Nothing can sell above it." readOnly={locked} />
         <Field label="Price (₹, incl. GST)" name="basePrice" defaultValue={product?.basePrice?.toString()} error={err("basePrice")} readOnly={locked} />
         <Field label="Was-price (₹)" name="compareAtPrice" defaultValue={product?.compareAtPrice?.toString()} error={err("compareAtPrice")} optional readOnly={locked} />
         <Field label="GST rate (%)" name="taxRatePercent" type="number" defaultValue={product?.taxRatePercent?.toString() ?? "18"} error={err("taxRatePercent")} readOnly={locked} />
@@ -440,6 +441,38 @@ export function ProductForm({
         </fieldset>
       )}
 
+      {/* --- Label declarations: what the law requires an online listing to show --- */}
+      <fieldset className="panel grid gap-4 p-4">
+        <legend className="label px-1">Label declarations</legend>
+        <p className="text-small text-ink-soft">
+          Copy these exactly from the pack. They&apos;re shown on the product page, and a product can&apos;t go live
+          without them. A draft can be saved without them.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Manufacturer's name" name="manufacturerName" defaultValue={product?.manufacturerName ?? undefined} error={err("manufacturerName")} />
+          <Field label="Country of origin" name="countryOfOrigin" defaultValue={product?.countryOfOrigin ?? undefined} error={err("countryOfOrigin")} />
+          <Field label="Net quantity" name="netQuantity" defaultValue={product?.netQuantity ?? undefined} error={err("netQuantity")} hint='As printed, e.g. "150 g" or "60 gummies (120 g)".' />
+        </div>
+        <TextArea label="Manufacturer's address" name="manufacturerAddress" rows={2} defaultValue={product?.manufacturerAddress} error={err("manufacturerAddress")} />
+        <TextArea
+          label="Packed or marketed by"
+          name="packerDetails"
+          rows={2}
+          defaultValue={product?.packerDetails}
+          error={err("packerDetails")}
+          hint="Name and address, only if different from the manufacturer."
+          optional
+        />
+        <TextArea
+          label="Ingredients"
+          name="ingredients"
+          rows={3}
+          defaultValue={product?.ingredients}
+          error={err("ingredients")}
+          hint="In descending order of weight, exactly as on the label."
+        />
+      </fieldset>
+
       {/* --- Photographs --- */}
       <fieldset className="panel p-4">
         <legend className="label px-1">Photographs</legend>
@@ -486,6 +519,36 @@ export function ProductForm({
         </div>
       </div>
     </form>
+  );
+}
+
+function TextArea({
+  label,
+  name,
+  rows,
+  defaultValue,
+  error,
+  hint,
+  optional,
+}: {
+  label: string;
+  name: string;
+  rows: number;
+  defaultValue?: string | null;
+  error?: string;
+  hint?: string;
+  optional?: boolean;
+}) {
+  return (
+    <div>
+      <label className="label" htmlFor={name}>
+        {label}
+        {optional && <span className="ml-1 font-normal text-ink-faint">(optional)</span>}
+      </label>
+      <textarea id={name} name={name} rows={rows} defaultValue={defaultValue ?? undefined} className="field" />
+      {hint && <p className="mt-1 text-micro text-ink-faint">{hint}</p>}
+      {error && <Err>{error}</Err>}
+    </div>
   );
 }
 

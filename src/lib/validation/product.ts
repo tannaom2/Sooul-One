@@ -84,7 +84,32 @@ const baseProduct = z.object({
    */
   suitableFromAge: z.number().int().min(0).max(100).optional(),
   suitableToAge: z.number().int().min(1).max(100).optional(),
+
+  /**
+   * Label declarations an online listing must show (Legal Metrology
+   * (Packaged Commodities) Rules, FSSAI labelling). Optional while a product
+   * is a draft, so it can be set up before the pack artwork is final;
+   * required before it goes live (LIVE_REQUIRED, below).
+   */
+  manufacturerName: z.string().trim().max(200).optional(),
+  manufacturerAddress: z.string().trim().max(500).optional(),
+  packerDetails: z.string().trim().max(500).optional(),
+  countryOfOrigin: z.string().trim().max(60).optional(),
+  netQuantity: z.string().trim().max(60).optional(),
+  mrp: rupees.optional(),
+  ingredients: z.string().trim().max(3000).optional(),
 });
+
+/** What a product can't go live without, with the name staff see. */
+export const LIVE_REQUIRED = [
+  ["manufacturerName", "Manufacturer's name"],
+  ["manufacturerAddress", "Manufacturer's address"],
+  ["countryOfOrigin", "Country of origin"],
+  ["netQuantity", "Net quantity"],
+  ["mrp", "MRP"],
+  ["ingredients", "Ingredients"],
+  ["hsnCode", "HSN code"],
+] as const;
 
 const nutritionFacts = z.object(
   {
@@ -259,6 +284,35 @@ export const productInputSchema = z
         path: ["compareAtPrice"],
         message: "Compare-at price must be higher than the selling price, or left blank.",
       });
+    }
+
+    // --- Going live needs the full label on the page -----------------------
+    if (input.isActive) {
+      for (const [field, label] of LIVE_REQUIRED) {
+        if (!input[field]) {
+          ctx.addIssue({
+            code: "custom",
+            path: [field],
+            message: `${label} is required before this product can go live. Save it as a draft until you have it.`,
+          });
+        }
+      }
+    }
+
+    // --- MRP is a ceiling ----------------------------------------------------
+    // Selling above MRP is an offence, and a "was" price above it would be a
+    // misleading reference price under the dark-pattern guidelines.
+    if (input.mrp) {
+      if (Number(input.basePrice) > Number(input.mrp)) {
+        ctx.addIssue({ code: "custom", path: ["basePrice"], message: "The selling price can't be above the MRP." });
+      }
+      if (input.compareAtPrice && Number(input.compareAtPrice) > Number(input.mrp)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["compareAtPrice"],
+          message: "The compare-at price can't be above the MRP.",
+        });
+      }
     }
 
     if (input.discountActive && input.discountPercent === undefined) {

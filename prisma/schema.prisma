@@ -179,6 +179,21 @@ model Product {
   complianceReviewedAt DateTime?
   complianceReviewedBy String?
 
+  // --- Label declarations (Legal Metrology (Packaged Commodities) Rules and
+  // FSSAI labelling, as they apply to online listings). Optional on drafts,
+  // required before a product goes live (validation/product.ts). ---
+  manufacturerName    String?
+  manufacturerAddress String?
+  /// "Packed by" / "Marketed by" name and address, when not the manufacturer.
+  packerDetails       String?
+  countryOfOrigin     String?
+  /// As printed on the pack: "150 g", "60 gummies (120 g)".
+  netQuantity         String?
+  /// Maximum retail price, inclusive of all taxes. Nothing may sell above it.
+  mrp                 Decimal? @db.Decimal(10, 2)
+  /// Ingredients in descending order of weight, as on the label.
+  ingredients         String?
+
   metaTitle       String?
   metaDescription String?
 
@@ -364,6 +379,10 @@ model Order {
   closedAt        DateTime?
   /// Why it ended: a code from CLOSE_REASONS in src/lib/order-lifecycle.ts.
   closeReason     String?
+  /// GST tax invoice, issued when the order ships: consecutive per financial
+  /// year, so orders cancelled before dispatch leave no gaps in the series.
+  invoiceNumber   String?     @unique
+  invoiceDate     DateTime?
   placedAt        DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -393,6 +412,10 @@ model OrderItem {
   listUnitPriceSnapshot Decimal? @db.Decimal(10, 2)
   quantity            Int
   lineTotal           Decimal @db.Decimal(10, 2)
+  /// Tax facts at the moment of sale, for the GST invoice: the product's own
+  /// rate or HSN may change later, and the invoice must not.
+  hsnCode             String?
+  taxRatePercent      Decimal? @db.Decimal(4, 2)
 }
 
 model Coupon {
@@ -573,4 +596,54 @@ model AnalyticsEvent {
 
   @@index([type, createdAt])
   @@index([sessionId, type])
+}
+
+/// Last invoice number issued in each financial year ("2026-27"). Incremented
+/// inside the transaction that ships the order, so numbers are unique and
+/// consecutive with no gaps.
+model InvoiceSequence {
+  financialYear String @id
+  lastNumber    Int    @default(0)
+}
+
+/// The seller's own details, shown on the site and printed on invoices. One
+/// row (id "default"), edited by the owner on Settings → Business details.
+/// Everything is optional until filled in; the launch-readiness check lists
+/// what's still missing, and orders stay blocked until it's complete.
+model BusinessProfile {
+  id                          String   @id @default("default")
+  legalName                   String?
+  /// Brand the customer sees, if different from the legal name.
+  tradeName                   String?
+  registeredAddress           String?
+  gstin                       String?
+  fssaiLicence                String?
+  customerCarePhone           String?
+  customerCareEmail           String?
+  /// Required on the site by the Consumer Protection (E-Commerce) Rules, 2020.
+  grievanceOfficerName        String?
+  grievanceOfficerDesignation String?
+  grievanceOfficerPhone       String?
+  grievanceOfficerEmail       String?
+  updatedAt                   DateTime @updatedAt
+}
+
+/// Proof of consent under the Digital Personal Data Protection Act, 2023:
+/// who agreed to what, when, where, and the exact wording they were shown.
+/// Append-only in practice; a withdrawal is a new row with granted = false.
+model ConsentRecord {
+  id         String   @id @default(cuid())
+  /// "MARKETING" for now.
+  purpose    String
+  granted    Boolean
+  email      String?
+  phone      String?
+  /// The exact text shown next to the checkbox.
+  noticeText String
+  /// Where it was given: "checkout".
+  source     String
+  orderId    String?
+  createdAt  DateTime @default(now())
+
+  @@index([email, purpose, createdAt])
 }

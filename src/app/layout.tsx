@@ -10,6 +10,7 @@ import { BasketButton } from "@/components/basket/basket-button";
 import { BasketDrawer } from "@/components/basket/basket-drawer";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
+import { getBusinessProfile } from "@/server/business";
 import "./globals.css";
 
 /**
@@ -67,14 +68,20 @@ function Nav() {
 }
 
 /**
- * The FSSAI licence number is a legally required site-wide display.
+ * Site-wide legal displays: the FSSAI licence, the seller's legal identity,
+ * customer care, and the grievance officer the Consumer Protection
+ * (E-Commerce) Rules require. All come from Settings → Business details.
  *
- * When it is absent the footer says so plainly rather than rendering a
- * placeholder. A fabricated licence number is a considerably worse problem
- * than a visibly missing one, and the gap should be uncomfortable.
+ * When the licence is absent the footer says so plainly rather than rendering
+ * a placeholder. A fabricated licence number is a considerably worse problem
+ * than a visibly missing one, and the gap should be uncomfortable. Other
+ * missing details are simply left out; the launch-readiness check lists them.
  */
-function Footer() {
-  const licence = process.env.NEXT_PUBLIC_FSSAI_LICENCE_NUMBER;
+async function Footer() {
+  const business = await getBusinessProfile();
+  const licence = business.fssaiLicence;
+  const identity = [business.legalName, business.registeredAddress, business.gstin && `GSTIN ${business.gstin}`].filter(Boolean);
+  const officer = [business.grievanceOfficerName, business.grievanceOfficerDesignation].filter(Boolean).join(", ");
 
   return (
     <footer className="mt-24 border-t border-[--color-rule] bg-shelf">
@@ -139,17 +146,33 @@ function Footer() {
         </div>
 
         <div className="text-small">
-          <p className="mb-2 font-semibold">Licensing</p>
-          {licence ? (
-            <p className="tabular text-ink-soft">FSSAI licence {licence}</p>
-          ) : (
-            <p className="text-alert">
-              FSSAI licence number not yet configured. Required before taking orders.
-            </p>
+          <p className="mb-2 font-semibold">Help</p>
+          <ul className="grid gap-1.5 text-ink-soft">
+            {business.customerCarePhone && <li className="tabular">Customer care {business.customerCarePhone}</li>}
+            {business.customerCareEmail && <li className="break-all">{business.customerCareEmail}</li>}
+          </ul>
+          {officer && (
+            <div className="mt-3 text-ink-soft">
+              <p className="font-semibold text-ink">Grievance officer</p>
+              <p>{officer}</p>
+              {business.grievanceOfficerEmail && <p className="break-all">{business.grievanceOfficerEmail}</p>}
+              {business.grievanceOfficerPhone && <p className="tabular">{business.grievanceOfficerPhone}</p>}
+            </div>
           )}
-          <p className="mt-3 text-ink-faint">
-            Supplement statements have not been evaluated as medicines and are not intended to
-            diagnose, treat, cure or prevent any disease.
+        </div>
+      </div>
+
+      <div className="border-t border-[--color-rule]">
+        <div className="mx-auto grid max-w-6xl gap-2 px-5 py-6 text-micro text-ink-faint">
+          {identity.length > 0 && <p>{identity.join(" · ")}</p>}
+          {licence ? (
+            <p className="tabular">FSSAI licence {licence}</p>
+          ) : (
+            <p className="text-alert">FSSAI licence number not yet configured. Required before taking orders.</p>
+          )}
+          <p>
+            Supplement statements have not been evaluated as medicines and are not intended to diagnose, treat, cure or
+            prevent any disease.
           </p>
         </div>
       </div>

@@ -14,6 +14,8 @@ import { lookupPincode } from "@/server/pincode";
 import { newOrderAccessToken } from "@/lib/order-access";
 import { recordOrderEvent } from "@/lib/order-events";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
+import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
+import { reportError } from "@/lib/observability";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -242,6 +244,23 @@ export async function POST(request: Request) {
       method: input.paymentMethod,
       totalPaise: quote.totalPaise,
     });
+    // Proof of the optional marketing opt-in: who, when, where, and the exact
+    // wording shown. Only a tick is recorded; no record means no consent.
+    if (input.marketingConsent) {
+      await db.consentRecord
+        .create({
+          data: {
+            purpose: "MARKETING",
+            granted: true,
+            email: input.email,
+            phone: input.phone,
+            noticeText: MARKETING_CONSENT_TEXT,
+            source: "checkout",
+            orderId: order.id,
+          },
+        })
+        .catch((error) => reportError("consent-record", error, { orderId: order.id }));
+    }
     await recordEvent(sessionId, "ORDER_PLACED", {
       orderId: order.id,
       metadata: { totalPaise: quote.totalPaise, method: input.paymentMethod },

@@ -28,7 +28,9 @@ export type Permission =
   /** The audit log: everyone's actions and IP addresses. */
   | "audit:view"
   /** Add people, change roles, deactivate, reset access. */
-  | "team:manage";
+  | "team:manage"
+  /** The company's legal and contact details: GSTIN, grievance officer, customer care. */
+  | "settings:manage";
 
 const MATRIX: Record<AdminRole, readonly Permission[]> = {
   OWNER: [
@@ -45,6 +47,7 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "stores:write",
     "audit:view",
     "team:manage",
+    "settings:manage",
   ],
   MANAGER: [
     "dashboard:view",

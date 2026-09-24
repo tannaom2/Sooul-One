@@ -39,8 +39,20 @@ const validFood = {
   nutritionFacts: nutrition,
 };
 
+/** A complete set of label declarations, so a product may go live. */
+const declarations = {
+  manufacturerName: "Example Foods Pvt Ltd",
+  manufacturerAddress: "Plot 1, GIDC, Ahmedabad, Gujarat 382445",
+  countryOfOrigin: "India",
+  netQuantity: "60 gummies (120 g)",
+  mrp: "499",
+  ingredients: "Sugar, pectin, citric acid, biotin",
+  hsnCode: "21069099",
+};
+
 const validSupplement = {
   ...base,
+  ...declarations,
   sku: "WA-BIO-001",
   slug: "biotin-gummies",
   name: "Biotin Gummies",
@@ -71,6 +83,26 @@ describe("the happy paths", () => {
 
   it("accepts a complete health supplement", () => {
     expect(productInputSchema.safeParse(validSupplement).success).toBe(true);
+  });
+});
+
+describe("label declarations", () => {
+  it("lets a draft be saved without them", () => {
+    expect(productInputSchema.safeParse({ ...validFood, isActive: false }).success).toBe(true);
+  });
+
+  it("lists each missing declaration before a product can go live", () => {
+    const paths = errorPaths({ ...validFood, isActive: true });
+    for (const field of ["manufacturerName", "manufacturerAddress", "countryOfOrigin", "netQuantity", "mrp", "ingredients", "hsnCode"]) {
+      expect(paths).toContain(field);
+    }
+    expect(productInputSchema.safeParse({ ...validFood, ...declarations, isActive: true }).success).toBe(true);
+  });
+
+  it("never sells above the MRP, or shows a 'was' price above it", () => {
+    expect(errorPaths({ ...validFood, ...declarations, mrp: "150" })).toContain("basePrice");
+    expect(errorPaths({ ...validFood, ...declarations, compareAtPrice: "599" })).toContain("compareAtPrice");
+    expect(productInputSchema.safeParse({ ...validFood, ...declarations, compareAtPrice: "249" }).success).toBe(true);
   });
 });
 
