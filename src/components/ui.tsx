@@ -83,6 +83,8 @@ export function ProductCard({ product }: { product: ProductSummary }) {
           alt={product.name}
           width={400}
           height={300}
+          // One column on phones, two on tablets, three on desktop (ProductGrid).
+          sizes="(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw"
           className="aspect-[4/3] w-full border border-[--color-rule] object-cover"
         />
       ) : (

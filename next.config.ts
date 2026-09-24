@@ -32,7 +32,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  images: { remotePatterns: [{ protocol: "https", hostname: "res.cloudinary.com" }] },
+  // Cloudinary resizes and re-encodes (AVIF/WebP) at the edge, instead of our
+  // server downloading originals to resize them. See src/lib/cloudinary-loader.ts.
+  images: {
+    loader: "custom",
+    loaderFile: "./src/lib/cloudinary-loader.ts",
+    remotePatterns: [{ protocol: "https", hostname: "res.cloudinary.com" }],
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
