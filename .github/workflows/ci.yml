@@ -17,7 +17,7 @@ jobs:
       # Prisma 7 move failed at its first step.
       DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the secret scan reads the commits being pushed
       - uses: actions/setup-node@v4
@@ -66,7 +66,7 @@ jobs:
       JWT_SECRET: ci-only-jwt-secret-at-least-32-characters-long
       SELLER_STATE: Gujarat
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
