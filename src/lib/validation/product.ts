@@ -71,6 +71,13 @@ const baseProduct = z.object({
     .positive("Shelf life is required and drives the delivery-eligibility rule"),
 
   allergens: z.array(z.string().min(1)),
+
+  /**
+   * Age suitability in whole years. Optional in general; required for Kids
+   * Vault products, which saveProduct enforces because it knows the brand.
+   */
+  suitableFromAge: z.number().int().min(0).max(100).optional(),
+  suitableToAge: z.number().int().min(1).max(100).optional(),
 });
 
 const nutritionFacts = z.object(
@@ -118,6 +125,15 @@ const packagedFood = baseProduct.extend({
 const healthSupplement = baseProduct.extend({
   regulatoryType: z.literal("HEALTH_SUPPLEMENT"),
   servingsPerContainer: z.number().int().positive("Servings per container is required"),
+  /**
+   * Grams of sugar per serving, shown as a number beside the price. Zero is a
+   * valid answer; blank is not, because "no added sugar" badges are what every
+   * competitor shows instead of the figure.
+   */
+  sugarPerServingG: z
+    .number({ message: "Enter the grams of sugar per serving (0 if none)" })
+    .min(0)
+    .max(100, "That's more sugar than a serving can weigh; check the figure"),
   dosageGuidance: z.string().min(1, "Dosage guidance is required"),
   supplementFacts: z
     .array(supplementFactRow)
@@ -220,6 +236,18 @@ export const productInputSchema = z
     }
 
     // --- Cross-field sanity -------------------------------------------------
+    if (
+      input.suitableFromAge !== undefined &&
+      input.suitableToAge !== undefined &&
+      input.suitableToAge < input.suitableFromAge
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["suitableToAge"],
+        message: "The upper age can't be below the lower one.",
+      });
+    }
+
     if (input.compareAtPrice && Number(input.compareAtPrice) <= Number(input.basePrice)) {
       ctx.addIssue({
         code: "custom",

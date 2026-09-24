@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { addTeamMember, changeRole, resetAccess, setActive, type TeamResult } from "./actions";
+import { keepFormValues, useClearOnSuccess } from "@/components/keep-form-values";
 
 const INITIAL: TeamResult = { ok: false };
 
@@ -39,10 +40,11 @@ function TemporaryPassword({ state }: { state: TeamResult }) {
 
 export function AddMemberForm({ roles }: { roles: RoleOption[] }) {
   const [state, submit, pending] = useActionState(addTeamMember, INITIAL);
+  const formRef = useClearOnSuccess(state);
 
   return (
     <div>
-      <form action={submit} className="grid gap-3 sm:grid-cols-[1fr_1fr_12rem_auto] sm:items-end">
+      <form ref={formRef} onSubmit={keepFormValues(submit)} className="grid gap-3 sm:grid-cols-[1fr_1fr_12rem_auto] sm:items-end">
         <div>
           <label className="label" htmlFor="member-name">Name</label>
           <input id="member-name" name="name" autoComplete="off" maxLength={100} required className="field" />

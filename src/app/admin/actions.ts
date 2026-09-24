@@ -97,6 +97,8 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     retailOnly: form.get("retailOnly") === "on",
     isVeg: form.get("isVeg") === "" ? undefined : form.get("isVeg") === "true",
     shelfLifeDays: num(form, "shelfLifeDays"),
+    suitableFromAge: num(form, "suitableFromAge"),
+    suitableToAge: num(form, "suitableToAge"),
     allergens: String(form.get("allergens") ?? "")
       .split(",")
       .map((a) => a.trim())
@@ -108,6 +110,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   }
   if (regulatoryType === "HEALTH_SUPPLEMENT") {
     candidate.servingsPerContainer = num(form, "servingsPerContainer");
+    candidate.sugarPerServingG = num(form, "sugarPerServingG");
     candidate.dosageGuidance = String(form.get("dosageGuidance") ?? "").trim();
     candidate.supplementFacts = json(form, "supplementFacts");
     candidate.complianceReviewConfirmed = form.get("complianceReviewConfirmed") === "on";
@@ -123,6 +126,19 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     };
   }
   const input = parsed.data;
+
+  // Kids Vault products must say which ages they're for: the age block is the
+  // first thing a parent looks for. Checked here because it depends on the brand.
+  if (input.suitableFromAge === undefined) {
+    const brand = await db.brand.findUnique({ where: { id: input.brandId }, select: { slug: true } });
+    if (brand?.slug === "kids-vault") {
+      return {
+        ok: false,
+        message: "Kids Vault products need a minimum age.",
+        fieldErrors: { suitableFromAge: ["Enter the youngest age this product is suitable for."] },
+      };
+    }
+  }
 
   // The stored row as it was before this save — used by the pricing guard,
   // the supplement sign-off, and the audit diff.
@@ -161,6 +177,8 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     retailOnly: input.retailOnly,
     isVeg: input.isVeg,
     shelfLifeDays: input.shelfLifeDays,
+    suitableFromAge: input.suitableFromAge ?? null,
+    suitableToAge: input.suitableToAge ?? null,
     allergens: input.allergens,
   };
 
@@ -170,6 +188,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
 
   if (input.regulatoryType === "HEALTH_SUPPLEMENT") {
     data.servingsPerContainer = input.servingsPerContainer;
+    data.sugarPerServingG = input.sugarPerServingG;
     data.dosageGuidance = input.dosageGuidance;
     data.supplementFacts = input.supplementFacts;
     data.isActive = input.isActive;

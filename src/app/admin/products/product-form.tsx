@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { saveProduct, type ActionResult } from "../actions";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { ImageUpload } from "@/components/image-upload";
+import { keepFormValues } from "@/components/keep-form-values";
 
 /**
  * The product form.
@@ -96,7 +97,7 @@ export function ProductForm({
   const err = (field: string) => state.fieldErrors?.[field]?.[0];
 
   return (
-    <form action={submit} className="grid max-w-3xl gap-6">
+    <form onSubmit={keepFormValues(submit)} className="grid max-w-3xl gap-6">
       {product?.id && <input type="hidden" name="id" value={product.id} />}
       <input type="hidden" name="nutritionFacts" value={JSON.stringify(
         Object.fromEntries(
@@ -304,6 +305,27 @@ export function ProductForm({
         />
       </div>
 
+      {/* Who it's for. Required for Kids Vault; shown as an age badge. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Suitable from age (years)"
+          name="suitableFromAge"
+          type="number"
+          defaultValue={product?.suitableFromAge?.toString()}
+          error={err("suitableFromAge")}
+          hint="Required for Kids Vault products."
+          optional
+        />
+        <Field
+          label="Suitable up to age (years)"
+          name="suitableToAge"
+          type="number"
+          defaultValue={product?.suitableToAge?.toString()}
+          error={err("suitableToAge")}
+          optional
+        />
+      </div>
+
       <Field
         label="Allergens"
         name="allergens"
@@ -339,7 +361,18 @@ export function ProductForm({
         <fieldset className="panel p-4">
           <legend className="label px-1">Supplement facts</legend>
 
-          <Field label="Servings per container" name="servingsPerContainer" type="number" defaultValue={product?.servingsPerContainer?.toString()} error={err("servingsPerContainer")} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Servings per container" name="servingsPerContainer" type="number" defaultValue={product?.servingsPerContainer?.toString()} error={err("servingsPerContainer")} />
+            <Field
+              label="Sugar per serving (g)"
+              name="sugarPerServingG"
+              type="number"
+              step="0.1"
+              defaultValue={product?.sugarPerServingG?.toString()}
+              error={err("sugarPerServingG")}
+              hint="Shown as a number next to the price. Enter 0 if there is none."
+            />
+          </div>
 
           <div className="mt-4">
             <label className="label" htmlFor="dosageGuidance">Dosage guidance</label>
@@ -456,6 +489,7 @@ function Field({
   hint,
   optional,
   readOnly,
+  step,
 }: {
   label: string;
   name: string;
@@ -465,6 +499,8 @@ function Field({
   hint?: string;
   optional?: boolean;
   readOnly?: boolean;
+  /** e.g. "0.1" for decimal figures; number inputs otherwise reject 1.5. */
+  step?: string;
 }) {
   return (
     <div>
@@ -478,6 +514,7 @@ function Field({
         type={type}
         defaultValue={defaultValue}
         readOnly={readOnly}
+        step={step}
         className={readOnly ? "field cursor-not-allowed bg-shelf text-ink-soft" : "field"}
       />
       {hint && <p className="mt-1 text-micro text-ink-faint">{hint}</p>}

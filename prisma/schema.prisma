@@ -160,6 +160,13 @@ model Product {
   dosageGuidance       String?
   /// { ingredient: { amountPerServing, percentRDA } }
   supplementFacts      Json?
+  /// Grams of sugar per serving, shown as a number on the product page and
+  /// card. Required for supplements (validation/product.ts); food takes it
+  /// from nutritionFacts.totalSugarsG. No peer in the field study shows it.
+  sugarPerServingG     Decimal? @db.Decimal(6, 2)
+  /// Age suitability, in years. Required for Kids Vault products (saveProduct).
+  suitableFromAge      Int?
+  suitableToAge        Int?
 
   /// [ADDED] Set by the admin before a HEALTH_SUPPLEMENT product may go live.
   /// Section 7.5's forcing function against accidental therapeutic claims.

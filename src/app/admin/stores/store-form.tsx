@@ -2,14 +2,16 @@
 
 import { useActionState } from "react";
 import { saveStore, type ActionResult } from "../actions";
+import { keepFormValues, useClearOnSuccess } from "@/components/keep-form-values";
 
 const INITIAL: ActionResult = { ok: false };
 
 export function StoreForm() {
   const [state, submit, pending] = useActionState(saveStore, INITIAL);
+  const formRef = useClearOnSuccess(state);
 
   return (
-    <form action={submit} className="panel grid gap-4 p-4 sm:grid-cols-2">
+    <form ref={formRef} onSubmit={keepFormValues(submit)} className="panel grid gap-4 p-4 sm:grid-cols-2">
       {[
         ["name", "Store name"],
         ["addressLine1", "Address"],

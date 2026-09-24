@@ -131,6 +131,14 @@ export function ProductCard({ product }: { product: ProductSummary }) {
 
       {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} size="micro" />}
 
+      {/* Declared label facts, as numbers: no peer in the field study shows grams of sugar. */}
+      {(product.ageLabel || product.sugarLabel) && (
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-micro">
+          {product.ageLabel && <span className="font-semibold" style={{ color: accent }}>{product.ageLabel}</span>}
+          {product.sugarLabel && <span className="text-ink-soft">{product.sugarLabel}</span>}
+        </p>
+      )}
+
       <p className="text-small text-ink-soft">{product.shortDescription}</p>
 
       {/* Allergens sit on the card, not behind a click. The brief's research

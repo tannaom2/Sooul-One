@@ -2,14 +2,16 @@
 
 import { useActionState } from "react";
 import { addBatch, type ActionResult } from "../actions";
+import { keepFormValues, useClearOnSuccess } from "@/components/keep-form-values";
 
 const INITIAL: ActionResult = { ok: false };
 
 export function BatchForm({ products }: { products: { id: string; name: string }[] }) {
   const [state, submit, pending] = useActionState(addBatch, INITIAL);
+  const formRef = useClearOnSuccess(state);
 
   return (
-    <form action={submit} className="panel grid gap-4 p-4 sm:grid-cols-2">
+    <form ref={formRef} onSubmit={keepFormValues(submit)} className="panel grid gap-4 p-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
         <label className="label" htmlFor="productId">Product</label>
         <select id="productId" name="productId" className="field">

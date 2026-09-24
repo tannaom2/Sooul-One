@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { saveBundle } from "./actions";
 import type { ActionResult } from "../actions";
+import { keepFormValues, useClearOnSuccess } from "@/components/keep-form-values";
 
 const INITIAL: ActionResult = { ok: false };
 
@@ -19,9 +20,10 @@ interface Product {
 
 export function BundleForm({ brands, products }: { brands: Brand[]; products: Product[] }) {
   const [state, submit, pending] = useActionState(saveBundle, INITIAL);
+  const formRef = useClearOnSuccess(state);
 
   return (
-    <form action={submit} className="panel grid gap-4 p-4">
+    <form ref={formRef} onSubmit={keepFormValues(submit)} className="panel grid gap-4 p-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-small">
           <span className="mb-1 block font-medium">Bundle name</span>

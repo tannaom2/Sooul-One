@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { authenticate, type LoginState } from "./actions";
+import { keepFormValues } from "@/components/keep-form-values";
 
 const INITIAL: LoginState = { stage: "PASSWORD" };
 
@@ -44,7 +45,7 @@ export default function AdminLogin() {
       )}
 
       {state.stage === "ENROL" && (
-        <form action={submit} className="mt-8 grid gap-5">
+        <form onSubmit={keepFormValues(submit)} className="mt-8 grid gap-5">
           <input type="hidden" name="step" value="enrol" />
           <input type="hidden" name="setupKey" value={state.setupKey} />
 
@@ -96,7 +97,7 @@ export default function AdminLogin() {
       )}
 
       {state.stage === "PASSWORD" && (
-        <form action={submit} className="mt-8 grid gap-4">
+        <form onSubmit={keepFormValues(submit)} className="mt-8 grid gap-4">
           <input type="hidden" name="step" value="password" />
           <div>
             <label className="label" htmlFor="email">Email</label>

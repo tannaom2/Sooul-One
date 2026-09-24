@@ -49,6 +49,7 @@ const validSupplement = {
   regulatoryType: "HEALTH_SUPPLEMENT" as const,
   shelfLifeDays: 730,
   servingsPerContainer: 30,
+  sugarPerServingG: 1.5,
   dosageGuidance: "1 gummy daily. Do not exceed the recommended dose.",
   supplementFacts: [{ ingredient: "Biotin", amountPerServing: "5000 mcg", percentRDA: 100 }],
   allergens: [],
@@ -108,6 +109,22 @@ describe("PACKAGED_FOOD mandatory fields", () => {
 
   it("does not demand supplement fields of a food product", () => {
     expect(errorPaths(validFood)).toHaveLength(0);
+  });
+});
+
+describe("sugar per serving and age suitability", () => {
+  it("requires grams of sugar on a supplement, and accepts zero", () => {
+    const { sugarPerServingG, ...withoutSugar } = validSupplement;
+    expect(errorPaths(withoutSugar)).toContain("sugarPerServingG");
+    expect(errorPaths({ ...validSupplement, sugarPerServingG: 0 })).toHaveLength(0);
+    expect(errorPaths({ ...validSupplement, sugarPerServingG: 250 })).toContain("sugarPerServingG");
+  });
+
+  it("accepts an age range, whole years only, lower bound first", () => {
+    expect(errorPaths({ ...validSupplement, suitableFromAge: 4, suitableToAge: 12 })).toHaveLength(0);
+    expect(errorPaths({ ...validSupplement, suitableFromAge: 4 })).toHaveLength(0);
+    expect(errorPaths({ ...validSupplement, suitableFromAge: 12, suitableToAge: 4 })).toContain("suitableToAge");
+    expect(errorPaths({ ...validSupplement, suitableFromAge: 4.5 })).toContain("suitableFromAge");
   });
 });
 

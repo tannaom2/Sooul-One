@@ -13,6 +13,7 @@ import { estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { ReviewForm } from "@/components/review-form";
+import { ageLabel, allergenLabel, sugarLabel } from "@/lib/label-facts";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fssai = process.env.NEXT_PUBLIC_FSSAI_LICENCE_NUMBER;
   const accent = BRAND_ACCENT[product.brand?.slug] ?? "var(--color-ink)";
   const buyable = availability.state === "in" || availability.state === "low";
+  const age = ageLabel(product.suitableFromAge, product.suitableToAge);
+  const facts = [sugarLabel(product), allergenLabel(product.allergens)].filter(Boolean) as string[];
+  const isKids = product.brand?.slug === "kids-vault";
 
   return (
     <article className="mx-auto max-w-6xl px-5 py-8 lg:py-10">
@@ -132,6 +136,31 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </a>
           )}
           <p className="mt-3 text-lead text-ink-soft">{product.shortDescription}</p>
+
+          {/* The label's key facts as plain numbers, before any selling. */}
+          {facts.length > 0 && (
+            <ul className="mt-4 flex flex-wrap gap-2" aria-label="At a glance">
+              {facts.map((f) => (
+                <li key={f} className="border border-[--color-rule] px-2.5 py-1 text-micro font-semibold" style={{ borderRadius: "var(--radius-panel)" }}>
+                  {f}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Kids Vault: who it's for and how to give it, above the button,
+              because a parent decides on this before anything else. */}
+          {age && (isKids || isSupplement) && (
+            <div className="mt-5 border-l-4 px-4 py-3" style={{ borderColor: accent, background: "color-mix(in srgb, " + accent + " 8%, white)" }}>
+              <p className="font-display text-lead font-bold" style={{ color: accent }}>{age}</p>
+              {isSupplement && product.dosageGuidance && <p className="mt-1 text-small">{product.dosageGuidance}</p>}
+              {isKids && (
+                <p className="mt-2 text-micro text-ink-soft">
+                  Not recommended under {product.suitableFromAge} years. Supervise young children while they chew. Keep out of reach of children.
+                </p>
+              )}
+            </div>
+          )}
 
           <div id="buy-box" className="panel mt-6">
             <div className="panel-head flex items-center justify-between">

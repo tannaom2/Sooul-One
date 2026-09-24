@@ -6,6 +6,7 @@ import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
 import { productAvailability, type AvailabilityState } from "@/lib/checkout/availability";
 import { estimateDeliveryDate } from "@/lib/checkout/delivery";
+import { ageLabel, sugarLabel } from "@/lib/label-facts";
 
 /**
  * Catalog reads.
@@ -40,6 +41,10 @@ export interface ProductSummary {
   availability: { state: AvailabilityState; shippableUnits: number };
   /** Approved reviews only; null when there are none yet. */
   rating: RatingSummary | null;
+  /** "1.5 g sugar per serving", from the declared label; null if undeclared. */
+  sugarLabel: string | null;
+  /** "For ages 4–12"; null if no age was declared. */
+  ageLabel: string | null;
 }
 
 export interface RatingSummary {
@@ -63,7 +68,7 @@ async function ratingsFor(productIds: string[]): Promise<Map<string, RatingSumma
 }
 
 /** Summaries with their ratings attached, in one extra grouped query. */
-async function withRatings(rows: any[]): Promise<ProductSummary[]> {
+async function withRatings(rows: { id: string }[]): Promise<ProductSummary[]> {
   const ratings = await ratingsFor(rows.map((r) => r.id));
   return rows.map((row) => ({ ...toSummary(row), rating: ratings.get(row.id) ?? null }));
 }
@@ -101,6 +106,8 @@ function toSummary(p: any): ProductSummary {
     imageUrl: p.images?.find((i: any) => i.isPrimary)?.url ?? p.images?.[0]?.url ?? null,
     availability: cardAvailability(p),
     rating: null,
+    sugarLabel: sugarLabel(p),
+    ageLabel: ageLabel(p.suitableFromAge, p.suitableToAge),
   };
 }
 
