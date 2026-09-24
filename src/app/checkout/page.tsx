@@ -1,17 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { formatINR } from "@/lib/money";
-import { checkoutInputSchema } from "@/lib/validation/checkout";
+import { formatDate } from "@/lib/format";
+import { track } from "@/lib/track";
+import { STEPS, normalise, stepSummary, validateStep, type CheckoutStep } from "@/lib/checkout/steps";
+import { useCheckout } from "./use-checkout";
+import { useQuote } from "./use-quote";
+import { usePincode } from "./use-pincode";
 
 /**
- * Checkout.
+ * Checkout, in three steps: contact, address, payment.
  *
- * Guest checkout is first class — no account wall. The totals shown here are
- * re-quoted server-side as the pincode and coupon change, and re-quoted again
- * on submit, because a basket can become non-compliant while someone is typing
- * their address.
+ * Guest checkout is first class — no account wall. Mobile number comes first
+ * (the smallest ask, and what delivery needs anyway); the pincode fills city
+ * and state and shows the delivery date; UPI is offered first because it's
+ * how most Indian shoppers pay. Totals are re-quoted on the server as the
+ * pincode and coupon change, and again on submit, because a basket can
+ * become non-compliant while someone is typing their address.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -22,111 +30,121 @@ declare global {
   }
 }
 
-const EMPTY = {
-  name: "",
-  email: "",
-  phone: "",
-  line1: "",
-  line2: "",
-  city: "",
-  state: "",
-  postalCode: "",
-  couponCode: "",
-};
+type PayChoice = "UPI" | "CARD" | "COD";
 
-// The same schema create-order/route.ts validates against, not a hand-copied
-// regex set — a rule change there now can't silently fall out of sync with
-// what this page checks before the round trip.
-const REQUIRED_FIELDS_SCHEMA = checkoutInputSchema.pick({
-  name: true,
-  email: true,
-  phone: true,
-  line1: true,
-  city: true,
-  state: true,
-  postalCode: true,
-});
+const STEP_TITLES: Record<CheckoutStep, string> = { contact: "Contact", address: "Delivery address", payment: "Payment" };
 
-function validate(form: typeof EMPTY): Record<string, string> {
-  const result = REQUIRED_FIELDS_SCHEMA.safeParse(form);
-  if (result.success) return {};
-  const errors: Record<string, string> = {};
-  for (const issue of result.error.issues) {
-    const key = String(issue.path[0]);
-    if (!errors[key]) errors[key] = issue.message;
+const PAY_OPTIONS: { value: PayChoice; title: string; detail: string }[] = [
+  { value: "UPI", title: "UPI", detail: "Pay from any UPI app: PhonePe, Google Pay, Paytm." },
+  { value: "CARD", title: "Card, net banking or wallet", detail: "Handled securely by Razorpay." },
+  { value: "COD", title: "Cash on delivery", detail: "Pay the courier when it arrives. No extra charge." },
+];
+
+const noop = () => () => {};
+
+/**
+ * The form restores a draft from sessionStorage, which only exists in the
+ * browser, so it renders after hydration; the server sends the page frame.
+ */
+export default function Checkout() {
+  const hydrated = useSyncExternalStore(noop, () => true, () => false);
+  if (!hydrated) {
+    return (
+      <div className="mx-auto max-w-6xl px-5 py-8 lg:py-12" aria-busy="true">
+        <h1 className="text-h1 font-extrabold">Checkout</h1>
+        <p className="mt-1 text-small text-ink-soft">No account needed</p>
+      </div>
+    );
   }
-  return errors;
+  return <CheckoutForm />;
 }
 
-export default function Checkout() {
-  const [form, setForm] = useState(EMPTY);
-  const [quote, setQuote] = useState<any>(null);
+function CheckoutForm() {
+  const router = useRouter();
+  const { form, step, errors, setErrors, set, setForm, next, edit, clearDraft } = useCheckout();
+  const { quote, couponRejected, empty } = useQuote(form.postalCode, form.state, form.couponCode);
+  const place = usePincode(form.postalCode);
+  const [pay, setPay] = useState<PayChoice>("UPI");
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [blocked, setBlocked] = useState<{ name: string; reason?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [method, setMethod] = useState<"RAZORPAY" | "COD">("RAZORPAY");
-  const [marketingConsent, setMarketingConsent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
+  const autofilled = useRef<{ city?: string; state?: string }>({});
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  // Once per mount, not on every re-quote below — this page is where
-  // CHECKOUT_STARTED lives in the funnel, and it needs to fire exactly once
-  // per visit to this page for the drop-off rate to mean anything.
+  // Once per visit: this page is where CHECKOUT_STARTED lives in the funnel.
   useEffect(() => {
-    fetch("/api/analytics/checkout-started", { method: "POST" }).catch(() => {});
+    track({ type: "CHECKOUT_STARTED" });
   }, []);
 
-  // Re-quote whenever something that affects price or compliance changes.
+  // Fill city and state from the pincode, but never overwrite what the
+  // shopper typed themselves (only empty fields, or ones we filled before).
   useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const response = await fetch("/api/checkout/quote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pincode: /^\d{6}$/.test(form.postalCode) ? form.postalCode : undefined,
-            state: form.state || undefined,
-            couponCode: form.couponCode || undefined,
-          }),
-          signal: controller.signal,
-        });
-        if (response.ok) setQuote((await response.json()).quote);
-      } catch {
-        /* an aborted re-quote is normal while typing */
-      }
-    }, 350);
+    if (!place?.city || !place.state) return;
+    setForm((f) => ({
+      ...f,
+      city: !f.city || f.city === autofilled.current.city ? place.city! : f.city,
+      state: !f.state || f.state === autofilled.current.state ? place.state! : f.state,
+    }));
+    autofilled.current = { city: place.city, state: place.state };
+  }, [place, setForm]);
 
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [form.postalCode, form.state, form.couponCode]);
+  // Moving to a step puts focus at its heading, so keyboard and screen-reader
+  // users land where the next thing to do is.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [step]);
 
-  function set(field: keyof typeof EMPTY, value: string) {
-    setForm((f) => ({ ...f, [field]: value }));
+  // Razorpay's script is large and only needed to pay, so it loads when the
+  // payment step opens rather than with the page. Cash on delivery never needs it.
+  useEffect(() => {
+    if (step !== "payment" || document.getElementById("razorpay-checkout")) return;
+    const script = document.createElement("script");
+    script.id = "razorpay-checkout";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, [step]);
+
+  function choosePay(value: PayChoice) {
+    setPay(value);
+    track({ type: "PAYMENT_METHOD_SELECTED", method: value });
+  }
+
+  function continueFrom() {
+    const found = next();
+    const first = Object.keys(found)[0];
+    if (first) document.getElementById(first)?.focus();
   }
 
   async function submit() {
-    // Stays enabled at all times (per Web Interface Guidelines) — validation
-    // happens on click, pointed at the specific field that's wrong, rather
-    // than leaving the shopper guessing why the button won't respond.
-    const errors = validate(form);
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      document.getElementById(Object.keys(errors)[0])?.focus();
-      return;
+    // Re-check the earlier steps directly: a restored draft may have skipped
+    // one, and a server rule could have changed. Send the shopper back to the
+    // first step with a problem.
+    for (const s of ["contact", "address"] as const) {
+      const found = validateStep(s, form);
+      if (Object.keys(found).length) {
+        edit(s);
+        setErrors(found);
+        return;
+      }
     }
-    setFieldErrors({});
     setBusy(true);
     setError(null);
     setBlocked([]);
 
     try {
+      const clean = normalise(form);
       const response = await fetch("/api/checkout/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, paymentMethod: method, marketingConsent }),
+        body: JSON.stringify({
+          ...clean,
+          line2: clean.line2 || undefined,
+          couponCode: clean.couponCode || undefined,
+          paymentMethod: pay === "COD" ? "COD" : "RAZORPAY",
+          marketingConsent,
+        }),
       });
       const body = await response.json();
 
@@ -142,15 +160,16 @@ export default function Checkout() {
             const key = String(issue.path?.[0] ?? "");
             if (key && !serverErrors[key]) serverErrors[key] = issue.message;
           }
-          setFieldErrors(serverErrors);
-          const firstKey = Object.keys(serverErrors)[0];
-          if (firstKey) document.getElementById(firstKey)?.focus();
+          setErrors(serverErrors);
+          if (serverErrors.phone || serverErrors.email) edit("contact");
+          else if (Object.keys(serverErrors).length) edit("address");
         }
         setError(body.message ?? "That didn't go through. Check your details and try again.");
         return;
       }
 
       if (body.method === "COD") {
+        clearDraft();
         router.push(`/order/${body.orderNumber}?t=${body.accessToken}`);
         return;
       }
@@ -158,18 +177,20 @@ export default function Checkout() {
       // Hosted Checkout: card data never touches this application, which is
       // what keeps PCI scope at SAQ-A.
       if (!window.Razorpay) {
-        setError("Payment window didn't load. Refresh and try again.");
+        setError("The payment window is still loading. Wait a moment and try again, or choose cash on delivery.");
         return;
       }
-
       new window.Razorpay({
         key: body.keyId,
         amount: body.amount,
         currency: "INR",
         name: "SooulOne",
         order_id: body.razorpayOrderId,
-        prefill: { name: form.name, email: form.email, contact: form.phone },
-        handler: () => router.push(`/order/${body.orderNumber}?t=${body.accessToken}`),
+        prefill: { name: clean.name, email: clean.email, contact: clean.phone, ...(pay === "UPI" && { method: "upi" }) },
+        handler: () => {
+          clearDraft();
+          router.push(`/order/${body.orderNumber}?t=${body.accessToken}`);
+        },
         modal: { ondismiss: () => setBusy(false) },
       }).open();
     } catch {
@@ -179,146 +200,201 @@ export default function Checkout() {
     }
   }
 
+  if (empty) {
+    return (
+      <div className="mx-auto max-w-lg px-5 py-24 text-center">
+        <h1 className="text-h2 font-extrabold">Your basket is empty</h1>
+        <p className="mt-3 text-ink-soft">Add something first, then come back to check out.</p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link href="/true-store" className="btn btn-solid">Shop snacks</Link>
+          <Link href="/gummies" className="btn btn-outline">Shop gummies</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const total = quote ? formatINR(quote.totalPaise) : null;
+  const stepIndex = STEPS.indexOf(step);
+  const payLabel = !total ? "Place order" : pay === "COD" ? `Place order · pay ${total} on delivery` : `Pay ${total}${pay === "UPI" ? " with UPI" : ""}`;
+
+  const field = (
+    id: keyof typeof form,
+    label: string,
+    props: React.InputHTMLAttributes<HTMLInputElement> = {},
+  ) => (
+    <div className={props.className}>
+      <label className="label" htmlFor={id}>{label}</label>
+      <input
+        {...props}
+        id={id}
+        className="field"
+        value={form[id]}
+        onChange={(e) => set(id, e.target.value)}
+        aria-invalid={Boolean(errors[id]) || undefined}
+        aria-describedby={errors[id] ? `${id}-error` : undefined}
+      />
+      {errors[id] && <p id={`${id}-error`} className="mt-1 text-micro text-alert">{errors[id]}</p>}
+    </div>
+  );
+
+  const summary = (
+    <div className="panel">
+      <div className="panel-head">Order summary</div>
+      {quote ? (
+        <dl>
+          <div className="panel-row"><dt>Items</dt><dd>{formatINR(quote.listSubtotalPaise)}</dd></div>
+          {quote.productDiscountPaise > 0 && (
+            <div className="panel-row"><dt>Product discounts</dt><dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd></div>
+          )}
+          {quote.bundleDiscountPaise > 0 && (
+            <div className="panel-row"><dt>Bundle offer ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd></div>
+          )}
+          {quote.discountPaise > 0 && (
+            <div className="panel-row"><dt>Discount code</dt><dd className="text-veg">−{formatINR(quote.discountPaise)}</dd></div>
+          )}
+          <div className="panel-row"><dt>Delivery</dt><dd>{quote.shippingPaise === 0 ? "Free" : formatINR(quote.shippingPaise)}</dd></div>
+          <div className="panel-row text-ink-faint"><dt>of which GST</dt><dd>{formatINR(quote.taxPaise)}</dd></div>
+          <div className="panel-row font-display text-lead font-bold"><dt>Total</dt><dd>{formatINR(quote.totalPaise)}</dd></div>
+        </dl>
+      ) : (
+        <div className="grid gap-2 p-3.5" aria-live="polite" role="status">
+          <span className="sr-only">Working out your total…</span>
+          {[60, 45, 40, 70].map((width, i) => (
+            <div key={i} className="flex justify-between">
+              <div className="h-3 animate-pulse bg-shelf" style={{ width: `${width}%`, borderRadius: "var(--radius-panel)" }} />
+              <div className="h-3 w-14 animate-pulse bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} />
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="px-3.5 pb-3 text-micro text-ink-faint">Nothing is added after this: no handling, packing or COD fees.</p>
+    </div>
+  );
+
   return (
     <>
-      <script src="https://checkout.razorpay.com/v1/checkout.js" async />
-
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 lg:grid-cols-[1fr_340px]">
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 lg:grid-cols-[1fr_340px] lg:py-12">
         <div>
           <h1 className="text-h1 font-extrabold">Checkout</h1>
-          <p className="mt-2 text-ink-soft">No account needed.</p>
+          <p className="mt-1 text-small text-ink-soft">No account needed · Step {stepIndex + 1} of 3</p>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="label" htmlFor="name">Full name</label>
-              <input
-                id="name"
-                className="field"
-                autoComplete="name"
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
-              />
-              {fieldErrors.name && <p className="mt-1 text-micro text-alert">{fieldErrors.name}</p>}
-            </div>
-            <div>
-              <label className="label" htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                className="field"
-                autoComplete="email"
-                spellCheck={false}
-                value={form.email}
-                onChange={(e) => set("email", e.target.value)}
-              />
-              {fieldErrors.email && <p className="mt-1 text-micro text-alert">{fieldErrors.email}</p>}
-            </div>
-            <div>
-              <label className="label" htmlFor="phone">Mobile number</label>
-              <input
-                id="phone"
-                type="tel"
-                inputMode="numeric"
-                className="field tabular"
-                autoComplete="tel"
-                value={form.phone}
-                onChange={(e) => set("phone", e.target.value)}
-              />
-              {fieldErrors.phone && <p className="mt-1 text-micro text-alert">{fieldErrors.phone}</p>}
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label" htmlFor="line1">Address</label>
-              <input
-                id="line1"
-                className="field"
-                autoComplete="address-line1"
-                value={form.line1}
-                onChange={(e) => set("line1", e.target.value)}
-              />
-              {fieldErrors.line1 && <p className="mt-1 text-micro text-alert">{fieldErrors.line1}</p>}
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label" htmlFor="line2">Apartment, landmark (optional)</label>
-              <input
-                id="line2"
-                className="field"
-                autoComplete="address-line2"
-                value={form.line2}
-                onChange={(e) => set("line2", e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="city">City</label>
-              <input
-                id="city"
-                className="field"
-                autoComplete="address-level2"
-                value={form.city}
-                onChange={(e) => set("city", e.target.value)}
-              />
-              {fieldErrors.city && <p className="mt-1 text-micro text-alert">{fieldErrors.city}</p>}
-            </div>
-            <div>
-              <label className="label" htmlFor="state">State</label>
-              <input
-                id="state"
-                className="field"
-                autoComplete="address-level1"
-                value={form.state}
-                onChange={(e) => set("state", e.target.value)}
-              />
-              {fieldErrors.state && <p className="mt-1 text-micro text-alert">{fieldErrors.state}</p>}
-            </div>
-            <div>
-              <label className="label" htmlFor="postalCode">Pincode</label>
-              <input
-                id="postalCode"
-                inputMode="numeric"
-                className="field tabular"
-                autoComplete="postal-code"
-                value={form.postalCode}
-                onChange={(e) => set("postalCode", e.target.value)}
-              />
-              {fieldErrors.postalCode && <p className="mt-1 text-micro text-alert">{fieldErrors.postalCode}</p>}
-            </div>
-            <div>
-              <label className="label" htmlFor="couponCode">Discount code (optional)</label>
-              <input
-                id="couponCode"
-                className="field"
-                autoComplete="off"
-                spellCheck={false}
-                value={form.couponCode}
-                onChange={(e) => set("couponCode", e.target.value.toUpperCase())}
-              />
-            </div>
-          </div>
+          {/* Phones: the total, collapsible, before the form. */}
+          <details className="mt-5 lg:hidden">
+            <summary className="flex cursor-pointer items-center justify-between border border-[--color-rule] px-3.5 py-3 text-small font-semibold" style={{ borderRadius: "var(--radius-panel)" }}>
+              <span>Order summary</span>
+              <span className="tabular">
+                {total ?? "…"} <span aria-hidden className="ml-1 text-ink-faint">▾</span>
+              </span>
+            </summary>
+            <div className="mt-2">{summary}</div>
+          </details>
 
-          <fieldset className="mt-8">
-            <legend className="label">How would you like to pay?</legend>
-            <div className="grid gap-2">
-              {([["RAZORPAY", "Card, UPI, net banking or wallet"], ["COD", "Cash on delivery"]] as const).map(
-                ([value, text]) => (
-                  <label key={value} className="flex cursor-pointer items-center gap-3 border border-[--color-rule] p-3">
-                    <input type="radio" name="pay" checked={method === value} onChange={() => setMethod(value)} />
-                    <span className="text-small">{text}</span>
-                  </label>
-                ),
-              )}
-            </div>
-          </fieldset>
+          <ol className="mt-6 grid gap-4">
+            {STEPS.map((s, i) => {
+              const active = s === step;
+              const done = i < stepIndex;
+              return (
+                <li key={s} className="panel" aria-current={active ? "step" : undefined}>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <h2
+                      ref={active ? headingRef : undefined}
+                      tabIndex={active ? -1 : undefined}
+                      className={`font-display text-lead font-bold outline-none ${active || done ? "" : "text-ink-faint"}`}
+                    >
+                      <span className="tabular mr-2 text-ink-faint">{i + 1}</span>
+                      {STEP_TITLES[s]}
+                      {done && <span className="ml-2 text-small font-normal text-veg">✓</span>}
+                    </h2>
+                    {done && (
+                      <button type="button" onClick={() => edit(s)} className="text-small underline">
+                        Change
+                      </button>
+                    )}
+                  </div>
+                  {done && <p className="px-4 pb-3 text-small text-ink-soft">{stepSummary(s, normalise(form))}</p>}
 
-          {/* Unchecked by default, and separate from the order. A phone number
-              given for delivery updates is not permission to send offers. */}
-          <label className="mt-6 flex items-start gap-3 text-small">
-            <input type="checkbox" className="mt-1" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} />
-            <span>Send me occasional offers and new product news. You can stop this at any time.</span>
-          </label>
+                  {active && s === "contact" && (
+                    <div className="grid gap-4 border-t border-[--color-rule] p-4 sm:grid-cols-2">
+                      {field("phone", "Mobile number", { type: "tel", inputMode: "tel", autoComplete: "tel", placeholder: "98765 43210", autoFocus: true })}
+                      {field("email", "Email, for your receipt", { type: "email", autoComplete: "email", spellCheck: false })}
+                      <button type="button" onClick={continueFrom} className="btn btn-solid sm:col-span-2 sm:justify-self-start">
+                        Continue to address
+                      </button>
+                    </div>
+                  )}
 
-          {/* Always mounted, not just when `error` is truthy — a live region has
-              to already be present for assistive tech to announce a change
-              into it; mounting it at the same time as the content would mean
-              the announcement can be missed. */}
+                  {active && s === "address" && (
+                    <div className="grid gap-4 border-t border-[--color-rule] p-4 sm:grid-cols-2">
+                      <div>
+                        {field("postalCode", "Pincode", { inputMode: "numeric", autoComplete: "postal-code", maxLength: 6 })}
+                        <p className="mt-1 text-micro text-ink-faint" aria-live="polite">
+                          {place?.notFound
+                            ? "We couldn't find that pincode. Check it, or type the city and state."
+                            : place?.arrivesBy
+                              ? `Arrives by ${formatDate(place.arrivesBy)} at the latest`
+                              : "Fills in your city and state"}
+                        </p>
+                      </div>
+                      {field("name", "Full name", { autoComplete: "name" })}
+                      {field("line1", "House, street and area", { autoComplete: "address-line1", className: "sm:col-span-2" })}
+                      {field("line2", "Landmark (optional)", { autoComplete: "address-line2", className: "sm:col-span-2" })}
+                      {field("city", "City or district", { autoComplete: "address-level2" })}
+                      {field("state", "State", { autoComplete: "address-level1" })}
+                      <button type="button" onClick={continueFrom} className="btn btn-solid sm:col-span-2 sm:justify-self-start">
+                        Continue to payment
+                      </button>
+                    </div>
+                  )}
+
+                  {active && s === "payment" && (
+                    <div className="grid gap-4 border-t border-[--color-rule] p-4">
+                      <fieldset>
+                        <legend className="sr-only">How would you like to pay?</legend>
+                        <div className="grid gap-2">
+                          {PAY_OPTIONS.map((o) => (
+                            <label
+                              key={o.value}
+                              className={`flex cursor-pointer items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${pay === o.value ? "border-ink bg-shelf" : "border-[--color-rule]"}`}
+                              style={{ borderRadius: "var(--radius-panel)" }}
+                            >
+                              <input type="radio" name="pay" className="mt-1" checked={pay === o.value} onChange={() => choosePay(o.value)} />
+                              <span>
+                                <span className="block text-small font-semibold">{o.title}</span>
+                                <span className="block text-micro text-ink-soft">{o.detail}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+
+                      <div className="max-w-xs">
+                        <label className="label" htmlFor="couponCode">Discount code (optional)</label>
+                        <input id="couponCode" className="field" autoComplete="off" spellCheck={false} value={form.couponCode} onChange={(e) => set("couponCode", e.target.value.toUpperCase())} />
+                        {couponRejected && form.couponCode && <p className="mt-1 text-micro text-alert">That code isn&rsquo;t valid for this order.</p>}
+                      </div>
+
+                      {/* Unchecked by default, and separate from the order. A phone number
+                          given for delivery updates is not permission to send offers. */}
+                      <label className="flex items-start gap-3 text-small">
+                        <input type="checkbox" className="mt-1" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} />
+                        <span>Send me occasional offers and new product news. You can stop this at any time.</span>
+                      </label>
+
+                      <button onClick={submit} disabled={busy || !quote?.canProceed} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">
+                        {busy ? "Working…" : payLabel}
+                      </button>
+                      {quote && !quote.canProceed && (
+                        <p className="text-small text-alert">Some items can&rsquo;t ship right now. <Link href="/cart" className="underline">Review your basket</Link>.</p>
+                      )}
+                      <p className="text-micro text-ink-faint">Card and UPI details are handled by Razorpay and never reach our servers.</p>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* Always mounted so assistive tech is already watching the region. */}
           <div aria-live="polite" role="status">
             {error && (
               <div className="mt-6 border-l-4 border-alert bg-shelf px-4 py-3">
@@ -326,9 +402,7 @@ export default function Checkout() {
                 {blocked.length > 0 && (
                   <ul className="mt-2 grid gap-1 text-small">
                     {blocked.map((b) => (
-                      <li key={b.name}>
-                        <strong>{b.name}</strong> — {b.reason}
-                      </li>
+                      <li key={b.name}><strong>{b.name}</strong> — {b.reason}</li>
                     ))}
                   </ul>
                 )}
@@ -337,71 +411,7 @@ export default function Checkout() {
           </div>
         </div>
 
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <div className="panel">
-            <div className="panel-head">Order summary</div>
-            {quote ? (
-              <dl>
-                <div className="panel-row">
-                  <dt>Items</dt>
-                  <dd>{formatINR(quote.listSubtotalPaise)}</dd>
-                </div>
-                {quote.productDiscountPaise > 0 && (
-                  <div className="panel-row">
-                    <dt>Product discounts</dt>
-                    <dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd>
-                  </div>
-                )}
-                {quote.bundleDiscountPaise > 0 && (
-                  <div className="panel-row">
-                    <dt>Bundle offer ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt>
-                    <dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd>
-                  </div>
-                )}
-                {quote.discountPaise > 0 && (
-                  <div className="panel-row">
-                    <dt>Discount</dt>
-                    <dd className="text-veg">−{formatINR(quote.discountPaise)}</dd>
-                  </div>
-                )}
-                <div className="panel-row">
-                  <dt>Delivery</dt>
-                  <dd>{quote.shippingPaise === 0 ? "Free" : formatINR(quote.shippingPaise)}</dd>
-                </div>
-                <div className="panel-row text-ink-faint">
-                  <dt>of which GST</dt>
-                  <dd>{formatINR(quote.taxPaise)}</dd>
-                </div>
-                <div className="panel-row font-display text-lead font-bold">
-                  <dt>Total</dt>
-                  <dd>{formatINR(quote.totalPaise)}</dd>
-                </div>
-              </dl>
-            ) : (
-              // A skeleton shaped like the real total, not bare "Loading…" text —
-              // the re-quote is frequent enough (every pincode/coupon keystroke)
-              // that a shape-shifting panel would be more distracting than this.
-              <div className="grid gap-2 p-3.5" aria-live="polite" role="status">
-                <span className="sr-only">Working out your total…</span>
-                {[60, 45, 40, 70].map((width, i) => (
-                  <div key={i} className="flex justify-between">
-                    <div className="h-3 animate-pulse bg-shelf" style={{ width: `${width}%`, borderRadius: "var(--radius-panel)" }} />
-                    <div className="h-3 w-14 animate-pulse bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="p-3.5">
-              <button onClick={submit} disabled={busy} className="btn btn-solid w-full">
-                {busy ? "Working…" : method === "COD" ? "Place order" : "Pay now"}
-              </button>
-              <p className="mt-3 text-micro text-ink-faint">
-                Card details are handled by Razorpay and never reach our servers.
-              </p>
-            </div>
-          </div>
-        </aside>
+        <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start">{summary}</aside>
       </div>
     </>
   );

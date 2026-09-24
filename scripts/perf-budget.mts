@@ -26,6 +26,11 @@ const BUDGETS: { path: string; jsKB: number; totalKB: number }[] = [
   { path: "/gummies", jsKB: 160, totalKB: 180 },
   { path: "/product/tesing", jsKB: 160, totalKB: 180 },
   { path: "/cart", jsKB: 165, totalKB: 195 },
+  // Checkout carries its own form logic and validation (zod/mini): 169 KB
+  // measured after moving off full zod, which had it at 242 KB. Its total
+  // (~207 KB) includes ~13 KB of Next prefetching the footer policy links,
+  // which happens because the short page shows the footer; not load-blocking.
+  { path: "/checkout", jsKB: 185, totalKB: 225 },
 ];
 
 const MEASURE_ONLY = BUDGETS.every((b) => b.jsKB === 0);
