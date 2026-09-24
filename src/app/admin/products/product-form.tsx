@@ -437,11 +437,6 @@ export function ProductForm({
               {err("complianceReviewConfirmed") && <Err>{err("complianceReviewConfirmed")}</Err>}
             </span>
           </label>
-
-          <label className="mt-3 flex items-center gap-3 text-small">
-            <input type="checkbox" name="isActive" defaultChecked={product?.isActive ?? false} />
-            <span>Publish this product on the site</span>
-          </label>
         </fieldset>
       )}
 
@@ -463,6 +458,20 @@ export function ProductForm({
         </label>
         {err("availableInRetail") && <Err>{err("availableInRetail")}</Err>}
       </div>
+
+      {/* --- Visibility: every product, so any of them can be taken off sale (e.g. a recall) --- */}
+      <label className="panel flex items-start gap-3 p-4 text-small">
+        <input type="checkbox" name="isActive" className="mt-1" defaultChecked={product?.isActive ?? false} />
+        <span>
+          <span className="font-semibold">Live on the storefront</span>
+          <span className="block text-ink-soft">
+            Untick to take it off sale at once: it disappears from the shop, and shoppers who already have it in
+            their basket can&apos;t check it out.
+            {type === "HEALTH_SUPPLEMENT" && " Supplements also need the claims review above."}
+          </span>
+          {err("isActive") && <Err>{err("isActive")}</Err>}
+        </span>
+      </label>
 
       <div className="flex items-center gap-4 border-t border-[--color-rule] pt-5">
         <button className="btn btn-solid" disabled={pending}>

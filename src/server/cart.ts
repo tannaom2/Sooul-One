@@ -178,6 +178,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
       })),
       stockQuantity: item.product.stockQuantity,
       retailOnly: item.product.retailOnly,
+      active: item.product.isActive,
     };
   });
 

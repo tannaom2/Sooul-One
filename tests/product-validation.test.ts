@@ -74,6 +74,19 @@ describe("the happy paths", () => {
   });
 });
 
+describe("on sale or off sale", () => {
+  it("keeps the live switch for food, so a snack can be taken off sale", () => {
+    const parsed = productInputSchema.safeParse({ ...validFood, isActive: false });
+    expect(parsed.success && parsed.data.isActive).toBe(false);
+  });
+
+  it("treats a product with no live flag as a draft", () => {
+    expect("isActive" in validFood).toBe(false);
+    const parsed = productInputSchema.safeParse(validFood);
+    expect(parsed.success && parsed.data.isActive).toBe(false);
+  });
+});
+
 describe("PACKAGED_FOOD mandatory fields", () => {
   it("rejects a product with no nutrition panel — the brief's stated failure mode", () => {
     const { nutritionFacts, ...withoutNutrition } = validFood;

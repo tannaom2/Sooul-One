@@ -222,6 +222,18 @@ describe("the shelf-life rule blocks checkout", () => {
     expect(quote.lines[0].reason).toBe("RETAIL_ONLY");
     expect(quote.lines[0].customerMessage).toMatch(/stores only/i);
   });
+
+  it("blocks a product taken off sale, even with compliant stock left in a basket", () => {
+    const quote = buildQuote({
+      lines: [namkeen({ active: false })],
+      estimatedDeliveryDate: DELIVERY,
+      gstTreatment: "INTRA_STATE",
+    });
+
+    expect(quote.lines[0].reason).toBe("UNAVAILABLE");
+    expect(quote.lines[0].customerMessage).toMatch(/no longer available/i);
+    expect(quote.canProceed).toBe(false);
+  });
 });
 
 describe("partial availability", () => {

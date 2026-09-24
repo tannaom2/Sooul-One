@@ -47,6 +47,12 @@ const baseProduct = z.object({
   weightGrams: z.number().int().positive().optional(),
   availableInRetail: z.boolean(),
   retailOnly: z.boolean(),
+  /**
+   * On sale or not, for every type: taking a product off sale (a recall, a
+   * label error) can't depend on its regulatory type. Absent means draft.
+   * Supplements additionally need the claims sign-off to go live (below).
+   */
+  isActive: z.boolean().default(false),
 
   /**
    * Required for every type, not just food. The veg/non-veg mark is mandatory
@@ -144,7 +150,6 @@ const healthSupplement = baseProduct.extend({
    * so that an edit after approval cannot inherit the old sign-off.
    */
   complianceReviewConfirmed: z.boolean(),
-  isActive: z.boolean(),
 });
 
 const beverage = baseProduct.extend({

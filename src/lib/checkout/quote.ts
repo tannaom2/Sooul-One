@@ -66,11 +66,14 @@ export interface QuoteLineInput {
   /** Untracked stock, used when `batches` is absent. */
   readonly stockQuantity?: number;
   readonly retailOnly?: boolean;
+  /** False once staff take the product off sale; it may still sit in older baskets. */
+  readonly active?: boolean;
 }
 
 export type LineStatus = "OK" | "PARTIAL" | "BLOCKED";
 
 export type LineBlockReason =
+  | "UNAVAILABLE"
   | "RETAIL_ONLY"
   | "OUT_OF_STOCK"
   | "NO_COMPLIANT_BATCH"
@@ -205,6 +208,8 @@ export interface Availability {
 export function resolveAvailability(line: QuoteLineInput, estimatedDeliveryDate: Date): Availability {
   const none = { quantityAvailable: 0, allocations: [], rejectedBatches: [] };
 
+  // Off sale (a recall, a label error): nothing ships, whatever stock remains.
+  if (line.active === false) return { ...none, reason: "UNAVAILABLE" };
   if (line.retailOnly) return { ...none, reason: "RETAIL_ONLY" };
 
   // Not batch-tracked: a simple count, no shelf-life judgement possible.
@@ -263,6 +268,7 @@ export function resolveAvailability(line: QuoteLineInput, estimatedDeliveryDate:
 }
 
 export const CUSTOMER_MESSAGES: Record<LineBlockReason, string> = {
+  UNAVAILABLE: "No longer available. Remove it to check out.",
   RETAIL_ONLY: "Available in our stores only — this item isn't shipped.",
   OUT_OF_STOCK: "Out of stock.",
   NO_COMPLIANT_BATCH:

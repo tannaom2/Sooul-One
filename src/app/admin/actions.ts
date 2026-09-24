@@ -95,6 +95,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     weightGrams: num(form, "weightGrams"),
     availableInRetail: form.get("availableInRetail") === "on",
     retailOnly: form.get("retailOnly") === "on",
+    isActive: form.get("isActive") === "on",
     isVeg: form.get("isVeg") === "" ? undefined : form.get("isVeg") === "true",
     shelfLifeDays: num(form, "shelfLifeDays"),
     suitableFromAge: num(form, "suitableFromAge"),
@@ -114,7 +115,6 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     candidate.dosageGuidance = String(form.get("dosageGuidance") ?? "").trim();
     candidate.supplementFacts = json(form, "supplementFacts");
     candidate.complianceReviewConfirmed = form.get("complianceReviewConfirmed") === "on";
-    candidate.isActive = form.get("isActive") === "on";
   }
 
   const parsed = productInputSchema.safeParse(candidate);
@@ -175,6 +175,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     weightGrams: input.weightGrams ?? null,
     availableInRetail: input.availableInRetail,
     retailOnly: input.retailOnly,
+    isActive: input.isActive,
     isVeg: input.isVeg,
     shelfLifeDays: input.shelfLifeDays,
     suitableFromAge: input.suitableFromAge ?? null,
@@ -191,7 +192,6 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     data.sugarPerServingG = input.sugarPerServingG;
     data.dosageGuidance = input.dosageGuidance;
     data.supplementFacts = input.supplementFacts;
-    data.isActive = input.isActive;
 
     /**
      * The sign-off is bound to the exact copy that was reviewed. If the
