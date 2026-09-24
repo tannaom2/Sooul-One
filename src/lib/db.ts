@@ -17,8 +17,21 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { withConnectRetry } from "./db-retry";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; pgPool?: Pool };
+function createClient(adapter: PrismaPg) {
+  return new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+  }).$extends({
+    // A suspended Neon database can take longer to accept the first
+    // connection than the timeout allows. Retry only those connect failures
+    // — see src/lib/db-retry.ts for why nothing else is retried.
+    query: { $allOperations: ({ args, query }) => withConnectRetry(() => query(args)) },
+  });
+}
+
+const globalForPrisma = globalThis as unknown as { prisma?: ReturnType<typeof createClient>; pgPool?: Pool };
 
 const pool =
   globalForPrisma.pgPool ??
@@ -26,17 +39,14 @@ const pool =
     connectionString: process.env.DATABASE_URL,
     max: 10,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
+    // A new TLS connection to Neon (us-east-2) takes ~3–4s from India, more
+    // on a cold start; 10s was being hit.
+    connectionTimeoutMillis: 20_000,
   });
 
 const adapter = new PrismaPg(pool);
 
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
+export const db = globalForPrisma.prisma ?? createClient(adapter);
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = db;
