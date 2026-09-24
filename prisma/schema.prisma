@@ -463,6 +463,10 @@ model AdminUser {
   mfaSecret    String?
   isActive     Boolean         @default(true)
   lastLoginAt  DateTime?
+  /// Bumped on reset access and deactivation. Sessions carry the value they
+  /// were issued with, and requirePermission rejects a mismatch, so a lost
+  /// phone that is still signed in is signed out the moment access is reset.
+  sessionVersion Int         @default(0)
   auditLogs    AdminAuditLog[]
   createdAt    DateTime        @default(now())
 }

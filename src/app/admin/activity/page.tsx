@@ -16,11 +16,11 @@ const AREAS: Record<string, string> = {
   Review: "Reviews",
   StoreLocation: "Stores",
   ProductImage: "Images",
-  AdminUser: "Sign-ins",
+  AdminUser: "Team & sign-ins",
   PaymentReconciliation: "Reconciliation",
 };
 
-const WARNING_ACTIONS = new Set(["SIGN_IN_FAILED", "SIGN_IN_LOCKED", "MFA_FAILED", "MFA_LOCKED", "DELETE_BUNDLE"]);
+const WARNING_ACTIONS = new Set(["SIGN_IN_FAILED", "SIGN_IN_LOCKED", "MFA_FAILED", "MFA_LOCKED", "DELETE_BUNDLE", "TEAM_DEACTIVATE", "TEAM_RESET_ACCESS"]);
 
 const when = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
@@ -55,6 +55,7 @@ function describeChanges(changes: unknown): string[] {
 function entityHref(entityType: string, entityId: string): string | null {
   if (entityType === "Product") return `/admin/products/${entityId}`;
   if (entityType === "Order") return `/admin/orders/${entityId}`;
+  if (entityType === "AdminUser" && entityId !== "-") return "/admin/team";
   return null;
 }
 

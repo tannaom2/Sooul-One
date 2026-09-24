@@ -35,6 +35,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     group: "Settings",
     items: [
       { href: "/admin/stores", label: "Stores", permission: "stores:write" },
+      { href: "/admin/team", label: "Team", permission: "team:manage" },
       { href: "/admin/activity", label: "Activity", permission: "audit:view" },
     ],
   },

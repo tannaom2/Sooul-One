@@ -26,7 +26,9 @@ export type Permission =
   | "finance:view"
   | "stores:write"
   /** The audit log: everyone's actions and IP addresses. */
-  | "audit:view";
+  | "audit:view"
+  /** Add people, change roles, deactivate, reset access. */
+  | "team:manage";
 
 const MATRIX: Record<AdminRole, readonly Permission[]> = {
   OWNER: [
@@ -42,6 +44,7 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "finance:view",
     "stores:write",
     "audit:view",
+    "team:manage",
   ],
   MANAGER: [
     "dashboard:view",
@@ -62,4 +65,17 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
 
 export function can(role: string, permission: Permission): boolean {
   return (MATRIX[role as AdminRole] ?? []).includes(permission);
+}
+
+/** Roles in the order the Team page offers them, with what each is for. */
+export const ROLES: readonly { role: AdminRole; label: string; description: string }[] = [
+  { role: "OWNER", label: "Owner", description: "Everything, including revenue, the activity log and the team." },
+  { role: "MANAGER", label: "Manager", description: "Runs the store day to day. No revenue figures, activity log or team." },
+  { role: "FULFILMENT", label: "Fulfilment", description: "Orders, shipping and stock batches." },
+  { role: "CONTENT", label: "Content", description: "Product copy and images, and review moderation. Can't change prices." },
+  { role: "STAFF", label: "View only", description: "Sees the overview and nothing else." },
+];
+
+export function isRole(value: string): value is AdminRole {
+  return Object.hasOwn(MATRIX, value);
 }

@@ -16,6 +16,7 @@
  */
 
 import "server-only";
+import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { generateSecret, verifySync } from "otplib";
@@ -35,6 +36,8 @@ export interface AdminSession {
   readonly role: AdminRole;
   /** False until the TOTP code has been accepted this session. */
   readonly mfaVerified: boolean;
+  /** AdminUser.sessionVersion when issued. Absent on sessions issued before it existed (treated as 0). */
+  readonly sessionVersion?: number;
 }
 
 function secret(): string {
@@ -62,8 +65,9 @@ export function newMfaSecret(): string {
 /**
  * No `mfaUri` export here.
  *
- * Enrolment happens once, in `scripts/create-admin.ts`, which calls
- * `generateURI` from otplib directly. A wrapper with the same job living in
+ * Enrolment happens at first sign-in (src/app/admin/login/actions.ts) or in
+ * `scripts/create-admin.ts` for the first owner; both call `generateURI`
+ * from otplib directly. A wrapper with the same job living in
  * two places is how they drift — if the issuer name ever changes it should
  * change in exactly one file, and that file is the one that runs once per
  * account rather than the one that runs on every request.
@@ -94,8 +98,8 @@ export async function issueSession(session: AdminSession): Promise<void> {
   // verifyMfa re-issuing with mfaVerified: true) — that payload carries a
   // decoded `exp` claim from jwt.verify, which jwt.sign rejects alongside its
   // own `expiresIn`. Sign only the fields the session actually is.
-  const { adminUserId, email, role, mfaVerified } = session;
-  const payload: AdminSession = { adminUserId, email, role, mfaVerified };
+  const { adminUserId, email, role, mfaVerified, sessionVersion } = session;
+  const payload: AdminSession = { adminUserId, email, role, mfaVerified, sessionVersion: sessionVersion ?? 0 };
   const token = jwt.sign(payload, secret(), { expiresIn: TTL_SECONDS });
   const store = await cookies();
   store.set(COOKIE, token, {
@@ -150,9 +154,11 @@ export async function requirePermission(permission: Permission): Promise<AdminSe
 
   const user = await db.adminUser.findUnique({
     where: { id: session.adminUserId },
-    select: { role: true, isActive: true },
+    select: { role: true, isActive: true, sessionVersion: true },
   });
   if (!user?.isActive || !can(user.role, permission)) return null;
+  // Access was reset or the account deactivated since this session was issued.
+  if (user.sessionVersion !== (session.sessionVersion ?? 0)) return null;
 
   return { ...session, role: user.role };
 }
@@ -195,4 +201,12 @@ export async function audit(
 /** Console base path. Defaults to something guessable only if unset. */
 export function adminPath(): string {
   return process.env.ADMIN_PATH?.replace(/^\/+|\/+$/g, "") || "admin";
+}
+
+/**
+ * One-time password for a new or reset team member. Shown to the owner once,
+ * and replaced by the member's own password at first sign-in.
+ */
+export function newTemporaryPassword(): string {
+  return randomBytes(12).toString("base64url");
 }
