@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { displayPrice, getProductBySlug } from "@/server/catalog";
-import { VegMark, Price } from "@/components/ui";
+import Link from "next/link";
+import { VegMark, Price, BRAND_ACCENT } from "@/components/ui";
+import { ProductGallery } from "@/components/product/product-gallery";
+import { StickyBuyBar } from "@/components/product/sticky-buy-bar";
 import { AddToBasket } from "@/components/add-to-basket";
 import { formatBestBefore, formatDate } from "@/lib/format";
 import { SUPPLEMENT_DISCLAIMER } from "@/lib/compliance/claims";
@@ -95,52 +98,37 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     | { ingredient: string; amountPerServing: string; percentRDA: number | null }[]
     | null;
 
+  const arrivesBy = estimateDeliveryDate(new Date(), "REST_OF_INDIA");
+  const fssai = process.env.NEXT_PUBLIC_FSSAI_LICENCE_NUMBER;
+  const accent = BRAND_ACCENT[product.brand?.slug] ?? "var(--color-ink)";
+  const buyable = availability.state === "in" || availability.state === "low";
+
   return (
-    <article className="mx-auto max-w-6xl px-5 py-10">
-      <nav className="mb-6 text-small text-ink-faint">
+    <article className="mx-auto max-w-6xl px-5 py-8 lg:py-10">
+      <nav className="mb-5 text-small text-ink-faint">
         {product.brand?.name} / {product.category?.name}
       </nav>
 
-      <div className="grid gap-10 lg:grid-cols-[1fr_400px]">
-        {/* ---------------- Left: identity and copy ---------------- */}
-        <div>
+      {/* Phones: photo, then name and buy box, then details. Desktop: photo and
+          details on the left, name and buy box sticky on the right. */}
+      <div className="grid gap-8 lg:grid-cols-[1fr_400px] lg:gap-x-12">
+        <div className="lg:col-start-1 lg:row-start-1">
+          <ProductGallery
+            images={(product.images ?? []).map((i: any) => ({ url: i.url, altText: i.altText }))}
+            name={product.name}
+            accent={accent}
+            fallbackLabel={product.category?.name ?? product.brand?.name ?? ""}
+          />
+        </div>
+
+        <aside className="lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <div className="flex items-start justify-between gap-4">
             <h1 className="max-w-[18ch] text-h1 font-extrabold">{product.name}</h1>
             <VegMark isVeg={product.isVeg} showText />
           </div>
+          <p className="mt-3 text-lead text-ink-soft">{product.shortDescription}</p>
 
-          <p className="mt-4 max-w-[60ch] text-lead text-ink-soft">{product.shortDescription}</p>
-
-          <div className="mt-8 max-w-[68ch] whitespace-pre-line text-base leading-relaxed">
-            {product.description}
-          </div>
-
-          {isSupplement && product.dosageGuidance && (
-            <div className="panel mt-8 max-w-[52ch]">
-              <div className="panel-head">How to take it</div>
-              <p className="px-3.5 py-3 text-small">{product.dosageGuidance}</p>
-            </div>
-          )}
-
-          {/* Allergens are a safety declaration, so they get their own block
-              rather than being folded into a spec list someone might skim. */}
-          {product.allergens?.length > 0 && (
-            <div className="mt-6 border-l-4 border-alert bg-shelf px-4 py-3">
-              <p className="text-small font-semibold">Allergen information</p>
-              <p className="mt-1 text-small">Contains {product.allergens.join(", ")}.</p>
-            </div>
-          )}
-
-          {isSupplement && (
-            <div className="mt-8 max-w-[68ch] border-t border-[--color-rule] pt-5">
-              <p className="text-small text-ink-soft">{SUPPLEMENT_DISCLAIMER}</p>
-            </div>
-          )}
-        </div>
-
-        {/* ---------------- Right: buy box and statutory panel ---------------- */}
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <div className="panel">
+          <div id="buy-box" className="panel mt-6">
             <div className="panel-head flex items-center justify-between">
               <Price pricePaise={price.pricePaise} comparePaise={price.comparePaise} percentOff={price.percentOff} />
               <span className="text-micro font-normal text-ink-faint">incl. GST</span>
@@ -148,9 +136,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
             <div className="p-3.5">
               {availability.state === "retail-only" ? (
-                <p className="text-small">
-                  Sold in our superstores only. This product is not shipped.
-                </p>
+                <p className="text-small">Sold in our superstores only. This product is not shipped.</p>
               ) : availability.state === "out" ? (
                 <p className="text-small text-caution">{availability.message}</p>
               ) : (
@@ -165,22 +151,27 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </>
               )}
 
-              {soonestBestBefore && (
-                <p className="mt-3 text-micro text-ink-faint">
-                  Best before {formatBestBefore(soonestBestBefore)} on the stock we would send you.
-                </p>
+              {/* The answers to "is this genuine, fresh, and safe to order?" sit
+                  right under the button, where the hesitation happens. Each line
+                  is a fact the system enforces, not a slogan. */}
+              {buyable && (
+                <ul className="mt-4 grid gap-1.5 border-t border-[--color-rule] pt-3 text-micro text-ink-soft">
+                  <li>Shipped by SooulOne itself, not a marketplace seller</li>
+                  {soonestBestBefore && <li>Best before {formatBestBefore(soonestBestBefore)} on the pack we&rsquo;d send you</li>}
+                  <li>Arrives by {formatDate(arrivesBy)} at the latest · cash on delivery available</li>
+                  <li>
+                    <Link href="/policies/refunds" className="underline">Returns and refunds</Link>
+                    {fssai && <> · FSSAI licence <span className="tabular">{fssai}</span></>}
+                  </li>
+                </ul>
               )}
 
               {product.availableInRetail && !product.retailOnly && (
-                <p className="mt-2 text-micro text-ink-faint">
-                  Also carried in our stores. We don&rsquo;t show live in-store stock.
-                </p>
+                <p className="mt-3 text-micro text-ink-faint">Also carried in our stores. We don&rsquo;t show live in-store stock.</p>
               )}
 
               {shippability && !shippability.isShippable && (
-                <p className="mt-3 text-micro text-alert">
-                  This product&rsquo;s shelf life leaves no lawful window for shipping.
-                </p>
+                <p className="mt-3 text-micro text-alert">This product&rsquo;s shelf life leaves no lawful window for shipping.</p>
               )}
             </div>
           </div>
@@ -235,7 +226,43 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
         </aside>
+
+        <div className="lg:col-start-1 lg:row-start-2">
+          <div className="max-w-[68ch] whitespace-pre-line text-base leading-relaxed">{product.description}</div>
+
+          {isSupplement && product.dosageGuidance && (
+            <div className="panel mt-8 max-w-[52ch]">
+              <div className="panel-head">How to take it</div>
+              <p className="px-3.5 py-3 text-small">{product.dosageGuidance}</p>
+            </div>
+          )}
+
+          {/* Allergens are a safety declaration, so they get their own block
+              rather than being folded into a spec list someone might skim. */}
+          {product.allergens?.length > 0 && (
+            <div className="mt-6 border-l-4 border-alert bg-shelf px-4 py-3">
+              <p className="text-small font-semibold">Allergen information</p>
+              <p className="mt-1 text-small">Contains {product.allergens.join(", ")}.</p>
+            </div>
+          )}
+
+          {isSupplement && (
+            <div className="mt-8 max-w-[68ch] border-t border-[--color-rule] pt-5">
+              <p className="text-small text-ink-soft">{SUPPLEMENT_DISCLAIMER}</p>
+            </div>
+          )}
+        </div>
       </div>
+
+      {buyable && (
+        <StickyBuyBar
+          targetId="buy-box"
+          productId={product.id}
+          name={product.name}
+          pricePaise={price.pricePaise}
+          note={`Arrives by ${formatDate(arrivesBy)} · cash on delivery`}
+        />
+      )}
 
       {/* FAQ block — Section 7.1 requires this on supplement pages. */}
       {isSupplement && (

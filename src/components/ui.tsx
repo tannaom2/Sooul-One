@@ -61,7 +61,7 @@ export function Price({
   );
 }
 
-const BRAND_ACCENT: Record<string, string> = {
+export const BRAND_ACCENT: Record<string, string> = {
   "the-true-store": "var(--color-truestore)",
   "woman-axis": "var(--color-womanaxis)",
   "kids-vault": "var(--color-kidsvault)",
