@@ -10,6 +10,7 @@ export const ORDER_VIEWS = {
   shipped: { label: "Shipped", statuses: ["SHIPPED"] },
   delivered: { label: "Delivered", statuses: ["DELIVERED"] },
   awaiting_payment: { label: "Awaiting payment", statuses: ["PENDING_PAYMENT"] },
+  returned: { label: "Returned & RTO", statuses: ["RTO", "RETURNED"] },
   closed: { label: "Cancelled & refunded", statuses: ["CANCELLED", "REFUNDED", "FAILED"] },
 } as const satisfies Record<string, { label: string; statuses: readonly string[] | null }>;
 

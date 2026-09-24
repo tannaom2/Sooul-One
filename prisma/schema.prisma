@@ -45,6 +45,11 @@ enum OrderStatus {
   CANCELLED
   REFUNDED
   FAILED
+  /// Return to origin: the parcel came back undelivered (refused at the door,
+  /// unreachable, bad address). The main cost of cash on delivery.
+  RTO
+  /// Delivered, then sent back by the customer.
+  RETURNED
 }
 
 enum DiscountType {
@@ -351,6 +356,14 @@ model Order {
   accessToken     String?     @unique
   trackingNumber  String?
   courierPartner  String?
+  /// The delivery date shown to the shopper at checkout, kept so on-time
+  /// delivery can be measured against what was actually promised.
+  promisedDeliveryDate DateTime?
+  deliveredAt     DateTime?
+  /// Set when an order ends as CANCELLED, RTO or RETURNED.
+  closedAt        DateTime?
+  /// Why it ended: a code from CLOSE_REASONS in src/lib/order-lifecycle.ts.
+  closeReason     String?
   placedAt        DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 

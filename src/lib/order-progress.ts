@@ -36,6 +36,8 @@ const ENDED: Record<string, string> = {
   CANCELLED: "Cancelled",
   REFUNDED: "Refunded",
   FAILED: "Payment didn't go through; nothing was charged",
+  RTO: "Couldn't be delivered; returning to us",
+  RETURNED: "Returned",
 };
 
 function statusTo(event: EventLike): string | null {

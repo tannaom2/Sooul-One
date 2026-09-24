@@ -59,9 +59,27 @@ services:
     schedule: "0 3 * * *" # 08:30 IST daily
     buildCommand: "true" # nothing to build — the request just hits the already-deployed web service
     startCommand: >-
-      node -e "fetch(process.env.TARGET_URL+'?secret='+process.env.CRON_SECRET).then(r=>r.text()).then(t=>{console.log(t);if(!t)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+      node -e "fetch(process.env.TARGET_URL,{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(async r=>{console.log(r.status,await r.text());if(!r.ok)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
     envVars:
       - key: TARGET_URL
         value: https://soulone-app.onrender.com/api/cron/near-expiry-alert
+      - key: CRON_SECRET
+        sync: false
+
+  # Closes online orders left unpaid for 30 minutes and returns their stock
+  # (src/app/api/cron/expire-unpaid). Without it, every closed payment window
+  # holds stock forever. Same CRON_SECRET as the web service.
+  - type: cron
+    name: soulone-expire-unpaid
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "*/10 * * * *"
+    buildCommand: "true"
+    startCommand: >-
+      node -e "fetch(process.env.TARGET_URL,{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(async r=>{console.log(r.status,await r.text());if(!r.ok)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+    envVars:
+      - key: TARGET_URL
+        value: https://soulone-app.onrender.com/api/cron/expire-unpaid
       - key: CRON_SECRET
         sync: false

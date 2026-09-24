@@ -92,9 +92,12 @@ export function MemberControls({
   const [activeState, submitActive, activePending] = useActionState(setActive, INITIAL);
   const [resetState, submitReset, resetPending] = useActionState(resetAccess, INITIAL);
 
+  // `contents`: the buttons sit in the row's right-hand column, while messages
+  // and the one-time password take a full-width line below, instead of
+  // stretching that column and pushing the buttons above the name.
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="contents">
+      <div className="flex flex-wrap items-center gap-2 lg:justify-self-end">
         <form action={submitRole} className="flex items-center gap-2">
           <input type="hidden" name="id" value={id} />
           <label className="sr-only" htmlFor={`role-${id}`}>
@@ -145,10 +148,12 @@ export function MemberControls({
           </button>
         </form>
       </div>
-      <Status state={roleState} />
-      <Status state={activeState} />
-      <Status state={resetState} />
-      <TemporaryPassword state={resetState} />
+      <div className="grid gap-2 empty:hidden lg:col-span-2">
+        <Status state={roleState} />
+        <Status state={activeState} />
+        <Status state={resetState} />
+        <TemporaryPassword state={resetState} />
+      </div>
     </div>
   );
 }

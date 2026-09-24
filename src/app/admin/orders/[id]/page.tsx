@@ -8,6 +8,10 @@ import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 import { OrderStatusForm } from "../status-form";
 import { OrderNoteForm } from "./note-form";
+import { CLOSE_REASONS, STATUS_LABELS, allowedMoves } from "@/lib/order-lifecycle";
+
+const reasonLabel = (code: string) =>
+  Object.values(CLOSE_REASONS).flat().find((r) => r.code === code)?.label ?? code;
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +39,8 @@ function describe(e: { type: string; detail: any }): { title: string; body?: str
     case "STATUS_CHANGED": {
       const parts: string[] = [];
       if (d.status) parts.push(`${String(d.status.from ?? "—").toLowerCase().replace(/_/g, " ")} → ${String(d.status.to).toLowerCase().replace(/_/g, " ")}`);
+      if (d.closeReason?.to) parts.push(`Reason: ${reasonLabel(String(d.closeReason.to))}`);
+      if (d.courierPartner?.to) parts.push(`Courier: ${d.courierPartner.to}`);
       if (d.trackingNumber) parts.push(`Tracking: ${d.trackingNumber.to ?? "—"}`);
       return { title: "Status changed", body: parts.join(" · ") || undefined };
     }
@@ -72,6 +78,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   });
   if (!order) notFound();
 
+  const paidOnline = order.paymentGateway === "RAZORPAY" && order.paymentStatus === "captured";
   const address = order.shippingAddress ?? {};
   const money = (v: unknown) => formatINR(decimalToPaise(v as any));
 
@@ -84,7 +91,8 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
         <div className="mt-2 flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="tabular text-h2 font-extrabold">{order.orderNumber}</h1>
           <p className="text-small text-ink-soft">
-            {order.status.replace(/_/g, " ").toLowerCase()} · placed {when.format(order.placedAt)}
+            {STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] ?? order.status} · placed {when.format(order.placedAt)}
+            {order.closeReason && <> · {reasonLabel(order.closeReason)}</>}
           </p>
         </div>
       </div>
@@ -156,7 +164,18 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <section className="panel">
               <div className="panel-head">Update status</div>
               <div className="p-3.5">
-                <OrderStatusForm orderId={order.id} current={order.status} tracking={order.trackingNumber} />
+                <OrderStatusForm
+                  orderId={order.id}
+                  current={order.status}
+                  moves={allowedMoves({ status: order.status, paidOnline })}
+                  tracking={order.trackingNumber}
+                  courier={order.courierPartner}
+                  blockedNote={
+                    paidOnline && ["PAID", "PROCESSING"].includes(order.status)
+                      ? "Paid online: cancelling needs a refund, which arrives with live Razorpay."
+                      : null
+                  }
+                />
               </div>
             </section>
           )}

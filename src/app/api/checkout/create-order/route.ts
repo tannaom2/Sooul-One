@@ -12,6 +12,7 @@ import { OUTSIDE_AREA_MESSAGE, isServiceable } from "@/lib/checkout/service-area
 import { lookupPincode } from "@/server/pincode";
 import { newOrderAccessToken } from "@/lib/order-access";
 import { recordOrderEvent } from "@/lib/order-events";
+import { onlinePaymentsEnabled } from "@/lib/payments-config";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -56,6 +57,15 @@ export async function POST(request: Request) {
     );
   }
   const input = parsed.data;
+
+  // Checked before anything is reserved: an order that can't be paid for
+  // would otherwise hold stock until the expiry sweep closed it.
+  if (input.paymentMethod !== "COD" && !onlinePaymentsEnabled()) {
+    return NextResponse.json(
+      { message: "Online payment isn't available yet. Choose cash on delivery." },
+      { status: 400 },
+    );
+  }
 
   // Delivery area (Gujarat only, service-area.ts). Checked against India
   // Post's state for the pincode, not the typed one; if the directory is
@@ -125,6 +135,8 @@ export async function POST(request: Request) {
         shippingAddress: address,
         billingAddress: address,
         paymentGateway: input.paymentMethod === "COD" ? "COD" : "RAZORPAY",
+        // What the shopper was shown, for measuring on-time delivery later.
+        promisedDeliveryDate: result.estimatedDeliveryDate,
       },
     });
 

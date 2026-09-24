@@ -21,6 +21,8 @@ const STATUS_COPY: Record<string, string> = {
   CANCELLED: "Cancelled.",
   REFUNDED: "Refunded.",
   FAILED: "Payment didn't go through. Nothing has been charged.",
+  RTO: "This parcel couldn't be delivered and is on its way back to us.",
+  RETURNED: "Returned to us.",
 };
 
 export default async function OrderPage({

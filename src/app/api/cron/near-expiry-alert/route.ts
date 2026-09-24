@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { findNearExpiryBatches } from "@/lib/compliance/fefo";
 import { sendNearExpiryAlert } from "@/lib/email";
+import { cronAuthorized } from "@/lib/cron-auth";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -19,8 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ status: "not_configured", reason: "CRON_SECRET unset" }, { status: 503 });
   }
 
-  const provided = request.nextUrl.searchParams.get("secret") ?? request.headers.get("x-cron-secret");
-  if (provided !== secret) {
+  if (!cronAuthorized(request.headers, secret)) {
     return NextResponse.json({ status: "unauthorized" }, { status: 401 });
   }
 

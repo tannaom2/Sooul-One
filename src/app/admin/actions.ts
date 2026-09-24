@@ -10,6 +10,8 @@ import { diffFields } from "@/lib/audit-diff";
 import { recordOrderEvent } from "@/lib/order-events";
 import { productInputSchema } from "@/lib/validation/product";
 import { sendShippingNotification } from "@/lib/email";
+import { STATUS_LABELS, checkMove, isClosing, releasesStock } from "@/lib/order-lifecycle";
+import { releaseStock } from "@/server/order-stock";
 
 /**
  * Admin write actions.
@@ -316,25 +318,52 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
 
   const orderId = String(form.get("orderId") ?? "");
   const status = String(form.get("status") ?? "");
-  const tracking = String(form.get("trackingNumber") ?? "").trim();
-
-  const allowed: OrderStatus[] = ["PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"];
-  if (!allowed.includes(status as OrderStatus)) return { ok: false, message: "That status isn't available." };
+  // The status the page showed when staff opened it: the update only applies
+  // if the order is still there, so two people can't overwrite each other.
+  const expected = String(form.get("expectedStatus") ?? "");
+  const tracking = String(form.get("trackingNumber") ?? "").trim().slice(0, 100);
+  const courier = String(form.get("courierPartner") ?? "").trim().slice(0, 60);
+  const reason = String(form.get("closeReason") ?? "") || null;
 
   const previous = await db.order.findUnique({ where: { id: orderId } });
   if (!previous) return { ok: false, message: "That order no longer exists." };
+  const STALE = "Someone else changed this order a moment ago. Reload the page to see its current status.";
+  if (expected && previous.status !== expected) return { ok: false, message: STALE };
 
-  const updated = await db.order.update({
-    where: { id: orderId },
-    data: { status: status as OrderStatus, trackingNumber: tracking || undefined },
+  const statusChanges = status !== previous.status;
+  if (statusChanges) {
+    const paidOnline = previous.paymentGateway === "RAZORPAY" && previous.paymentStatus === "captured";
+    const check = checkMove({ status: previous.status, paidOnline }, status, reason);
+    if (!check.ok) return { ok: false, message: check.message };
+  }
+
+  const now = new Date();
+  const data: Prisma.OrderUpdateManyMutationInput = {
+    trackingNumber: tracking || previous.trackingNumber,
+    courierPartner: courier || previous.courierPartner,
+    ...(statusChanges && { status: status as OrderStatus }),
+    ...(statusChanges && status === "DELIVERED" && { deliveredAt: now }),
+    ...(statusChanges && isClosing(status) && { closeReason: reason, closedAt: now }),
+  };
+
+  const applied = await db.$transaction(async (tx) => {
+    const { count } = await tx.order.updateMany({ where: { id: orderId, status: previous.status }, data });
+    if (count === 1 && statusChanges && releasesStock(status)) {
+      await releaseStock(tx, { id: orderId, couponCode: previous.couponCode });
+    }
+    return count === 1;
   });
+  if (!applied) return { ok: false, message: STALE };
+  if (statusChanges && releasesStock(status)) expireTag(CATALOG_TAG);
+
+  const updated = { ...previous, ...data, status: statusChanges ? (status as OrderStatus) : previous.status } as typeof previous;
 
   // Only on the transition INTO shipped, not on every save of an already
   // shipped order — otherwise correcting a typo in the tracking number would
   // email the customer all over again.
   const changes = diffFields(
-    { status: previous.status, trackingNumber: previous.trackingNumber },
-    { status, trackingNumber: tracking || previous.trackingNumber },
+    { status: previous.status, trackingNumber: previous.trackingNumber, courierPartner: previous.courierPartner, closeReason: previous.closeReason },
+    { status, trackingNumber: data.trackingNumber, courierPartner: data.courierPartner, closeReason: statusChanges && isClosing(status) ? reason : previous.closeReason },
   );
   const admin = { type: "ADMIN" as const, email: session.email };
   if (Object.keys(changes).length > 0) {
@@ -360,7 +389,9 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin");
 
-  return { ok: true, message: `Order marked ${status.toLowerCase()}.${mailed}` };
+  if (!statusChanges) return { ok: true, message: Object.keys(changes).length ? "Tracking details saved." : "No change." };
+  const restocked = releasesStock(status) ? " Its stock is back on sale." : "";
+  return { ok: true, message: `Status now: ${STATUS_LABELS[status as keyof typeof STATUS_LABELS]}.${restocked}${mailed}` };
 }
 
 export async function addOrderNote(_prev: ActionResult, form: FormData): Promise<ActionResult> {
