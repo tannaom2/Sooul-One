@@ -31,7 +31,7 @@ export function isConnectError(error: unknown): boolean {
 
 export async function withConnectRetry<T>(
   run: () => Promise<T>,
-  { delaysMs = [300, 1000], sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)) } = {},
+  { delaysMs = [500], sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)) } = {},
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {

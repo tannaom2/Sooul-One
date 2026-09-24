@@ -38,10 +38,13 @@ const pool =
   new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 10,
-    idleTimeoutMillis: 30_000,
-    // A new TLS connection to Neon (us-east-2) takes ~3–4s from India, more
-    // on a cold start; 10s was being hit.
-    connectionTimeoutMillis: 20_000,
+    // Opening a connection to Neon (us-east-2) costs seconds from India —
+    // measured 7–24s on a bad day — so keep open ones around instead of
+    // closing them after 30s idle and paying that again on the next page.
+    idleTimeoutMillis: 10 * 60_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 30_000,
+    connectionTimeoutMillis: 30_000,
   });
 
 const adapter = new PrismaPg(pool);
