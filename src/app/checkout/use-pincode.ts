@@ -7,6 +7,9 @@ export interface PincodeInfo {
   state?: string;
   arrivesBy?: string;
   notFound?: boolean;
+  /** False when we don't deliver to this pincode (outside Gujarat). */
+  serviceable?: boolean;
+  message?: string;
 }
 
 /**

@@ -1,5 +1,6 @@
 import * as z from "zod/mini";
 import { checkoutInputSchema } from "../validation/checkout";
+import { OUTSIDE_AREA_MESSAGE, inServicePincode, inServiceState } from "./service-area";
 
 /**
  * The three checkout steps and which fields each owns. Validation reuses the
@@ -43,12 +44,20 @@ const STEP_FIELDS = {
 /** Field errors for one step; empty when the step is complete. */
 export function validateStep(step: CheckoutStep, form: CheckoutForm): Record<string, string> {
   if (step === "payment") return {};
-  const result = z.pick(checkoutInputSchema, STEP_FIELDS[step]).safeParse(normalise(form));
-  if (result.success) return {};
+  const clean = normalise(form);
+  const result = z.pick(checkoutInputSchema, STEP_FIELDS[step]).safeParse(clean);
   const errors: Record<string, string> = {};
-  for (const issue of result.error.issues) {
-    const key = String(issue.path[0]);
-    errors[key] ??= issue.message;
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const key = String(issue.path[0]);
+      errors[key] ??= issue.message;
+    }
+  }
+  // Delivery area: the server re-checks against India Post; this catches it
+  // before the shopper reaches payment.
+  if (step === "address") {
+    if (!errors.postalCode && !inServicePincode(clean.postalCode)) errors.postalCode = OUTSIDE_AREA_MESSAGE;
+    else if (!errors.state && clean.state && !inServiceState(clean.state)) errors.state = OUTSIDE_AREA_MESSAGE;
   }
   return errors;
 }

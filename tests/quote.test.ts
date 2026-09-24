@@ -435,9 +435,9 @@ describe("delivery estimation", () => {
   it("is pessimistic by design — uses the slowest transit, not the midpoint", () => {
     const placed = d("2026-06-01"); // Monday
     const metro = estimateDeliveryDate(placed, "METRO");
-    const expected = DEFAULT_DELIVERY_CONFIG.dispatchLeadDays + 4;
-    expect(metro).toEqual(d("2026-06-07"));
-    expect(expected).toBe(6);
+    const expected = DEFAULT_DELIVERY_CONFIG.dispatchLeadDays + DEFAULT_DELIVERY_CONFIG.maxTransitDays.METRO;
+    expect(metro).toEqual(d("2026-06-06"));
+    expect(expected).toBe(5);
   });
 
   it("takes longer for remote destinations", () => {
@@ -463,8 +463,8 @@ describe("delivery estimation", () => {
   });
 
   it("maps known pincodes and defaults unknown ones to the slowest zone", () => {
-    expect(zoneForPincode("400601")).toBe("METRO");
-    expect(zoneForPincode("302001")).toBe("TIER_2");
+    expect(zoneForPincode("380015")).toBe("METRO"); // Ahmedabad
+    expect(zoneForPincode("370001")).toBe("TIER_2"); // Bhuj
     expect(zoneForPincode("999999")).toBe("REST_OF_INDIA");
   });
 

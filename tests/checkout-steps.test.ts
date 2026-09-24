@@ -6,11 +6,11 @@ const complete: CheckoutForm = {
   ...EMPTY_FORM,
   phone: "9876543210",
   email: "a@b.in",
-  postalCode: "411001",
+  postalCode: "380015",
   name: "Asha Rao",
-  line1: "12 MG Road",
-  city: "Pune",
-  state: "Maharashtra",
+  line1: "12 CG Road",
+  city: "Ahmedabad",
+  state: "Gujarat",
 };
 
 describe("validateStep", () => {
@@ -23,6 +23,14 @@ describe("validateStep", () => {
 
   it("uses the server's own messages", () => {
     expect(validateStep("contact", { ...complete, phone: "12345" }).phone).toMatch(/10-digit Indian mobile/);
+  });
+});
+
+describe("delivery area in the address step", () => {
+  it("refuses addresses outside Gujarat with a clear message", () => {
+    expect(validateStep("address", { ...complete, postalCode: "411001" }).postalCode).toMatch(/only within Gujarat/);
+    expect(validateStep("address", { ...complete, state: "Maharashtra" }).state).toMatch(/only within Gujarat/);
+    expect(validateStep("address", complete)).toEqual({});
   });
 });
 
@@ -43,7 +51,7 @@ describe("firstIncompleteStep and stepSummary", () => {
 
   it("summarises finished steps in one line", () => {
     expect(stepSummary("contact", complete)).toBe("9876543210 · a@b.in");
-    expect(stepSummary("address", complete)).toBe("Asha Rao, 12 MG Road, Pune, 411001");
+    expect(stepSummary("address", complete)).toBe("Asha Rao, 12 CG Road, Ahmedabad, 380015");
   });
 });
 

@@ -36,7 +36,10 @@ export interface DeliveryConfig {
 
 export const DEFAULT_DELIVERY_CONFIG: DeliveryConfig = {
   dispatchLeadDays: 2,
-  maxTransitDays: { METRO: 4, TIER_2: 6, REST_OF_INDIA: 9 },
+  // Gujarat-only delivery (see service-area.ts): within-state transit, still
+  // taken at the slow end. REST_OF_INDIA is kept for completeness; it isn't
+  // served, so no order is quoted against it.
+  maxTransitDays: { METRO: 3, TIER_2: 4, REST_OF_INDIA: 9 },
   weekendBufferDays: 1,
 };
 
@@ -72,19 +75,29 @@ export function estimateDeliveryDate(
 }
 
 /**
- * Metro pincode prefixes, as a starting point.
+ * Zones within Gujarat, the only area served for now (service-area.ts).
  *
  * Pincode-to-zone mapping is properly a courier's serviceability API, not a
  * hard-coded list — this exists so the quote engine has something to call
  * before that integration lands, and returns the slowest zone for anything it
  * does not recognise rather than guessing fast.
+ *
+ * METRO: Ahmedabad (380), Gandhinagar and Ahmedabad district (382), Surat
+ * (394, 395), Vadodara (390, 391), Rajkot (360). TIER_2: the rest of Gujarat.
  */
-const METRO_PREFIXES = ["110", "400", "560", "600", "700", "500", "380", "411"];
-const TIER_2_PREFIXES = ["302", "440", "641", "452", "226", "800", "160", "682"];
+const METRO_PREFIXES = ["380", "382", "394", "395", "390", "391", "360"];
+const GUJARAT_PREFIXES = ["36", "37", "38", "39"];
 
 export function zoneForPincode(pincode: string): DeliveryZone {
-  const prefix = pincode.trim().slice(0, 3);
-  if (METRO_PREFIXES.includes(prefix)) return "METRO";
-  if (TIER_2_PREFIXES.includes(prefix)) return "TIER_2";
+  const pin = pincode.trim();
+  if (METRO_PREFIXES.includes(pin.slice(0, 3))) return "METRO";
+  if (GUJARAT_PREFIXES.includes(pin.slice(0, 2))) return "TIER_2";
   return "REST_OF_INDIA";
 }
+
+/**
+ * The zone to estimate with before the shopper's pincode is known: the
+ * slowest one actually served, so a promise made on the product page holds
+ * anywhere we deliver.
+ */
+export const SLOWEST_SERVED_ZONE: DeliveryZone = "TIER_2";

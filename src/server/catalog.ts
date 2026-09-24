@@ -5,7 +5,7 @@ import { CATALOG_TAG, STORES_TAG } from "@/lib/cache-tags";
 import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
 import { productAvailability, type AvailabilityState } from "@/lib/checkout/availability";
-import { estimateDeliveryDate } from "@/lib/checkout/delivery";
+import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { ageLabel, sugarLabel } from "@/lib/label-facts";
 
 /**
@@ -126,7 +126,7 @@ function cardAvailability(p: any): ProductSummary["availability"] {
         quantityRemaining: b.quantityRemaining,
       })),
     },
-    estimateDeliveryDate(new Date(), "REST_OF_INDIA"),
+    estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE),
   );
   return { state: a.state, shippableUnits: a.shippableUnits };
 }

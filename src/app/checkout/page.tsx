@@ -10,6 +10,7 @@ import { STEPS, normalise, stepSummary, validateStep, type CheckoutStep } from "
 import { useCheckout } from "./use-checkout";
 import { useQuote } from "./use-quote";
 import { usePincode } from "./use-pincode";
+import { OUTSIDE_AREA_MESSAGE, SERVICE_AREA, inServicePincode } from "@/lib/checkout/service-area";
 
 /**
  * Checkout, in three steps: contact, address, payment.
@@ -214,6 +215,8 @@ function CheckoutForm() {
   }
 
   const total = quote ? formatINR(quote.totalPaise) : null;
+  // Out of area as soon as a full pincode is typed: by range, or by India Post's state.
+  const outsideArea = place?.serviceable === false || (/^\d{6}$/.test(form.postalCode) && !inServicePincode(form.postalCode));
   const stepIndex = STEPS.indexOf(step);
   const payLabel = !total ? "Place order" : pay === "COD" ? `Place order · pay ${total} on delivery` : `Pay ${total}${pay === "UPI" ? " with UPI" : ""}`;
 
@@ -327,12 +330,14 @@ function CheckoutForm() {
                     <div className="grid gap-4 border-t border-[--color-rule] p-4 sm:grid-cols-2">
                       <div>
                         {field("postalCode", "Pincode", { inputMode: "numeric", autoComplete: "postal-code", maxLength: 6 })}
-                        <p className="mt-1 text-micro text-ink-faint" aria-live="polite">
-                          {place?.notFound
-                            ? "We couldn't find that pincode. Check it, or type the city and state."
-                            : place?.arrivesBy
-                              ? `Arrives by ${formatDate(place.arrivesBy)} at the latest`
-                              : "Fills in your city and state"}
+                        <p className={`mt-1 text-micro ${outsideArea ? "text-alert" : "text-ink-faint"}`} aria-live="polite" hidden={Boolean(errors.postalCode)}>
+                          {outsideArea
+                            ? OUTSIDE_AREA_MESSAGE
+                            : place?.notFound
+                              ? "We couldn't find that pincode. Check it, or type the city and state."
+                              : place?.arrivesBy
+                                ? `Arrives by ${formatDate(place.arrivesBy)} at the latest`
+                                : `We deliver within ${SERVICE_AREA.label}. Fills in your city and state.`}
                         </p>
                       </div>
                       {field("name", "Full name", { autoComplete: "name" })}

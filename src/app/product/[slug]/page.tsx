@@ -9,11 +9,12 @@ import { formatBestBefore, formatDate } from "@/lib/format";
 import { SUPPLEMENT_DISCLAIMER } from "@/lib/compliance/claims";
 import { assessShippability } from "@/lib/compliance/shelf-life";
 import { productAvailability } from "@/lib/checkout/availability";
-import { estimateDeliveryDate } from "@/lib/checkout/delivery";
+import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { ReviewForm } from "@/components/review-form";
 import { ageLabel, allergenLabel, sugarLabel } from "@/lib/label-facts";
+import { SERVICE_AREA } from "@/lib/checkout/service-area";
 
 export const dynamic = "force-dynamic";
 
@@ -89,7 +90,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         quantityRemaining: b.quantityRemaining,
       })),
     },
-    estimateDeliveryDate(new Date(), "REST_OF_INDIA"),
+    estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE),
   );
   const soonestBestBefore = availability.soonestBestBefore;
   const shippability = product.shelfLifeDays ? assessShippability(product.shelfLifeDays) : null;
@@ -99,7 +100,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     | { ingredient: string; amountPerServing: string; percentRDA: number | null }[]
     | null;
 
-  const arrivesBy = estimateDeliveryDate(new Date(), "REST_OF_INDIA");
+  const arrivesBy = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
   const fssai = process.env.NEXT_PUBLIC_FSSAI_LICENCE_NUMBER;
   const accent = BRAND_ACCENT[product.brand?.slug] ?? "var(--color-ink)";
   const buyable = availability.state === "in" || availability.state === "low";
@@ -196,7 +197,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <ul className="mt-4 grid gap-1.5 border-t border-[--color-rule] pt-3 text-micro text-ink-soft">
                   <li>Shipped by SooulOne itself, not a marketplace seller</li>
                   {soonestBestBefore && <li>Best before {formatBestBefore(soonestBestBefore)} on the pack we&rsquo;d send you</li>}
-                  <li>Arrives by {formatDate(arrivesBy)} at the latest · cash on delivery available</li>
+                  <li>Delivering across {SERVICE_AREA.label}: arrives by {formatDate(arrivesBy)} at the latest · cash on delivery available</li>
                   <li>
                     <Link href="/policies/refunds" className="underline">Returns and refunds</Link>
                     {fssai && <> · FSSAI licence <span className="tabular">{fssai}</span></>}

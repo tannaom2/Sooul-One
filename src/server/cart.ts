@@ -13,7 +13,7 @@ import { DEFAULT_SHIPPING_POLICY, buildQuote, type QuoteLineInput } from "@/lib/
 import { freeDeliveryProgress, nextOfferNudge } from "@/lib/checkout/basket-nudges";
 import { MAX_LINE_QUANTITY, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR } from "@/lib/money";
-import { estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
+import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
 import type { GstTreatment } from "@/lib/money";
 import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
@@ -144,7 +144,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   const cart = await getCart(sessionId);
   if (!cart || cart.items.length === 0) return null;
 
-  const zone = context.pincode ? zoneForPincode(context.pincode) : "REST_OF_INDIA";
+  const zone = context.pincode ? zoneForPincode(context.pincode) : SLOWEST_SERVED_ZONE;
   const estimatedDeliveryDate = estimateDeliveryDate(new Date(), zone);
 
   const gstTreatment: GstTreatment =

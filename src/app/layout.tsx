@@ -3,6 +3,9 @@ import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import { BASKET_COUNT_COOKIE } from "@/lib/session-cookie";
 import { CartProvider } from "@/components/basket/cart-provider";
+import { SERVICE_AREA } from "@/lib/checkout/service-area";
+import { DEFAULT_SHIPPING_POLICY } from "@/lib/checkout/quote";
+import { formatPriceTag } from "@/lib/money";
 import { BasketButton } from "@/components/basket/basket-button";
 import { BasketDrawer } from "@/components/basket/basket-drawer";
 import { readSessionId } from "@/server/cart";
@@ -38,6 +41,10 @@ export const metadata: Metadata = {
 function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-[--color-rule] bg-paper/95 backdrop-blur">
+      {/* Said up front, so shoppers outside the area learn it before they fill a basket. */}
+      <p className="bg-ink px-5 py-1.5 text-center text-micro font-semibold text-paper">
+        Delivering across {SERVICE_AREA.label} · Free delivery over {formatPriceTag(DEFAULT_SHIPPING_POLICY.freeAbovePaise)}
+      </p>
       <nav className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-3">
         <Link href="/" className="font-display text-lead font-extrabold tracking-tight">
           SooulOne

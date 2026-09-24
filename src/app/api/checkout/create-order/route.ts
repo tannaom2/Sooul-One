@@ -8,6 +8,8 @@ import { fromPaise } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { checkoutInputSchema } from "@/lib/validation/checkout";
+import { OUTSIDE_AREA_MESSAGE, isServiceable } from "@/lib/checkout/service-area";
+import { lookupPincode } from "@/server/pincode";
 import { newOrderAccessToken } from "@/lib/order-access";
 import { recordOrderEvent } from "@/lib/order-events";
 
@@ -42,6 +44,17 @@ export async function POST(request: Request) {
     );
   }
   const input = parsed.data;
+
+  // Delivery area (Gujarat only, service-area.ts). Checked against India
+  // Post's state for the pincode, not the typed one; if the directory is
+  // unreachable, the pincode range and typed state still have to agree.
+  const directory = await lookupPincode(input.postalCode).catch(() => null);
+  if (!isServiceable(input.postalCode, input.state, directory?.state)) {
+    return NextResponse.json(
+      { message: OUTSIDE_AREA_MESSAGE, issues: [{ path: ["postalCode"], message: OUTSIDE_AREA_MESSAGE }] },
+      { status: 400 },
+    );
+  }
 
   // --- 1 & 2: authoritative re-quote --------------------------------------
   const result = await quoteCart(sessionId, {
