@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
+import { ordersOpen } from "@/server/launch-readiness";
 import { CheckoutClient } from "./checkout-client";
 
 /**
@@ -9,5 +10,5 @@ import { CheckoutClient } from "./checkout-client";
  */
 export default async function CheckoutPage() {
   await connection();
-  return <CheckoutClient onlinePayments={onlinePaymentsEnabled()} />;
+  return <CheckoutClient onlinePayments={onlinePaymentsEnabled()} ordersOpen={await ordersOpen()} />;
 }

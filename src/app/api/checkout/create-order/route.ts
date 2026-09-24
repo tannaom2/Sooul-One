@@ -15,6 +15,7 @@ import { lookupPincode } from "@/server/pincode";
 import { newOrderAccessToken } from "@/lib/order-access";
 import { recordOrderEvent } from "@/lib/order-events";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
+import { ordersOpen } from "@/server/launch-readiness";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import { reportError } from "@/lib/observability";
 
@@ -60,6 +61,12 @@ export async function POST(request: Request) {
     );
   }
   const input = parsed.data;
+
+  // The launch gate (src/lib/launch-readiness.ts): on the public site, no
+  // orders until every blocking checklist item is done.
+  if (!(await ordersOpen())) {
+    return NextResponse.json({ message: "We're not taking orders just yet. Please check back soon." }, { status: 503 });
+  }
 
   // Checked before anything is reserved: an order that can't be paid for
   // would otherwise hold stock until the expiry sweep closed it.

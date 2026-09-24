@@ -8,6 +8,7 @@ import { percentChange } from "@/lib/order-filters";
 import { findNearExpiryBatches } from "@/lib/compliance/fefo";
 import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
+import { getReadiness } from "@/server/launch-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -99,8 +100,20 @@ export default async function Dashboard() {
     ).map((b) => ({ ...b, productName: p.name, productId: p.id }));
   });
 
+  // The launch checklist leads while anything required is outstanding.
+  const launchBlockers = can(session.role, "settings:manage")
+    ? await getReadiness()
+        .then((r) => r.blockers.length)
+        .catch(() => 0)
+    : 0;
+
   // Only items this person can act on, and only when there is something to do.
   const attention = [
+    launchBlockers > 0 && {
+      href: "/admin/launch",
+      text: `${launchBlockers} ${launchBlockers === 1 ? "item" : "items"} left before the site can take orders`,
+      warn: true,
+    },
     canSeeOrders && toShip > 0 && {
       href: "/admin/orders?view=to_ship",
       text: `${toShip} ${toShip === 1 ? "order" : "orders"} to pack and ship`,

@@ -48,8 +48,20 @@ const noop = () => () => {};
  * The form restores a draft from sessionStorage, which only exists in the
  * browser, so it renders after hydration; the server sends the page frame.
  */
-export function CheckoutClient({ onlinePayments }: { onlinePayments: boolean }) {
+export function CheckoutClient({ onlinePayments, ordersOpen = true }: { onlinePayments: boolean; ordersOpen?: boolean }) {
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
+  // Before launch the public site takes no orders (src/lib/launch-readiness.ts).
+  if (!ordersOpen) {
+    return (
+      <div className="mx-auto max-w-xl px-5 py-16">
+        <h1 className="text-h1 font-extrabold">Opening soon</h1>
+        <p className="mt-2 text-ink-soft">We&rsquo;re not taking orders just yet. Your basket is saved, so check back soon.</p>
+        <Link href="/" className="btn btn-outline mt-6">
+          Keep browsing
+        </Link>
+      </div>
+    );
+  }
   if (!hydrated) {
     return (
       <div className="mx-auto max-w-6xl px-5 py-8 lg:py-12" aria-busy="true">
