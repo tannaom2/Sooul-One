@@ -32,7 +32,7 @@ jobs:
       - name: No known high-severity vulnerabilities in shipped dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: No secrets in the pushed commits
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
