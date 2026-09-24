@@ -8,7 +8,6 @@ import { can } from "@/lib/permissions";
 import { diffFields } from "@/lib/audit-diff";
 import { recordOrderEvent } from "@/lib/order-events";
 import { productInputSchema } from "@/lib/validation/product";
-import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { sendShippingNotification } from "@/lib/email";
 
 /**
@@ -215,15 +214,6 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
 }
 
 /** Live preview of the claims check, so the writer sees it before saving. */
-export async function checkCopy(_prev: unknown, form: FormData) {
-  const copy = String(form.get("copy") ?? "");
-  const allowed = String(form.get("allowedPhrases") ?? "")
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return lintSupplementCopy(copy, { allowedPhrases: allowed });
-}
-
 export async function addBatch(_prev: ActionResult, form: FormData): Promise<ActionResult> {
   const session = await requirePermission("batches:write");
   if (!session) return { ok: false, message: NOT_ALLOWED };

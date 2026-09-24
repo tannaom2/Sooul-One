@@ -1,5 +1,6 @@
 import "server-only";
 import { v2 as cloudinary } from "cloudinary";
+import { reportError } from "@/lib/observability";
 
 /**
  * Product image upload.
@@ -93,7 +94,7 @@ export async function uploadProductImage(file: File): Promise<UploadResult> {
       height: Number(result.height),
     };
   } catch (error) {
-    console.error("[cloudinary] upload failed", error);
+    reportError("cloudinary", error, { op: "upload" });
     return { ok: false, message: "That upload didn't go through. Try again." };
   }
 }
@@ -104,7 +105,7 @@ export async function deleteProductImage(publicId: string): Promise<boolean> {
     await cloudinary.uploader.destroy(publicId, { invalidate: true });
     return true;
   } catch (error) {
-    console.error("[cloudinary] delete failed", { publicId }, error);
+    reportError("cloudinary", error, { op: "delete", publicId });
     return false;
   }
 }

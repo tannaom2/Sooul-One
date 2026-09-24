@@ -4,6 +4,7 @@ import { Empty, NoAccess } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { ReviewActions } from "./review-actions";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,8 @@ export default async function ReviewsPage() {
       include: { product: { select: { name: true, regulatoryType: true } } },
       orderBy: { createdAt: "asc" },
     });
-  } catch {
+  } catch (error) {
+    reportError("admin/reviews", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and that migrations have run." />;
   }
 

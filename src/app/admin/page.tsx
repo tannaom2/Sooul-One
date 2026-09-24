@@ -7,6 +7,7 @@ import { decimalToPaise, formatDate } from "@/lib/format";
 import { percentChange } from "@/lib/order-filters";
 import { findNearExpiryBatches } from "@/lib/compliance/fefo";
 import { Empty, NoAccess } from "@/components/ui";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,7 @@ export default async function Dashboard() {
     current = { revenue: decimalToPaise(cur._sum.totalAmount), orders: cur._count._all };
     previous = { revenue: decimalToPaise(prev._sum.totalAmount), orders: prev._count._all };
   } catch (error) {
-    console.error("[admin/dashboard] query failed", error);
+    reportError("admin/dashboard", error);
     return (
       <Empty
         title="Can't reach the database"

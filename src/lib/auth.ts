@@ -23,6 +23,7 @@ import { cookies, headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { can, type AdminRole, type Permission } from "./permissions";
+import { reportError } from "@/lib/observability";
 
 const COOKIE = "soulone_admin";
 const TTL_SECONDS = 60 * 60 * 8; // one working day
@@ -187,7 +188,7 @@ export async function audit(
       },
     });
   } catch (error) {
-    console.error("[audit] failed to record", { action, entityType, entityId }, error);
+    reportError("audit", error, { action, entityType, entityId });
   }
 }
 

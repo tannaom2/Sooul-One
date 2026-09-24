@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
 import { ProductForm } from "../product-form";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,8 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         orderBy: { name: "asc" },
       }),
     ]);
-  } catch {
+  } catch (error) {
+    reportError("admin/products/edit", error);
     // Distinct from "no such product": this is "can't tell if it exists,"
     // and treating the two the same way risks an admin deleting a product
     // that's actually fine, purely because the database blipped.

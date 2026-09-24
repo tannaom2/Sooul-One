@@ -4,6 +4,7 @@ import { Empty, NoAccess } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { requiredRemainingDays, wholeDaysBetween } from "@/lib/compliance/shelf-life";
 import { BatchForm } from "./batch-form";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,8 @@ export default async function Batches() {
       include: { batches: { orderBy: { expiresOn: "asc" } } },
       orderBy: { name: "asc" },
     });
-  } catch {
+  } catch (error) {
+    reportError("admin/batches", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
 

@@ -4,6 +4,7 @@ import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { formatDate } from "@/lib/format";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,8 @@ export default async function CartPage() {
   let result = null;
   try {
     result = sessionId ? await quoteCart(sessionId) : null;
-  } catch {
+  } catch (error) {
+    reportError("cart", error);
     result = null;
   }
 

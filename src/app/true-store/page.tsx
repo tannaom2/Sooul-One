@@ -1,5 +1,6 @@
 import { getProductsByBrand } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,8 @@ export default async function TrueStore() {
   let products: Awaited<ReturnType<typeof getProductsByBrand>> = [];
   try {
     products = await getProductsByBrand("the-true-store");
-  } catch {
+  } catch (error) {
+    reportError("true-store", error);
     products = [];
   }
 

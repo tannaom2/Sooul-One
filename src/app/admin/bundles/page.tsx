@@ -5,6 +5,7 @@ import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 import { BundleForm } from "./bundle-form";
 import { BundleRowActions } from "./bundle-row-actions";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,8 @@ export default async function BundlesPage() {
       db.brand.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.product.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, brandId: true } }),
     ]);
-  } catch {
+  } catch (error) {
+    reportError("admin/bundles", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
 

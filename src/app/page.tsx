@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getBrands, getFeatured } from "@/server/catalog";
 import { ProductGrid, Empty } from "@/components/ui";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,8 @@ export default async function Home() {
   try {
     featured = await getFeatured();
     brandCount = (await getBrands()).length;
-  } catch {
+  } catch (error) {
+    reportError("home", error);
     featured = [];
   }
 

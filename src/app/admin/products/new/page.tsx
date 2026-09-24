@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { ProductForm } from "../product-form";
 import { Empty, NoAccess } from "@/components/ui";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,8 @@ export default async function NewProduct() {
       include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
       orderBy: { name: "asc" },
     });
-  } catch {
+  } catch (error) {
+    reportError("admin/products/new", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
 

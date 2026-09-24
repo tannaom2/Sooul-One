@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import type { AnalyticsEventType, Prisma } from "@prisma/client";
+import { reportError } from "@/lib/observability";
 
 /**
  * Funnel and abandonment event recording.
@@ -26,6 +27,6 @@ export async function recordEvent(
       },
     });
   } catch (error) {
-    console.error("[analytics] failed to record event", { type, sessionId }, error);
+    reportError("analytics", error, { type });
   }
 }

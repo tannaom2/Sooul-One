@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
 import { StoreForm } from "./store-form";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export default async function AdminStores() {
   let stores: any[] = [];
   try {
     stores = await db.storeLocation.findMany({ orderBy: { city: "asc" } });
-  } catch {
+  } catch (error) {
+    reportError("admin/stores", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
 

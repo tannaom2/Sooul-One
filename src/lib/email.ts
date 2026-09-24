@@ -2,6 +2,7 @@ import "server-only";
 import { Resend } from "resend";
 import { buildOrderBill } from "./order-bill";
 import { renderOrderConfirmation } from "./email-templates";
+import { reportError } from "@/lib/observability";
 
 /**
  * Transactional email.
@@ -60,12 +61,12 @@ async function send(to: string, subject: string, html: string, text: string): Pr
   try {
     const { error } = await resend.emails.send({ from: FROM, to, subject, html, text });
     if (error) {
-      console.error("[email] send rejected", { to, subject, error });
+      reportError("email", error, { subject, stage: "rejected" });
       return { delivered: false, reason: String(error) };
     }
     return { delivered: true };
   } catch (error) {
-    console.error("[email] send threw", { to, subject }, error);
+    reportError("email", error, { subject, stage: "threw" });
     return { delivered: false, reason: "exception" };
   }
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
+import { reportError } from "@/lib/observability";
 
 export type OrderEventType =
   | "PLACED"
@@ -35,6 +36,6 @@ export async function recordOrderEvent(
       },
     });
   } catch (error) {
-    console.error("[order-events] failed to record", { orderId, type }, error);
+    reportError("order-events", error, { orderId, type });
   }
 }

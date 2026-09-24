@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getGummiesProducts } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,8 @@ export default async function Gummies() {
   let products: Awaited<ReturnType<typeof getGummiesProducts>> = [];
   try {
     products = await getGummiesProducts();
-  } catch {
+  } catch (error) {
+    reportError("gummies", error);
     products = [];
   }
 

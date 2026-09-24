@@ -6,6 +6,7 @@ import { Empty, NoAccess } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { ORDER_VIEWS, ORDERS_PAGE_SIZE, orderFiltersHref, parseOrderFilters, type OrderView } from "@/lib/order-filters";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export default async function Orders({
       db.order.groupBy({ by: ["status"], where: search, _count: { _all: true } }) as any,
     ]);
   } catch (error) {
-    console.error("[admin/orders] query failed", error);
+    reportError("admin/orders", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
 

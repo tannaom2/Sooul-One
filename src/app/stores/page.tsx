@@ -1,5 +1,6 @@
 import { getStores } from "@/server/catalog";
 import { Empty, PageHeader } from "@/components/ui";
+import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,8 @@ export default async function Stores() {
   let stores: Awaited<ReturnType<typeof getStores>> = [];
   try {
     stores = await getStores();
-  } catch {
+  } catch (error) {
+    reportError("stores", error);
     stores = [];
   }
 
