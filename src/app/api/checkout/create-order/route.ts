@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { db } from "@/lib/db";
 import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
-import { quoteCart, readSessionId } from "@/server/cart";
+import { clearCart, quoteCart, readSessionId, writeBasketCount } from "@/server/cart";
 import { orderNumber } from "@/lib/format";
 import { fromPaise } from "@/lib/money";
 import { sendOrderConfirmation } from "@/lib/email";
@@ -194,6 +194,11 @@ export async function POST(request: Request) {
       reason: sent.reason ?? null,
     });
 
+    // A COD order is final once placed, so the basket empties now. (Online
+    // payments empty it in the webhook, once the payment has actually cleared,
+    // so a dismissed payment window leaves the basket intact.)
+    await clearCart(sessionId);
+    await writeBasketCount(0);
     return NextResponse.json({ orderNumber: order.orderNumber, accessToken: order.accessToken, method: "COD" });
   }
 

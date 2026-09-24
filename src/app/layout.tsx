@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { BASKET_COUNT_COOKIE } from "@/lib/session-cookie";
+import { CartProvider } from "@/components/basket/cart-provider";
+import { BasketButton } from "@/components/basket/basket-button";
+import { BasketDrawer } from "@/components/basket/basket-drawer";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import "./globals.css";
@@ -49,9 +53,7 @@ function Nav() {
             Find a store
           </Link>
         </div>
-        <Link href="/cart" className="btn btn-outline ml-auto px-3 py-1.5 text-small">
-          Basket
-        </Link>
+        <BasketButton />
       </nav>
     </header>
   );
@@ -181,9 +183,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         {/* The owner console has its own chrome (admin/layout.tsx); the
             storefront's sticky header used to sit on top of it. */}
-        {!isAdmin && <Nav />}
-        <main>{children}</main>
-        {!isAdmin && <Footer />}
+        {isAdmin ? (
+          <main>{children}</main>
+        ) : (
+          // The badge count comes from a cookie the basket actions keep current,
+          // so showing it costs no database call on every page.
+          <CartProvider initialCount={Math.max(0, Number((await cookies()).get(BASKET_COUNT_COOKIE)?.value) || 0)}>
+            <Nav />
+            <main>{children}</main>
+            <Footer />
+            <BasketDrawer />
+          </CartProvider>
+        )}
       </body>
     </html>
   );

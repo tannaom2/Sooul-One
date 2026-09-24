@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { recordOrderEvent } from "@/lib/order-events";
+import { clearCart } from "@/server/cart";
+import { reportError } from "@/lib/observability";
 
 /**
  * Razorpay webhook.
@@ -78,6 +80,12 @@ export async function POST(request: Request) {
           amountPaise: payment.amount,
           method: payment.method ?? null,
         });
+
+        // Paid, so the basket it came from empties. Never fails the webhook:
+        // Razorpay would retry, and the order is already correctly PAID.
+        if (paid.sessionId) {
+          await clearCart(paid.sessionId).catch((error) => reportError("webhook/clear-cart", error, { orderId: order.id }));
+        }
 
         const sent = await sendOrderConfirmation(paid);
         await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {

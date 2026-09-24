@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { orderTokenMatches } from "@/lib/order-access";
+import { BasketSync } from "@/components/basket/basket-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,7 @@ export default async function OrderPage({
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-16">
+      <BasketSync />
       <p className="text-small font-semibold text-veg">Order placed</p>
       <h1 className="mt-2 text-h1 font-extrabold">Thank you</h1>
       <p className="mt-3 text-lead text-ink-soft">{STATUS_COPY[order.status] ?? order.status}</p>

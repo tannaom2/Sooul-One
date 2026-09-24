@@ -79,7 +79,7 @@ export default async function CartPage() {
                     </div>
 
                     <div className="mt-3 flex flex-wrap items-center gap-4">
-                      <CartQuantity itemId={item?.id ?? ""} quantity={line.quantityRequested} />
+                      <CartQuantity itemId={item?.id ?? ""} quantity={line.quantityRequested} name={line.name} />
                       <span className="tabular text-small">
                         {line.productDiscountPaise > 0 && (
                           <s className="mr-2 text-ink-faint">{formatPriceTag(line.listGrossPaise)}</s>

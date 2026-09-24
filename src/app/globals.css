@@ -264,3 +264,10 @@
   font-variant-numeric: tabular-nums;
 }
 } /* end @layer components */
+
+/* Menu basket badge: a small pop when the count changes (motion-safe only, see BasketButton). */
+@keyframes badge-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
