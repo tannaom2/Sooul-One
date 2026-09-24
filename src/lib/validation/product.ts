@@ -42,7 +42,6 @@ const baseProduct = z.object({
   discountPercent: z.number().gt(0, "Enter a percentage above 0").lt(100, "Must be below 100").optional(),
   hsnCode: z.string().regex(/^\d{4,8}$/, "HSN code is 4–8 digits").optional(),
   taxRatePercent: z.number().min(0).max(28),
-  stockQuantity: z.number().int().min(0),
   lowStockThreshold: z.number().int().min(0),
   weightGrams: z.number().int().positive().optional(),
   availableInRetail: z.boolean(),

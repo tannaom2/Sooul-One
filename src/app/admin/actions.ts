@@ -105,7 +105,6 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     discountPercent: num(form, "discountPercent"),
     hsnCode: form.get("hsnCode") ? String(form.get("hsnCode")) : undefined,
     taxRatePercent: num(form, "taxRatePercent") ?? 18,
-    stockQuantity: num(form, "stockQuantity") ?? 0,
     lowStockThreshold: num(form, "lowStockThreshold") ?? 10,
     weightGrams: num(form, "weightGrams"),
     availableInRetail: form.get("availableInRetail") === "on",
@@ -200,7 +199,6 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     discountPercent: input.discountPercent ?? null,
     hsnCode: input.hsnCode ?? null,
     taxRatePercent: input.taxRatePercent,
-    stockQuantity: input.stockQuantity,
     lowStockThreshold: input.lowStockThreshold,
     weightGrams: input.weightGrams ?? null,
     availableInRetail: input.availableInRetail,
@@ -311,11 +309,8 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
     },
   });
 
-  // Online stock is the sum of batches, so receiving stock raises both.
-  await db.product.update({
-    where: { id: productId },
-    data: { stockQuantity: { increment: quantity } },
-  });
+  // The product's stock total follows automatically: a database trigger keeps
+  // it equal to the sum of its batches.
 
   await audit(session, "ADD_BATCH", "ProductBatch", batch.id, { productId, batchNumber, quantity });
   revalidatePath("/admin/batches");

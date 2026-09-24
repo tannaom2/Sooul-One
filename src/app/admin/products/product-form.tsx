@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { saveProduct, type ActionResult } from "../actions";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
@@ -243,8 +244,18 @@ export function ProductForm({
         <Field label="Price (₹, incl. GST)" name="basePrice" defaultValue={product?.basePrice?.toString()} error={err("basePrice")} readOnly={locked} />
         <Field label="Was-price (₹)" name="compareAtPrice" defaultValue={product?.compareAtPrice?.toString()} error={err("compareAtPrice")} optional readOnly={locked} />
         <Field label="GST rate (%)" name="taxRatePercent" type="number" defaultValue={product?.taxRatePercent?.toString() ?? "18"} error={err("taxRatePercent")} readOnly={locked} />
-        <Field label="Online stock" name="stockQuantity" type="number" defaultValue={String(product?.stockQuantity ?? 0)} />
-        <Field label="Reorder at" name="lowStockThreshold" type="number" defaultValue={String(product?.lowStockThreshold ?? 10)} />
+        <div>
+          <p className="label">Stock</p>
+          <p className="field cursor-default bg-shelf text-ink-soft">{product?.stockQuantity ?? 0} units</p>
+          <p className="mt-1 text-micro text-ink-faint">
+            The total of this product&apos;s batches. Add stock on{" "}
+            <Link href="/admin/batches" className="underline">
+              Stock batches
+            </Link>
+            .
+          </p>
+        </div>
+        <Field label="Warn when shippable stock is at or below" name="lowStockThreshold" type="number" defaultValue={String(product?.lowStockThreshold ?? 10)} />
         <Field label="Pack weight (g)" name="weightGrams" type="number" defaultValue={product?.weightGrams?.toString()} optional />
       </div>
 

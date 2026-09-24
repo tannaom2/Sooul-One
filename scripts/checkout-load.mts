@@ -29,7 +29,7 @@ if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(BASE) && process.env.LOAD
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 30000 });
 await db.connect();
 
-const product = (await db.query(`SELECT id, "basePrice", "stockQuantity" FROM "Product" WHERE slug='e2e-test-product'`)).rows[0];
+const product = (await db.query(`SELECT id, "basePrice" FROM "Product" WHERE slug='e2e-test-product'`)).rows[0];
 if (!product) {
   console.error("The E2E test product doesn't exist yet. Run `npm run test:e2e` once to create it.");
   process.exit(1);
@@ -96,6 +96,6 @@ try {
   await db.query(`DELETE FROM "Cart" WHERE "sessionId" = ANY($1)`, [sessions]);
   await db.query(`DELETE FROM "AnalyticsEvent" WHERE "sessionId" = ANY($1)`, [sessions]);
   for (const b of batches) await db.query(`UPDATE "ProductBatch" SET "quantityRemaining"=$1 WHERE id=$2`, [b.quantityRemaining, b.id]);
-  await db.query(`UPDATE "Product" SET "stockQuantity"=$1 WHERE id=$2`, [product.stockQuantity, product.id]);
+  // The product total follows the batches by trigger; nothing to restore directly.
   await db.end();
 }

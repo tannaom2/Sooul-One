@@ -10,6 +10,7 @@ import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
 import { getReadiness } from "@/server/launch-readiness";
 import { getStoreControls } from "@/server/store-settings";
+import { stockView } from "@/lib/stock-view";
 
 export const dynamic = "force-dynamic";
 
@@ -42,13 +43,9 @@ export default async function Dashboard() {
   let previous = { revenue: 0, orders: 0 };
 
   try {
-    const [recent, live, low, ship, reviews, failed, cur, prev] = await Promise.all([
+    const [recent, live, ship, reviews, failed, cur, prev] = await Promise.all([
       db.order.findMany({ orderBy: { placedAt: "desc" }, take: 8 }),
       db.product.findMany({ where: { isActive: true }, include: { batches: true } }),
-      db.product.findMany({
-        where: { isActive: true, stockQuantity: { lte: db.product.fields.lowStockThreshold } },
-        orderBy: { stockQuantity: "asc" },
-      }),
       canSeeOrders ? db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }) : 0,
       can(session.role, "reviews:moderate") ? db.review.count({ where: { isApproved: false } }) : 0,
       can(session.role, "audit:view")
@@ -64,7 +61,12 @@ export default async function Dashboard() {
     ]);
     orders = recent;
     products = live;
-    runningLow = low;
+    // Judged on shippable stock, by the storefront's own rule: units too close
+    // to their best-before date can't be sent, so they don't count as stock.
+    runningLow = live
+      .map((p: any) => ({ ...p, stock: stockView({ ...p, shelfLifeDays: p.shelfLifeDays, batches: p.batches }) }))
+      .filter((p: any) => p.stock.low)
+      .sort((a: any, b: any) => a.stock.shippable - b.stock.shippable);
     toShip = ship;
     pendingReviews = reviews;
     failedSignIns = failed;
@@ -219,13 +221,16 @@ export default async function Dashboard() {
         <div id="low-stock" className="panel scroll-mt-6">
           <div className="panel-head">Running low</div>
           {runningLow.length === 0 ? (
-            <p className="p-3.5 text-small text-ink-soft">Nothing below its reorder threshold.</p>
+            <p className="p-3.5 text-small text-ink-soft">Nothing at or below its reorder level.</p>
           ) : (
             <ul>
               {runningLow.slice(0, 8).map((p) => (
                 <li key={p.id} className="panel-row">
                   <span>{p.name}</span>
-                  <span className="tabular">{p.stockQuantity} left</span>
+                  <span className="tabular">
+                    {p.stock.shippable} shippable
+                    {p.stock.tooShortDated > 0 && <span className="text-ink-faint"> · {p.stock.tooShortDated} too short-dated</span>}
+                  </span>
                 </li>
               ))}
             </ul>

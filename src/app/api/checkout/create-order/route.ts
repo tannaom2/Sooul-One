@@ -162,18 +162,10 @@ export async function POST(request: Request) {
     }));
   });
   const shippingTaxPaise = quote.taxPaise - quote.lines.reduce((sum, l) => sum + l.taxPaise, 0);
+  // Batches are the only stock record; the product totals follow by trigger.
   const batchTakes = quote.lines.flatMap((line) =>
     line.allocations.map((a) => ({ id: a.batchId, qty: a.quantity, name: line.name })),
   );
-  // Batch-tracked products: the batches are the stock record and this count
-  // only mirrors them. Untracked products: this count is the record, so it
-  // gets the same no-oversell guard as a batch.
-  const productTakes = quote.lines.map((line) => ({
-    id: line.productId,
-    qty: line.quantityAvailable,
-    guarded: line.allocations.length === 0,
-    name: line.name,
-  }));
 
   const order = await db
     .$transaction(
@@ -231,7 +223,7 @@ export async function POST(request: Request) {
           if (redeemed.count === 0) throw new CouponUsedUp();
         }
 
-        const shortOf = await takeStock(tx, batchTakes, productTakes);
+        const shortOf = await takeStock(tx, batchTakes);
         if (shortOf) throw new SoldOut(shortOf);
 
         return created;

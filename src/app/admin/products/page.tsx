@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { Empty, NoAccess, VegMark } from "@/components/ui";
 import { formatINR } from "@/lib/money";
+import { stockView } from "@/lib/stock-view";
 import { decimalToPaise } from "@/lib/format";
 import {
   PRODUCT_VIEWS,
@@ -73,7 +74,7 @@ export default async function AdminProducts({
     [products, total, counts, hasAny] = await Promise.all([
       db.product.findMany({
         where,
-        include: { brand: true, category: true },
+        include: { brand: true, category: true, batches: { where: { quantityRemaining: { gt: 0 } } } },
         orderBy: { createdAt: "desc" },
         take: PRODUCTS_PAGE_SIZE,
         skip: (filters.page - 1) * PRODUCTS_PAGE_SIZE,
@@ -178,8 +179,10 @@ export default async function AdminProducts({
       ) : (
         <div className="panel">
           {products.map((p) => {
-            const out = p.stockQuantity <= 0;
-            const low = !out && p.stockQuantity <= p.lowStockThreshold;
+            // Shippable stock, by the storefront's rule: short-dated units don't count.
+            const stock = stockView(p);
+            const out = stock.shippable <= 0;
+            const low = !out && stock.low;
             return (
               <div key={p.id} className="panel-row items-center gap-3">
                 <span className="flex min-w-0 items-center gap-3">
@@ -205,7 +208,8 @@ export default async function AdminProducts({
                     className={`text-micro tabular ${out ? "font-semibold text-alert" : low ? "font-semibold" : "text-ink-faint"}`}
                     style={low ? { color: "var(--color-caution)" } : undefined}
                   >
-                    {out ? "out of stock" : `${p.stockQuantity} in stock`}
+                    {out ? (stock.held > 0 ? "none shippable" : "out of stock") : `${stock.shippable} shippable`}
+                    {stock.tooShortDated > 0 && ` · ${stock.tooShortDated} too short-dated`}
                   </span>
                   <span className="tabular">{formatINR(decimalToPaise(p.basePrice))}</span>
                 </span>
