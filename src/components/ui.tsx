@@ -36,6 +36,30 @@ export function VegMark({ isVeg, showText = false }: { isVeg: boolean | null; sh
   );
 }
 
+/**
+ * Average of approved reviews. Rendered only when there is at least one:
+ * no empty stars on a product nobody has reviewed yet.
+ */
+export function Rating({ avg, count, size = "small" }: { avg: number; count: number; size?: "small" | "micro" }) {
+  // Conservative: a star fills only from .75, so the stars never read higher
+  // than the score (4.5 shows four and a number, not five).
+  const full = Math.min(5, Math.floor(avg + 0.25));
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${size === "micro" ? "text-micro" : "text-small"}`}>
+      <span
+        role="img"
+        aria-label={`Rated ${avg} out of 5 from ${count} ${count === 1 ? "review" : "reviews"}`}
+        style={{ color: "var(--color-caution)" }}
+      >
+        {"★".repeat(full)}
+        <span className="text-[--color-rule]">{"★".repeat(5 - full)}</span>
+      </span>
+      <span className="tabular font-semibold" aria-hidden>{avg.toFixed(1)}</span>
+      <span className="text-ink-faint" aria-hidden>({count})</span>
+    </span>
+  );
+}
+
 export function Price({
   pricePaise,
   comparePaise,
@@ -104,6 +128,8 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         </h3>
         <VegMark isVeg={product.isVeg} />
       </div>
+
+      {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} size="micro" />}
 
       <p className="text-small text-ink-soft">{product.shortDescription}</p>
 

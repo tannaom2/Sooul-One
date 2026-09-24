@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { displayPrice, getProductBySlug } from "@/server/catalog";
 import Link from "next/link";
-import { VegMark, Price, BRAND_ACCENT } from "@/components/ui";
+import { VegMark, Price, BRAND_ACCENT, Rating } from "@/components/ui";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { StickyBuyBar } from "@/components/product/sticky-buy-bar";
 import { AddToBasket } from "@/components/add-to-basket";
@@ -126,6 +126,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <h1 className="max-w-[18ch] text-h1 font-extrabold">{product.name}</h1>
             <VegMark isVeg={product.isVeg} showText />
           </div>
+          {product.rating && (
+            <a href="#reviews" className="mt-2 inline-block hover:underline">
+              <Rating avg={product.rating.avg} count={product.rating.count} />
+            </a>
+          )}
           <p className="mt-3 text-lead text-ink-soft">{product.shortDescription}</p>
 
           <div id="buy-box" className="panel mt-6">
@@ -297,8 +302,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </section>
       )}
 
-      <section className="mt-16 max-w-[68ch] border-t border-[--color-rule] pt-8">
-        <h2 className="text-h2 font-extrabold">Reviews</h2>
+      <section id="reviews" className="mt-16 max-w-[68ch] scroll-mt-24 border-t border-[--color-rule] pt-8">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-h2 font-extrabold">Reviews</h2>
+          {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} />}
+        </div>
 
         {product.reviews?.length > 0 ? (
           <div className="mt-6 grid gap-5">

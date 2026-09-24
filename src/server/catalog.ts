@@ -38,6 +38,34 @@ export interface ProductSummary {
   imageUrl: string | null;
   /** The basket's own stock rule, so a card never promises what the basket refuses. */
   availability: { state: AvailabilityState; shippableUnits: number };
+  /** Approved reviews only; null when there are none yet. */
+  rating: RatingSummary | null;
+}
+
+export interface RatingSummary {
+  /** Mean of approved ratings, one decimal. */
+  avg: number;
+  count: number;
+}
+
+/** Average and count of approved reviews for each product id. */
+async function ratingsFor(productIds: string[]): Promise<Map<string, RatingSummary>> {
+  if (productIds.length === 0) return new Map();
+  const rows = await db.review.groupBy({
+    by: ["productId"],
+    where: { productId: { in: productIds }, isApproved: true },
+    _avg: { rating: true },
+    _count: { _all: true },
+  });
+  return new Map(
+    rows.map((r) => [r.productId, { avg: Math.round((r._avg.rating ?? 0) * 10) / 10, count: r._count._all }]),
+  );
+}
+
+/** Summaries with their ratings attached, in one extra grouped query. */
+async function withRatings(rows: any[]): Promise<ProductSummary[]> {
+  const ratings = await ratingsFor(rows.map((r) => r.id));
+  return rows.map((row) => ({ ...toSummary(row), rating: ratings.get(row.id) ?? null }));
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -72,6 +100,7 @@ function toSummary(p: any): ProductSummary {
     retailOnly: p.retailOnly,
     imageUrl: p.images?.find((i: any) => i.isPrimary)?.url ?? p.images?.[0]?.url ?? null,
     availability: cardAvailability(p),
+    rating: null,
   };
 }
 
@@ -146,7 +175,7 @@ export const getProductsByBrand = unstable_cache(
       include: LIST_INCLUDE,
       orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
     });
-    return rows.map(toSummary);
+    return withRatings(rows);
   },
   ["products-by-brand"],
   CATALOG,
@@ -159,7 +188,7 @@ export const getGummiesProducts = unstable_cache(
       include: LIST_INCLUDE,
       orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
     });
-    return rows.map(toSummary);
+    return withRatings(rows);
   },
   ["gummies-products"],
   CATALOG,
@@ -172,7 +201,7 @@ export const getFeatured = unstable_cache(
       include: LIST_INCLUDE,
       take: limit,
     });
-    return rows.map(toSummary);
+    return withRatings(rows);
   },
   ["featured"],
   CATALOG,
@@ -185,8 +214,8 @@ export const getFeatured = unstable_cache(
  * page permanently (500 on every request) after a single database hiccup.
  */
 export const getProductBySlug = unstable_cache(
-  async (slug: string) =>
-    db.product.findUnique({
+  async (slug: string) => {
+    const product = await db.product.findUnique({
       where: { slug },
       include: {
         brand: true,
@@ -196,7 +225,12 @@ export const getProductBySlug = unstable_cache(
         batches: { orderBy: { expiresOn: "asc" } },
         reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" }, take: 10 },
       },
-    }),
+    });
+    if (!product) return null;
+    // The page lists the latest 10; the average covers every approved review.
+    const rating = (await ratingsFor([product.id])).get(product.id) ?? null;
+    return { ...product, rating };
+  },
   ["product-by-slug"],
   CATALOG,
 );
