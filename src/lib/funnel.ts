@@ -7,6 +7,7 @@ import {
   type FunnelStage,
   type FunnelStageType,
 } from "./funnel-compute";
+import { INTERACTION_TYPES, summariseInteractions } from "./interactions";
 
 export type { FunnelStage, FunnelStageType, AbandonedCartRow } from "./funnel-compute";
 
@@ -65,4 +66,20 @@ export async function findAbandonedCarts(days = 7, limit = 50) {
   const nameById = new Map(products.map((p) => [p.id, p.name]));
 
   return groupAbandonedCarts(addedToCart, startedSessions, nameById, limit);
+}
+
+/**
+ * Storefront interactions in the window, for the Funnel page. Capped so a
+ * busy month can't turn an admin page view into an unbounded read; at the cap
+ * the page says the figures are partial.
+ */
+export async function buildInteractions(days = 30, cap = 20_000) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await db.analyticsEvent.findMany({
+    where: { type: { in: [...INTERACTION_TYPES] }, createdAt: { gte: since } },
+    select: { sessionId: true, type: true, metadata: true },
+    orderBy: { createdAt: "desc" },
+    take: cap,
+  });
+  return { lines: summariseInteractions(rows), partial: rows.length >= cap };
 }

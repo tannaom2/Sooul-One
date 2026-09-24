@@ -528,6 +528,13 @@ enum AnalyticsEventType {
   CHECKOUT_STARTED
   ORDER_PLACED
   ORDER_PAID
+  /// Storefront interactions recorded from the browser via /api/analytics/event
+  /// (allowlisted in src/lib/client-events.ts).
+  CART_OPENED
+  OFFER_SHOWN
+  OFFER_APPLIED
+  CHECKOUT_STEP
+  PAYMENT_METHOD_SELECTED
 }
 
 /// Funnel and abandonment tracking (Section: analytics). Write-heavy,

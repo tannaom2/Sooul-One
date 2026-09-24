@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
-import { buildFunnel, findAbandonedCarts } from "@/lib/funnel";
+import { buildFunnel, buildInteractions, findAbandonedCarts } from "@/lib/funnel";
 import { formatDate } from "@/lib/format";
 import { Empty, NoAccess } from "@/components/ui";
 
@@ -21,7 +21,11 @@ export default async function FunnelPage({
   const { days: daysParam } = await searchParams;
   const days = Math.max(1, Math.min(365, Number(daysParam) || 30));
 
-  const [funnel, abandoned] = await Promise.all([buildFunnel(days), findAbandonedCarts(7, 50)]);
+  const [funnel, abandoned, interactions] = await Promise.all([
+    buildFunnel(days),
+    findAbandonedCarts(7, 50),
+    buildInteractions(days),
+  ]);
 
   // Bars scale to the largest stage, not the first, so a later stage can
   // never draw wider than its card (it did, when visits read zero).
@@ -82,6 +86,26 @@ export default async function FunnelPage({
             ))}
           </div>
         )}
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-h3 font-bold">Interactions</h2>
+        <p className="mb-4 max-w-2xl text-small text-ink-soft">
+          Sessions that used each part of the basket and checkout in the last {days} days. These
+          start filling in as the new basket and checkout ship; each one is how we tell whether a
+          change helped.
+          {interactions.partial && " Showing the most recent 20,000 events only."}
+        </p>
+        <dl className="panel">
+          {interactions.lines.map((l) => (
+            <div key={l.label} className="panel-row">
+              <dt>{l.label}</dt>
+              <dd className="tabular">
+                {l.sessions} {l.sessions === 1 ? "session" : "sessions"}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
       <div>

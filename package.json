@@ -21,7 +21,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "admin:create": "tsx scripts/create-admin.ts",
-    "check:schema": "python3 scripts/check-relations.py prisma/schema.prisma"
+    "check:schema": "python3 scripts/check-relations.py prisma/schema.prisma",
+    "perf:budget": "tsx scripts/perf-budget.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
