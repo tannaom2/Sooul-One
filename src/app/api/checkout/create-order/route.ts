@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { db } from "@/lib/db";
+import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { quoteCart, readSessionId } from "@/server/cart";
 import { orderNumber } from "@/lib/format";
 import { fromPaise } from "@/lib/money";
@@ -158,6 +159,8 @@ export async function POST(request: Request) {
     orderId: order.id,
     metadata: { totalPaise: quote.totalPaise, method: input.paymentMethod },
   });
+  // Stock just moved, so "Only N left" and availability must refresh.
+  expireTag(CATALOG_TAG);
   await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email }, {
     method: input.paymentMethod,
     totalPaise: quote.totalPaise,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { audit, requirePermission } from "@/lib/auth";
 import { uploadProductImage } from "@/lib/cloudinary";
 
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
   });
 
   await audit(session, "UPLOAD_IMAGE", "ProductImage", image.id, { productId });
+  expireTag(CATALOG_TAG);
 
   return NextResponse.json({ ok: true, id: image.id, url: image.url });
 }

@@ -1,5 +1,7 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
+import { CATALOG_TAG, STORES_TAG } from "@/lib/cache-tags";
 import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
 import { productAvailability, type AvailabilityState } from "@/lib/checkout/availability";
@@ -103,73 +105,104 @@ const LIST_INCLUDE = {
   },
 };
 
-export async function getBrands() {
-  return db.brand.findMany({
-    where: { isActive: true },
-    include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
-    orderBy: { name: "asc" },
-  });
-}
+/*
+ * Every read below is cached across requests and tagged, so a page view
+ * normally costs no database round trip. Writes that change what shoppers see
+ * expire the tag (src/lib/cache-tags.ts); the 5-minute revalidate is only a
+ * safety net, e.g. for shelf-life eligibility, which moves with the date.
+ *
+ * unstable_cache, not React's cache(): a thrown error is never stored, so one
+ * database blip can't wedge a route (see the note on getProductBySlug). Results
+ * pass through JSON, so Dates arrive as ISO strings and Decimals as strings;
+ * every caller already goes through new Date() / decimalToPaise().
+ */
+const CATALOG = { revalidate: 300, tags: [CATALOG_TAG] };
 
-export async function getBrandBySlug(slug: string) {
-  return db.brand.findUnique({
-    where: { slug },
-    include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
-  });
-}
+export const getBrands = unstable_cache(
+  async () =>
+    db.brand.findMany({
+      where: { isActive: true },
+      include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
+      orderBy: { name: "asc" },
+    }),
+  ["brands"],
+  CATALOG,
+);
 
-export async function getProductsByBrand(brandSlug: string): Promise<ProductSummary[]> {
-  const rows = await db.product.findMany({
-    where: { isActive: true, brand: { slug: brandSlug } },
-    include: LIST_INCLUDE,
-    orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
-  });
-  return rows.map(toSummary);
-}
+export const getBrandBySlug = unstable_cache(
+  async (slug: string) =>
+    db.brand.findUnique({
+      where: { slug },
+      include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
+    }),
+  ["brand-by-slug"],
+  CATALOG,
+);
 
-export async function getGummiesProducts(): Promise<ProductSummary[]> {
-  const rows = await db.product.findMany({
-    where: { isActive: true, regulatoryType: "HEALTH_SUPPLEMENT" },
-    include: LIST_INCLUDE,
-    orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
-  });
-  return rows.map(toSummary);
-}
+export const getProductsByBrand = unstable_cache(
+  async (brandSlug: string): Promise<ProductSummary[]> => {
+    const rows = await db.product.findMany({
+      where: { isActive: true, brand: { slug: brandSlug } },
+      include: LIST_INCLUDE,
+      orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
+    });
+    return rows.map(toSummary);
+  },
+  ["products-by-brand"],
+  CATALOG,
+);
 
-export async function getFeatured(limit = 6): Promise<ProductSummary[]> {
-  const rows = await db.product.findMany({
-    where: { isActive: true, isFeatured: true },
-    include: LIST_INCLUDE,
-    take: limit,
-  });
-  return rows.map(toSummary);
-}
+export const getGummiesProducts = unstable_cache(
+  async (): Promise<ProductSummary[]> => {
+    const rows = await db.product.findMany({
+      where: { isActive: true, regulatoryType: "HEALTH_SUPPLEMENT" },
+      include: LIST_INCLUDE,
+      orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
+    });
+    return rows.map(toSummary);
+  },
+  ["gummies-products"],
+  CATALOG,
+);
+
+export const getFeatured = unstable_cache(
+  async (limit = 6): Promise<ProductSummary[]> => {
+    const rows = await db.product.findMany({
+      where: { isActive: true, isFeatured: true },
+      include: LIST_INCLUDE,
+      take: limit,
+    });
+    return rows.map(toSummary);
+  },
+  ["featured"],
+  CATALOG,
+);
 
 /**
- * generateMetadata() and the page component both call this, so it runs twice
- * per page view. Deliberately NOT wrapped in React's cache() to dedupe that:
- * cache() memoizes the promise itself, including a rejected one, and it
- * doesn't reliably reset per-request outside of a full production Next.js
- * render — verified live, wrapping this broke the page permanently (500 on
- * every request) after a single transient database hiccup, until the dev
- * server was restarted. One extra identical query per page view is a far
- * smaller cost than a route that silently wedges itself broken after one
- * bad network blip.
+ * generateMetadata() and the page component both call this; the cross-request
+ * cache now serves both. Deliberately not React's cache(): that memoizes the
+ * promise itself, including a rejected one, and verified live it broke the
+ * page permanently (500 on every request) after a single database hiccup.
  */
-export async function getProductBySlug(slug: string) {
-  return db.product.findUnique({
-    where: { slug },
-    include: {
-      brand: true,
-      category: true,
-      images: { orderBy: { sortOrder: "asc" } },
-      variants: true,
-      batches: { orderBy: { expiresOn: "asc" } },
-      reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" }, take: 10 },
-    },
-  });
-}
+export const getProductBySlug = unstable_cache(
+  async (slug: string) =>
+    db.product.findUnique({
+      where: { slug },
+      include: {
+        brand: true,
+        category: true,
+        images: { orderBy: { sortOrder: "asc" } },
+        variants: true,
+        batches: { orderBy: { expiresOn: "asc" } },
+        reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" }, take: 10 },
+      },
+    }),
+  ["product-by-slug"],
+  CATALOG,
+);
 
-export async function getStores() {
-  return db.storeLocation.findMany({ where: { isActive: true }, orderBy: { city: "asc" } });
-}
+export const getStores = unstable_cache(
+  async () => db.storeLocation.findMany({ where: { isActive: true }, orderBy: { city: "asc" } }),
+  ["stores"],
+  { revalidate: 300, tags: [STORES_TAG] },
+);

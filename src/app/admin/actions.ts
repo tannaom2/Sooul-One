@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { CATALOG_TAG, STORES_TAG, expireTag } from "@/lib/cache-tags";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { audit, requirePermission } from "@/lib/auth";
@@ -208,7 +209,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   }
 
   revalidatePath("/admin/products");
-  revalidatePath(`/product/${input.slug}`);
+  expireTag(CATALOG_TAG);
 
   return { ok: true, message: id ? "Product updated." : "Product created." };
 }
@@ -254,6 +255,8 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
   await audit(session, "ADD_BATCH", "ProductBatch", batch.id, { productId, batchNumber, quantity });
   revalidatePath("/admin/batches");
 
+  // New stock changes availability and the best-before shoppers are quoted.
+  expireTag(CATALOG_TAG);
   return { ok: true, message: `Batch ${batchNumber} received.` };
 }
 
@@ -283,7 +286,7 @@ export async function saveStore(_prev: ActionResult, form: FormData): Promise<Ac
 
   await audit(session, "CREATE_STORE", "StoreLocation", store.id, { name, city });
   revalidatePath("/admin/stores");
-  revalidatePath("/stores");
+  expireTag(STORES_TAG);
 
   return { ok: true, message: `${name} added.` };
 }

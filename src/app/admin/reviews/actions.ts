@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { db } from "@/lib/db";
 import { requirePermission, audit } from "@/lib/auth";
 
@@ -26,4 +27,6 @@ export async function moderateReview(reviewId: string, decision: "APPROVE" | "RE
   // and copying it into the permanent, append-only log would undo that.
   await audit(session, `REVIEW_${decision}`, "Review", reviewId, review);
   revalidatePath("/admin/reviews");
+  // Approved reviews appear on the product page.
+  expireTag(CATALOG_TAG);
 }
