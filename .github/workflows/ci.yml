@@ -5,11 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the secret scan reads the commits being pushed
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -24,3 +29,57 @@ jobs:
         run: npm run typecheck
       - name: Unit and integration tests
         run: npm test
+      - name: No known high-severity vulnerabilities in shipped dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: No secrets in the pushed commits
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The production build, then the checkout journey in a real browser against
+  # a throwaway Postgres: migrations, basket, three-step checkout, a COD order.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: verify
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: soulone
+          POSTGRES_PASSWORD: soulone
+          POSTGRES_DB: soulone
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U soulone"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://soulone:soulone@localhost:5432/soulone
+      SITE_URL: http://localhost:3000
+      # Test-only values; this database and server exist for the length of the job.
+      JWT_SECRET: ci-only-jwt-secret-at-least-32-characters-long
+      SELLER_STATE: Gujarat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Apply migrations to a fresh database
+        run: npx prisma migrate deploy
+      - name: Production build
+        run: npm run build
+      - name: Install the browser
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end checkout
+        run: npm run test:e2e
+      - name: Keep traces of failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

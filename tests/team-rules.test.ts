@@ -42,11 +42,11 @@ describe("teamChangeBlocked", () => {
 
 describe("isValidSetupKey", () => {
   it("accepts base32 keys", () => {
-    expect(isValidSetupKey("UMEYJPZH5JDPX6BAYU6CI5JCZCLESWO5")).toBe(true);
+    expect(isValidSetupKey("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP")).toBe(true);
   });
 
   it("refuses anything else", () => {
-    for (const bad of ["", "short", "umeyjpzh5jdpx6bayu6ci5jczcleswo5", "UMEYJPZH5JDPX6BA 1", "A".repeat(65)]) {
+    for (const bad of ["", "short", "jbswy3dpehpk3pxpjbswy3dpehpk3pxp", "JBSWY3DPEHPK3PXP 1", "A".repeat(65)]) {
       expect(isValidSetupKey(bad)).toBe(false);
     }
   });

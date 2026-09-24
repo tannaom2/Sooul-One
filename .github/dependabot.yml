@@ -1,0 +1,28 @@
+# Weekly dependency updates, grouped so a week's changes arrive as a few
+# reviewable PRs instead of one per package. CI (build, unit and E2E tests)
+# must pass before any of them is merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    groups:
+      # Next.js and React move together; mismatched versions break the build.
+      framework:
+        patterns: ["next", "react", "react-dom", "@types/react", "@types/react-dom", "eslint-config-next"]
+      prisma:
+        patterns: ["prisma", "@prisma/*"]
+      dev-tooling:
+        dependency-type: development
+      runtime:
+        dependency-type: production
+    # Security fixes are never held back by the grouping or the weekly schedule.
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

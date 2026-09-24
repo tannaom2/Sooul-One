@@ -8,9 +8,9 @@ import { defineConfig, devices } from "@playwright/test";
  * dies on real Postgres behaviour (the FEFO transaction, the GST split), so a
  * mocked backend would pass while the real thing broke.
  *
- * `webServer` starts `next dev` itself and waits for /api/health before the
- * first test runs, so `npm run test:e2e` is a single command with nothing to
- * start by hand.
+ * `webServer` starts `next dev` itself (in CI, `next start` against the build
+ * the workflow just made) and waits for /api/health before the first test
+ * runs, so `npm run test:e2e` is a single command with nothing to start by hand.
  */
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -28,7 +28,8 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 
   webServer: {
-    command: "npm run dev",
+    // CI tests the production build it has just made; locally, the dev server.
+    command: process.env.CI ? "npm run start" : "npm run dev",
     url: "http://localhost:3000/api/health",
     reuseExistingServer: !process.env.CI,
     // Generous: a cold Next.js compile plus a Neon free-tier database waking

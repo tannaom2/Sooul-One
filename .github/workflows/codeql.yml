@@ -1,0 +1,25 @@
+name: CodeQL
+
+# Static analysis for injection, XSS, unsafe redirects and similar flaws in our
+# own TypeScript. Free for public repositories. Findings appear under the
+# repository's Security tab.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "30 3 * * 1" # Mondays 09:00 IST, to catch new queries against unchanged code
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
