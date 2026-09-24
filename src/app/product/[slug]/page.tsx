@@ -181,7 +181,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                       Only {availability.shippableUnits} left
                     </p>
                   )}
-                  <AddToBasket productId={product.id} productName={product.name} />
+                  <AddToBasket
+                    productId={product.id}
+                    productName={product.name}
+                    pack={isSupplement && product.servingsPerContainer ? { servings: product.servingsPerContainer, pricePaise: price.pricePaise } : undefined}
+                  />
                 </>
               )}
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useCart } from "./basket/cart-provider";
 import { QuantityStepper } from "./basket/quantity-stepper";
+import { PackPicker } from "./product/pack-picker";
 
 /**
  * Add-to-basket control.
@@ -15,7 +16,16 @@ import { QuantityStepper } from "./basket/quantity-stepper";
  * the page; the badge and drawer update instantly and settle on the server's
  * answer.
  */
-export function AddToBasket({ productId, productName }: { productId: string; productName: string }) {
+export function AddToBasket({
+  productId,
+  productName,
+  pack,
+}: {
+  productId: string;
+  productName: string;
+  /** Supplements: choose 1-3 packs instead of a free quantity. */
+  pack?: { servings: number; pricePaise: number };
+}) {
   const { add, pending, error } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
@@ -31,10 +41,14 @@ export function AddToBasket({ productId, productName }: { productId: string; pro
 
   return (
     <div className="grid gap-3">
-      <div className="flex items-center gap-3">
-        <span className="text-small font-semibold">Quantity</span>
-        <QuantityStepper value={quantity} onChange={setQuantity} label={productName} />
-      </div>
+      {pack ? (
+        <PackPicker value={quantity} onChange={setQuantity} servingsPerPack={pack.servings} pricePaise={pack.pricePaise} />
+      ) : (
+        <div className="flex items-center gap-3">
+          <span className="text-small font-semibold">Quantity</span>
+          <QuantityStepper value={quantity} onChange={setQuantity} label={productName} />
+        </div>
+      )}
 
       <button onClick={onAdd} disabled={pending} className="btn btn-solid w-full">
         {added ? "Added ✓" : "Add to basket"}
