@@ -4,10 +4,8 @@ import { VegMark, Price } from "@/components/ui";
 import { AddToBasket } from "@/components/add-to-basket";
 import { formatBestBefore, formatDate } from "@/lib/format";
 import { SUPPLEMENT_DISCLAIMER } from "@/lib/compliance/claims";
-import {
-  assessShippability,
-  evaluateBatchForDelivery,
-} from "@/lib/compliance/shelf-life";
+import { assessShippability } from "@/lib/compliance/shelf-life";
+import { productAvailability } from "@/lib/checkout/availability";
 import { estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
@@ -68,24 +66,28 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const price = displayPrice(product);
 
   /**
-   * Show the shopper the earliest best-before date they could actually be sent,
-   * not the latest one in the warehouse. FEFO means the oldest compliant batch
-   * ships first, so quoting the newest date would be a promise the fulfilment
-   * logic has no intention of keeping.
+   * The basket's own rule (FEFO + shelf-life at delivery), so this page can't
+   * offer stock the basket would refuse. Estimated against the slowest zone,
+   * as the basket does before a pincode is known. The best-before shown is the
+   * pack we'd actually send first, not the newest one in the warehouse.
    */
-  const deliveryEstimate = estimateDeliveryDate(new Date(), "REST_OF_INDIA");
-  const shippableBatches = (product.batches ?? []).filter((b: any) => {
-    if (b.quantityRemaining <= 0) return false;
-    if (!product.shelfLifeDays) return new Date(b.expiresOn) > deliveryEstimate;
-    return evaluateBatchForDelivery(
-      { id: b.id, batchNumber: b.batchNumber, expiresOn: new Date(b.expiresOn), quantityRemaining: b.quantityRemaining },
-      product.shelfLifeDays,
-      deliveryEstimate,
-    ).isEligible;
-  });
-
-  const soonestBestBefore = shippableBatches[0]?.expiresOn ?? null;
-  const inStock = shippableBatches.length > 0 || product.stockQuantity > 0;
+  const availability = productAvailability(
+    {
+      regulatoryType: product.regulatoryType,
+      shelfLifeDays: product.shelfLifeDays,
+      stockQuantity: product.stockQuantity,
+      lowStockThreshold: product.lowStockThreshold,
+      retailOnly: product.retailOnly,
+      batches: (product.batches ?? []).map((b: any) => ({
+        id: b.id,
+        batchNumber: b.batchNumber,
+        expiresOn: new Date(b.expiresOn),
+        quantityRemaining: b.quantityRemaining,
+      })),
+    },
+    estimateDeliveryDate(new Date(), "REST_OF_INDIA"),
+  );
+  const soonestBestBefore = availability.soonestBestBefore;
   const shippability = product.shelfLifeDays ? assessShippability(product.shelfLifeDays) : null;
 
   const nutrition = (product.nutritionFacts ?? null) as Record<string, number> | null;
@@ -145,17 +147,22 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
 
             <div className="p-3.5">
-              {product.retailOnly ? (
+              {availability.state === "retail-only" ? (
                 <p className="text-small">
                   Sold in our superstores only. This product is not shipped.
                 </p>
-              ) : inStock ? (
-                <AddToBasket productId={product.id} productName={product.name} />
+              ) : availability.state === "out" ? (
+                <p className="text-small text-caution">{availability.message}</p>
               ) : (
-                <p className="text-small text-caution">
-                  Temporarily unavailable. Our remaining stock is too close to its best-before date
-                  to ship.
-                </p>
+                <>
+                  {/* Real stock at or below the owner's reorder level, never invented. */}
+                  {availability.state === "low" && (
+                    <p className="mb-3 text-small font-semibold" style={{ color: "var(--color-caution)" }}>
+                      Only {availability.shippableUnits} left
+                    </p>
+                  )}
+                  <AddToBasket productId={product.id} productName={product.name} />
+                </>
               )}
 
               {soonestBestBefore && (

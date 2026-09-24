@@ -193,7 +193,7 @@ const SHELF_LIFE_RULE_APPLIES: readonly RegulatoryType[] = [
   "BEVERAGE",
 ];
 
-interface Availability {
+export interface Availability {
   readonly quantityAvailable: number;
   readonly allocations: readonly Allocation[];
   readonly rejectedBatches: readonly BatchEligibility[];
@@ -201,7 +201,8 @@ interface Availability {
   readonly usedFallbackPolicy?: boolean;
 }
 
-function resolveAvailability(line: QuoteLineInput, estimatedDeliveryDate: Date): Availability {
+/** Exported so product pages and cards apply exactly the rule the basket enforces. */
+export function resolveAvailability(line: QuoteLineInput, estimatedDeliveryDate: Date): Availability {
   const none = { quantityAvailable: 0, allocations: [], rejectedBatches: [] };
 
   if (line.retailOnly) return { ...none, reason: "RETAIL_ONLY" };
@@ -261,7 +262,7 @@ function resolveAvailability(line: QuoteLineInput, estimatedDeliveryDate: Date):
   };
 }
 
-const CUSTOMER_MESSAGES: Record<LineBlockReason, string> = {
+export const CUSTOMER_MESSAGES: Record<LineBlockReason, string> = {
   RETAIL_ONLY: "Available in our stores only — this item isn't shipped.",
   OUT_OF_STOCK: "Out of stock.",
   NO_COMPLIANT_BATCH:

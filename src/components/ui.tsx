@@ -116,6 +116,10 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         <Price pricePaise={product.pricePaise} comparePaise={product.comparePaise} percentOff={product.percentOff} />
         {product.retailOnly ? (
           <span className="text-micro font-semibold text-caution">In stores only</span>
+        ) : product.availability.state === "out" ? (
+          <span className="text-micro font-semibold text-caution">Out of stock</span>
+        ) : product.availability.state === "low" ? (
+          <span className="text-micro font-semibold text-caution">Only {product.availability.shippableUnits} left</span>
         ) : (
           product.availableInRetail && (
             <span className="text-micro text-ink-faint">Also in stores</span>

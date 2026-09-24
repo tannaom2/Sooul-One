@@ -2,6 +2,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
+import { productAvailability, type AvailabilityState } from "@/lib/checkout/availability";
+import { estimateDeliveryDate } from "@/lib/checkout/delivery";
 
 /**
  * Catalog reads.
@@ -32,6 +34,8 @@ export interface ProductSummary {
   availableInRetail: boolean;
   retailOnly: boolean;
   imageUrl: string | null;
+  /** The basket's own stock rule, so a card never promises what the basket refuses. */
+  availability: { state: AvailabilityState; shippableUnits: number };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -65,13 +69,38 @@ function toSummary(p: any): ProductSummary {
     availableInRetail: p.availableInRetail,
     retailOnly: p.retailOnly,
     imageUrl: p.images?.find((i: any) => i.isPrimary)?.url ?? p.images?.[0]?.url ?? null,
+    availability: cardAvailability(p),
   };
+}
+
+function cardAvailability(p: any): ProductSummary["availability"] {
+  const a = productAvailability(
+    {
+      regulatoryType: p.regulatoryType,
+      shelfLifeDays: p.shelfLifeDays,
+      stockQuantity: p.stockQuantity ?? 0,
+      lowStockThreshold: p.lowStockThreshold ?? 0,
+      retailOnly: Boolean(p.retailOnly),
+      batches: (p.batches ?? []).map((b: any) => ({
+        id: b.id,
+        batchNumber: b.batchNumber,
+        expiresOn: new Date(b.expiresOn),
+        quantityRemaining: b.quantityRemaining,
+      })),
+    },
+    estimateDeliveryDate(new Date(), "REST_OF_INDIA"),
+  );
+  return { state: a.state, shippableUnits: a.shippableUnits };
 }
 
 const LIST_INCLUDE = {
   brand: true,
   category: true,
   images: { orderBy: { sortOrder: "asc" as const } },
+  batches: {
+    where: { quantityRemaining: { gt: 0 } },
+    select: { id: true, batchNumber: true, expiresOn: true, quantityRemaining: true },
+  },
 };
 
 export async function getBrands() {
