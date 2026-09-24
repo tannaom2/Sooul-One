@@ -84,6 +84,17 @@ describe("PACKAGED_FOOD mandatory fields", () => {
     expect(productInputSchema.safeParse(partial).success).toBe(false);
   });
 
+  it("rejects a panel where a 'which of' figure exceeds its total", () => {
+    expect(errorPaths({ ...validFood, nutritionFacts: { ...nutrition, totalSugarsG: 60 } })).toContain(
+      "nutritionFacts.totalSugarsG",
+    );
+    expect(errorPaths({ ...validFood, nutritionFacts: { ...nutrition, saturatedFatG: 10, transFatG: 3 } })).toContain(
+      "nutritionFacts.saturatedFatG",
+    );
+    // Equal is fine: all of the carbohydrate can be sugar, all of the fat saturated.
+    expect(errorPaths({ ...validFood, nutritionFacts: { ...nutrition, totalSugarsG: 52, saturatedFatG: 12 } })).toHaveLength(0);
+  });
+
   it("rejects an absent allergen declaration while allowing an empty one", () => {
     const { allergens, ...withoutAllergens } = validFood;
     expect(errorPaths(withoutAllergens)).toContain("allergens");

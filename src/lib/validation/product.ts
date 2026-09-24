@@ -87,7 +87,17 @@ const nutritionFacts = z.object(
     servingSizeG: z.number().positive(),
   },
   { message: "The full nutrition panel is required for packaged food" },
-);
+).superRefine((n, ctx) => {
+  // A "which of" figure can never exceed its total, whatever basis the panel
+  // uses (per serving or per 100 g). The label is the product's whole promise,
+  // so a physically impossible one is caught at entry, not by a shopper.
+  if (n.totalSugarsG > n.carbohydrateG) {
+    ctx.addIssue({ code: "custom", path: ["totalSugarsG"], message: "Sugars can't be more than total carbohydrate." });
+  }
+  if (n.saturatedFatG + n.transFatG > n.totalFatG) {
+    ctx.addIssue({ code: "custom", path: ["saturatedFatG"], message: "Saturated plus trans fat can't be more than total fat." });
+  }
+});
 
 const supplementFactRow = z.object({
   ingredient: z.string().min(1),
