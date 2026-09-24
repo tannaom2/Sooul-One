@@ -40,48 +40,57 @@ async function gotoProductWithRetry(page: import("@playwright/test").Page, path:
   await page.goto(path); // final attempt, let it fail with a normal assertion below
 }
 
-test("guest can browse, add to basket, and place a COD order", async ({ page }) => {
+/** Adds the E2E product from its page; the basket drawer opens straight away. */
+async function addProductAndOpenBasket(page: import("@playwright/test").Page) {
   await gotoProductWithRetry(page, `/product/${E2E_PRODUCT_SLUG}`);
   await expect(page.getByRole("heading", { name: /E2E Test Product/i })).toBeVisible();
+  await page.getByRole("button", { name: "Add to basket" }).first().click();
+  const basket = page.getByRole("dialog", { name: /basket/i });
+  await expect(basket.getByText(/E2E Test Product/i)).toBeVisible({ timeout: 15_000 });
+  return basket;
+}
 
-  await page.getByRole("button", { name: "Add to basket" }).click();
-  await expect(page.getByRole("link", { name: "Go to basket" })).toBeVisible();
-  await page.getByRole("link", { name: "Go to basket" }).click();
+/** Contact step, then the address step up to (not including) "Continue to payment". */
+async function fillContactAndAddress(page: import("@playwright/test").Page, address: { pincode: string; city: string; state: string }) {
+  await page.locator("#phone").fill(uniquePhone());
+  await page.locator("#email").fill("e2e-tester@example.com");
+  await page.getByRole("button", { name: "Continue to address" }).click();
 
-  await expect(page).toHaveURL(/\/cart/);
-  await expect(page.getByText(/E2E Test Product/i)).toBeVisible();
+  await page.locator("#postalCode").fill(address.pincode);
+  await page.locator("#name").fill("Playwright Tester");
+  await page.locator("#line1").fill("221B Test Lane");
+  // The pincode lookup may fill city and state itself; type over it so the
+  // test states exactly what the shopper entered.
+  await page.locator("#city").fill(address.city);
+  await page.locator("#state").fill(address.state);
+}
 
-  await page.getByRole("link", { name: /checkout/i }).click();
+test("guest can browse, add to basket, and place a COD order", async ({ page }) => {
+  const basket = await addProductAndOpenBasket(page);
+  await basket.getByRole("link", { name: /^Checkout/ }).click();
   await expect(page).toHaveURL(/\/checkout/);
 
-  await page.locator("#name").fill("Playwright Tester");
-  await page.locator("#email").fill("e2e-tester@example.com");
-  await page.locator("#phone").fill(uniquePhone());
-  await page.locator("#line1").fill("221B Test Lane");
-  await page.locator("#city").fill("Mumbai");
-  await page.locator("#state").fill("Maharashtra");
-  await page.locator("#postalCode").fill("400001");
-
-  // Wait for the server re-quote to resolve before reading the total —
-  // it's debounced client-side, so an immediate read can catch a stale quote.
-  await expect(page.getByText("Working out your total…")).toHaveCount(0, { timeout: 10_000 });
+  await fillContactAndAddress(page, { pincode: "380015", city: "Ahmedabad", state: "Gujarat" });
+  await page.getByRole("button", { name: "Continue to payment" }).click();
 
   await page.getByRole("radio", { name: /cash on delivery/i }).check();
-
-  await page.getByRole("button", { name: "Place order" }).click();
+  // Wait for the server re-quote before placing the order; it's debounced
+  // client-side, so an immediate click can catch a stale quote.
+  await expect(page.getByText("Working out your total…")).toHaveCount(0, { timeout: 10_000 });
+  await page.getByRole("button", { name: /^Place order/ }).click();
 
   await expect(page).toHaveURL(/\/order\//, { timeout: 15_000 });
   await expect(page.getByText("Order placed")).toBeVisible();
 });
 
-test("checkout blocks submission until required address fields are filled", async ({ page }) => {
-  await gotoProductWithRetry(page, `/product/${E2E_PRODUCT_SLUG}`);
-  await page.getByRole("button", { name: "Add to basket" }).click();
+test("checkout stops an address outside Gujarat before payment", async ({ page }) => {
+  await addProductAndOpenBasket(page);
   await page.goto("/checkout");
 
-  // Ready gate in checkout/page.tsx requires name/email/phone/line1/city/state/postalCode.
-  await expect(page.getByRole("button", { name: /pay now|place order/i })).toBeDisabled();
+  // A Pune pincode with "Gujarat" typed in the state box is still refused.
+  await fillContactAndAddress(page, { pincode: "411001", city: "Pune", state: "Gujarat" });
+  await page.getByRole("button", { name: "Continue to payment" }).click();
 
-  await page.locator("#name").fill("Playwright Tester");
-  await expect(page.getByRole("button", { name: /pay now|place order/i })).toBeDisabled();
+  await expect(page.locator("#postalCode-error")).toHaveText(/only within Gujarat/);
+  await expect(page.getByRole("radio", { name: /cash on delivery/i })).toHaveCount(0);
 });

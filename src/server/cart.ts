@@ -14,7 +14,7 @@ import { freeDeliveryProgress, nextOfferNudge } from "@/lib/checkout/basket-nudg
 import { MAX_LINE_QUANTITY, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR } from "@/lib/money";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
-import type { GstTreatment } from "@/lib/money";
+import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
 
@@ -34,7 +34,7 @@ export { SESSION_COOKIE };
  * Belongs in configuration, not a literal, because it changes if the company
  * registers in a second state.
  */
-const SELLER_STATE = (process.env.SELLER_STATE ?? "Maharashtra").toLowerCase();
+const SELLER_STATE = process.env.SELLER_STATE ?? "Gujarat";
 
 export async function getOrCreateSessionId(): Promise<string> {
   const store = await cookies();
@@ -147,8 +147,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   const zone = context.pincode ? zoneForPincode(context.pincode) : SLOWEST_SERVED_ZONE;
   const estimatedDeliveryDate = estimateDeliveryDate(new Date(), zone);
 
-  const gstTreatment: GstTreatment =
-    context.state && context.state.toLowerCase() === SELLER_STATE ? "INTRA_STATE" : "INTER_STATE";
+  const gstTreatment = gstTreatmentFor(context.state, SELLER_STATE);
 
   const lines: QuoteLineInput[] = cart.items.map((item: any) => {
     // A variant's own price replaces the base; the product's discount then

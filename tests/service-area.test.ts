@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inServicePincode, isServiceable } from "../src/lib/checkout/service-area";
+import { gstTreatmentFor, inServicePincode, isServiceable } from "../src/lib/checkout/service-area";
 import { zoneForPincode } from "../src/lib/checkout/delivery";
 
 describe("service area: Gujarat only", () => {
@@ -23,6 +23,17 @@ describe("service area: Gujarat only", () => {
 
   it("refuses a Gujarat pincode typed with another state when the directory can't confirm", () => {
     expect(isServiceable("380015", "Rajasthan")).toBe(false);
+  });
+});
+
+describe("GST treatment for a Gujarat-registered seller", () => {
+  it("charges CGST+SGST in Gujarat however the state was typed", () => {
+    for (const s of ["Gujarat", " gujarat ", "GUJARAT"]) expect(gstTreatmentFor(s, "Gujarat")).toBe("INTRA_STATE");
+  });
+
+  it("charges IGST for another state, or when no state is known", () => {
+    expect(gstTreatmentFor("Maharashtra", "Gujarat")).toBe("INTER_STATE");
+    expect(gstTreatmentFor(undefined, "Gujarat")).toBe("INTER_STATE");
   });
 });
 

@@ -10,6 +10,8 @@
  * trusting what was typed. Pure, so it's tested directly.
  */
 
+import type { GstTreatment } from "@/lib/money";
+
 export const SERVICE_AREA = {
   /** How the storefront names the area: "Delivering across Gujarat". */
   label: "Gujarat",
@@ -37,4 +39,13 @@ export function inServiceState(state: string): boolean {
 export function isServiceable(pincode: string, typedState: string, directoryState?: string | null): boolean {
   if (!inServicePincode(pincode)) return false;
   return inServiceState(directoryState ?? typedState);
+}
+
+/**
+ * CGST+SGST when the customer is in the seller's GST-registered state, IGST
+ * otherwise. Same normalisation as the delivery check, so "gujarat " can't
+ * pass delivery and then be taxed as out of state.
+ */
+export function gstTreatmentFor(customerState: string | undefined, sellerState: string): GstTreatment {
+  return customerState && normalState(customerState) === normalState(sellerState) ? "INTRA_STATE" : "INTER_STATE";
 }
