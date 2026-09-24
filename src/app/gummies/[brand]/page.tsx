@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { getBrandBySlug, getProductsByBrand } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
+import { ConcernChips } from "@/components/concern-chips";
+import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +23,15 @@ export async function generateMetadata({ params }: { params: Promise<{ brand: st
   return { title: `${name} — SooulOne Gummies`, description, openGraph: { title: name, description } };
 }
 
-export default async function BrandPage({ params }: { params: Promise<{ brand: string }> }) {
+export default async function BrandPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ brand: string }>;
+  searchParams: Promise<{ concern?: string }>;
+}) {
   const { brand: slug } = await params;
+  const { concern } = await searchParams;
   if (!ACCENT[slug]) notFound();
 
   // A database error propagates to the nearest error.tsx rather than being
@@ -32,6 +41,9 @@ export default async function BrandPage({ params }: { params: Promise<{ brand: s
   const products = await getProductsByBrand(slug);
 
   const name = brand?.name ?? slug.replace(/-/g, " ");
+  const options = filterOptions(brand?.categories ?? [], products);
+  const active = activeFilter(concern, options);
+  const shown = applyFilter(products, active);
 
   return (
     <>
@@ -41,23 +53,20 @@ export default async function BrandPage({ params }: { params: Promise<{ brand: s
         accent={ACCENT[slug]}
       />
 
-      {brand?.categories && brand.categories.length > 0 && (
-        <div className="border-b border-[--color-rule]">
-          <div className="mx-auto flex max-w-6xl flex-wrap gap-x-5 gap-y-2 px-5 py-4 text-small">
-            {brand.categories.map((c: { id: string; name: string }) => (
-              <span key={c.id} className="text-ink-soft">
-                {c.name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <ConcernChips
+        label="Shop by concern"
+        basePath={`/gummies/${slug}`}
+        options={options}
+        active={active}
+        total={products.length}
+        accent={ACCENT[slug]}
+      />
 
       <section className="mx-auto max-w-6xl px-5 py-12">
         {products.length > 0 ? (
           <>
             <h2 className="sr-only">Products</h2>
-            <ProductGrid products={products} />
+            <ProductGrid products={shown} />
           </>
         ) : (
           <Empty

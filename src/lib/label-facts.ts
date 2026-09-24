@@ -35,3 +35,19 @@ export function allergenLabel(allergens: readonly string[] | null | undefined): 
   if (!allergens) return null;
   return allergens.length === 0 ? "No allergens declared" : `Contains ${allergens.join(", ")}`;
 }
+
+/**
+ * Value per unit, so a shopper can compare packs of different sizes:
+ * "₹30.00 per 100 g" for food with a declared pack weight, "₹16.63 per
+ * serving" for supplements. Null when the size wasn't declared.
+ */
+export function unitPriceLabel(
+  p: { regulatoryType: string; weightGrams?: number | null; servingsPerContainer?: number | null },
+  pricePaise: number,
+  format: (paise: number) => string,
+): string | null {
+  if (p.regulatoryType === "HEALTH_SUPPLEMENT") {
+    return p.servingsPerContainer ? `${format(Math.round(pricePaise / p.servingsPerContainer))} per serving` : null;
+  }
+  return p.weightGrams ? `${format(Math.round((pricePaise * 100) / p.weightGrams))} per 100 g` : null;
+}

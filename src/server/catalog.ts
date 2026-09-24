@@ -6,7 +6,8 @@ import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
 import { productAvailability, type AvailabilityState } from "@/lib/checkout/availability";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delivery";
-import { ageLabel, sugarLabel } from "@/lib/label-facts";
+import { ageLabel, sugarLabel, unitPriceLabel } from "@/lib/label-facts";
+import { formatINR } from "@/lib/money";
 
 /**
  * Catalog reads.
@@ -34,6 +35,10 @@ export interface ProductSummary {
   brandSlug: string;
   brandName: string;
   categoryName: string;
+  /** For the brand-page concern filter. */
+  categorySlug: string;
+  /** "₹30.00 per 100 g" or "₹16.63 per serving"; null if the size wasn't declared. */
+  unitPriceLabel: string | null;
   availableInRetail: boolean;
   retailOnly: boolean;
   imageUrl: string | null;
@@ -101,6 +106,8 @@ function toSummary(p: any): ProductSummary {
     brandSlug: p.brand?.slug ?? "",
     brandName: p.brand?.name ?? "",
     categoryName: p.category?.name ?? "",
+    categorySlug: p.category?.slug ?? "",
+    unitPriceLabel: unitPriceLabel(p, displayPrice(p).pricePaise, formatINR),
     availableInRetail: p.availableInRetail,
     retailOnly: p.retailOnly,
     imageUrl: p.images?.find((i: any) => i.isPrimary)?.url ?? p.images?.[0]?.url ?? null,

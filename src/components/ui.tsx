@@ -149,7 +149,10 @@ export function ProductCard({ product }: { product: ProductSummary }) {
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <Price pricePaise={product.pricePaise} comparePaise={product.comparePaise} percentOff={product.percentOff} />
+        <span className="grid">
+          <Price pricePaise={product.pricePaise} comparePaise={product.comparePaise} percentOff={product.percentOff} />
+          {product.unitPriceLabel && <span className="tabular text-micro text-ink-faint">{product.unitPriceLabel}</span>}
+        </span>
         {product.retailOnly ? (
           <span className="text-micro font-semibold text-caution">In stores only</span>
         ) : product.availability.state === "out" ? (

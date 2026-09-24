@@ -5,6 +5,8 @@ import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { orderTokenMatches } from "@/lib/order-access";
 import { BasketSync } from "@/components/basket/basket-sync";
+import { OrderTracker } from "@/components/order-tracker";
+import { orderProgress } from "@/lib/order-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,11 @@ export default async function OrderPage({
   // that a retry would clear.
   const order: any = await db.order.findUnique({
     where: { orderNumber },
-    include: { items: true },
+    include: {
+      items: true,
+      // Only what the tracker reads; staff notes stay in admin (order-progress.ts).
+      events: { select: { type: true, detail: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+    },
   });
   // A wrong or missing token gets the same 404 as a nonexistent order, so the
   // page can't be used to confirm which order numbers exist.
@@ -51,6 +57,8 @@ export default async function OrderPage({
       <p className="text-small font-semibold text-veg">Order placed</p>
       <h1 className="mt-2 text-h1 font-extrabold">Thank you</h1>
       <p className="mt-3 text-lead text-ink-soft">{STATUS_COPY[order.status] ?? order.status}</p>
+
+      <OrderTracker progress={orderProgress(order, order.events)} />
 
       <div className="panel mt-8">
         <div className="panel-head flex items-center justify-between">
