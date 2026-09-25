@@ -4,6 +4,7 @@ import { buildOrderBill } from "./order-bill";
 import { emailButton, esc, renderOrderConfirmation } from "./email-templates";
 import { orderStatusUrl } from "./order-access";
 import { reportError } from "@/lib/observability";
+import { isUndeliverableTestAddress } from "./email-recipient";
 
 /**
  * Transactional email.
@@ -49,6 +50,12 @@ interface Sent {
 }
 
 async function send(to: string, subject: string, html: string, text: string): Promise<Sent> {
+  // Test orders use addresses like x@soulone.test; mailing them only bounces.
+  if (isUndeliverableTestAddress(to)) {
+    console.info(`[email] skipped "${subject}" to test address ${to}`);
+    return { delivered: false, reason: "test_address" };
+  }
+
   const resend = client();
 
   if (!resend) {

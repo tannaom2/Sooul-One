@@ -25,5 +25,6 @@ export async function POST(request: Request) {
     quote: result.quote,
     estimatedDeliveryDate: result.estimatedDeliveryDate,
     couponRejected: result.couponRejected,
+    couponMessage: result.couponMessage,
   });
 }

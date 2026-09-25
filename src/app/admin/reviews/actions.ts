@@ -5,7 +5,7 @@ import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { db } from "@/lib/db";
 import { requirePermission, audit } from "@/lib/auth";
 
-export async function moderateReview(reviewId: string, decision: "APPROVE" | "REJECT"): Promise<void> {
+export async function moderateReview(reviewId: string, decision: "APPROVE" | "REJECT" | "UNPUBLISH"): Promise<void> {
   const session = await requirePermission("reviews:moderate");
   if (!session) throw new Error("Not authorized.");
 
@@ -14,6 +14,10 @@ export async function moderateReview(reviewId: string, decision: "APPROVE" | "RE
 
   if (decision === "APPROVE") {
     await db.review.update({ where: { id: reviewId }, data: { isApproved: true } });
+  } else if (decision === "UNPUBLISH") {
+    // Taken off the product page and back into the queue, where it can be
+    // rejected (deleted) or approved again after a second look.
+    await db.review.update({ where: { id: reviewId }, data: { isApproved: false } });
   } else {
     // A rejected review is deleted rather than kept in a "rejected" state —
     // there's no product page or report that shows rejected reviews, so

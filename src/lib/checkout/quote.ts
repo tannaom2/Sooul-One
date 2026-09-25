@@ -137,7 +137,13 @@ export interface QuoteInput {
   readonly lines: readonly QuoteLineInput[];
   readonly estimatedDeliveryDate: Date;
   readonly gstTreatment: GstTreatment;
-  readonly coupon?: { readonly code: string; readonly type: DiscountType; readonly value: number };
+  readonly coupon?: {
+    readonly code: string;
+    readonly type: DiscountType;
+    readonly value: number;
+    /** The code applies only when the order, after bundle offers, reaches this. */
+    readonly minOrderPaise?: number | null;
+  };
   readonly bundles?: readonly BundleRule[];
   readonly shipping?: ShippingPolicy;
 }
@@ -163,6 +169,8 @@ export interface Quote {
   readonly igstPaise: Paise;
   readonly totalPaise: Paise;
   readonly appliedCouponCode?: string;
+  /** How far short of the coupon's minimum order this order is (0 when met or no minimum). */
+  readonly couponShortfallPaise: number;
   readonly blockedLineCount: number;
 }
 
@@ -334,9 +342,13 @@ export function buildQuote(input: QuoteInput): Quote {
   const bundleDiscountPaise = resolved.reduce((sum, r, i) => sum + (r.grossPaise - preCouponByLine[i]), 0);
 
   // --- 4. Coupon, on what the better-of-the-two discounts left ---------------
-  const { discountPaise } = input.coupon
-    ? applyDiscount(subtotalPaise - bundleDiscountPaise, input.coupon.type, input.coupon.value)
-    : { discountPaise: 0 };
+  const couponBase = subtotalPaise - bundleDiscountPaise;
+  const couponShortfallPaise =
+    input.coupon?.minOrderPaise && couponBase < input.coupon.minOrderPaise ? input.coupon.minOrderPaise - couponBase : 0;
+  const { discountPaise } =
+    input.coupon && couponShortfallPaise === 0
+      ? applyDiscount(couponBase, input.coupon.type, input.coupon.value)
+      : { discountPaise: 0 };
 
   const perLineDiscount = distributeDiscount(preCouponByLine, discountPaise);
 
@@ -428,6 +440,7 @@ export function buildQuote(input: QuoteInput): Quote {
     igstPaise,
     totalPaise: discountedSubtotal + shippingPaise,
     appliedCouponCode: discountPaise > 0 ? input.coupon?.code : undefined,
+    couponShortfallPaise,
     blockedLineCount,
   };
 }

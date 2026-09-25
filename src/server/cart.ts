@@ -18,6 +18,7 @@ import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
 import { getStoreControls } from "@/server/store-settings";
+import { couponValidity, minimumOrderMessage } from "@/lib/checkout/coupons";
 
 /**
  * Cart persistence and quoting.
@@ -207,24 +208,25 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   }));
 
   let coupon;
+  let couponMessage: string | null = null;
   if (context.couponCode) {
-    const now = new Date();
-    if (
-      found &&
-      found.isActive &&
-      new Date(found.validFrom) <= now &&
-      new Date(found.validUntil) >= now &&
-      (found.maxUses === null || found.usedCount < found.maxUses)
-    ) {
+    const validity = couponValidity(found, new Date());
+    if (validity.ok && found) {
       coupon = {
         code: found.code,
         type: found.discountType as "PERCENTAGE" | "FLAT",
         value: Number(found.discountValue.toString()),
+        minOrderPaise: found.minOrderValue == null ? null : decimalToPaise(found.minOrderValue),
       };
+    } else if (!validity.ok) {
+      couponMessage = validity.message;
     }
   }
 
   const quote = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon, bundles });
+  if (coupon?.minOrderPaise && quote.couponShortfallPaise > 0) {
+    couponMessage = minimumOrderMessage(coupon.minOrderPaise, quote.couponShortfallPaise, formatINR);
+  }
 
   return {
     quote,
@@ -233,6 +235,8 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     bundles,
     estimatedDeliveryDate,
     couponRejected: Boolean(context.couponCode) && !quote.appliedCouponCode,
+    /** Why the code didn't apply, in words for the shopper. */
+    couponMessage: context.couponCode && !quote.appliedCouponCode ? (couponMessage ?? "That code isn't valid for this order.") : null,
   };
 }
 

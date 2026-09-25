@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
  */
 export function useQuote(pincode: string, state: string, couponCode: string) {
   const [quote, setQuote] = useState<any>(null);
-  const [couponRejected, setCouponRejected] = useState(false);
+  const [couponRejected, setCouponRejected] = useState<string | null>(null);
   const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function useQuote(pincode: string, state: string, couponCode: string) {
         const body = await response.json().catch(() => ({}));
         if (response.ok) {
           setQuote(body.quote);
-          setCouponRejected(Boolean(body.couponRejected));
+          setCouponRejected(body.couponRejected ? (body.couponMessage ?? "That code isn't valid for this order.") : null);
           setEmpty(false);
         } else if (/basket is empty/i.test(body.message ?? "")) {
           setEmpty(true);

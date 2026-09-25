@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
@@ -39,8 +40,14 @@ export default async function AdminStores() {
               <span>
                 <strong>{s.name}</strong>
                 <span className="ml-2 text-ink-faint">{s.city}, {s.state}</span>
+                {!s.isActive && <span className="ml-2 text-micro font-semibold text-ink-faint">closed</span>}
               </span>
-              <span className="tabular text-ink-faint">{s.postalCode}</span>
+              <span className="flex items-center gap-4">
+                <span className="tabular text-ink-faint">{s.postalCode}</span>
+                <Link href={`/admin/stores/${s.id}`} className="underline">
+                  Edit
+                </Link>
+              </span>
             </div>
           ))}
         </div>

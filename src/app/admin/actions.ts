@@ -46,6 +46,11 @@ function num(form: FormData, key: string): number | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+/** The database refused a duplicate of a unique field (Prisma P2002). */
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === "P2002";
+}
+
 /** A trimmed text field, or undefined when left blank. */
 function text(form: FormData, key: string): string | undefined {
   const value = String(form.get(key) ?? "").trim();
@@ -174,6 +179,19 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     return { ok: false, message: STALE_PRODUCT };
   }
 
+  // SKU and web address are unique: say which product already has them,
+  // rather than failing the save with a database error.
+  const clash = await db.product.findFirst({
+    where: { OR: [{ sku: input.sku }, { slug: input.slug }], ...(id && { NOT: { id } }) },
+    select: { name: true, sku: true, slug: true },
+  });
+  if (clash) {
+    const fieldErrors: Record<string, string[]> = {};
+    if (clash.sku === input.sku) fieldErrors.sku = [`Already used by "${clash.name}". Each product needs its own SKU.`];
+    if (clash.slug === input.slug) fieldErrors.slug = [`Already used by "${clash.name}". Choose another web address.`];
+    return { ok: false, message: "That SKU or web address is already taken.", fieldErrors };
+  }
+
   // Copy editors (CONTENT) can change words but not money. Checked against
   // the stored row, not the form's claims about what changed.
   if (!can(session.role, "products:pricing")) {
@@ -246,16 +264,22 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   // `data` is built up field-by-field across the branches above, so its
   // static type is a loose Record — zod already validated its actual shape.
   let saved: { id: string; updatedAt: Date };
-  if (id && before) {
-    // Applies only if the product is still the version read above.
-    const { count } = await db.product.updateMany({
-      where: { id, updatedAt: before.updatedAt },
-      data: data as Prisma.ProductUncheckedUpdateManyInput,
-    });
-    if (count === 0) return { ok: false, message: STALE_PRODUCT };
-    saved = await db.product.findUniqueOrThrow({ where: { id }, select: { id: true, updatedAt: true } });
-  } else {
-    saved = await db.product.create({ data: data as Prisma.ProductCreateInput });
+  try {
+    if (id && before) {
+      // Applies only if the product is still the version read above.
+      const { count } = await db.product.updateMany({
+        where: { id, updatedAt: before.updatedAt },
+        data: data as Prisma.ProductUncheckedUpdateManyInput,
+      });
+      if (count === 0) return { ok: false, message: STALE_PRODUCT };
+      saved = await db.product.findUniqueOrThrow({ where: { id }, select: { id: true, updatedAt: true } });
+    } else {
+      saved = await db.product.create({ data: data as Prisma.ProductCreateInput });
+    }
+  } catch (error) {
+    // Someone took the same SKU or address in the instant since the check above.
+    if (isUniqueViolation(error)) return { ok: false, message: "That SKU or web address was just taken by another product. Choose another." };
+    throw error;
   }
 
   if (before) {
@@ -298,16 +322,30 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
     return { ok: false, message: "The expiry date must be after the manufacture date." };
   }
 
-  const batch = await db.productBatch.create({
-    data: {
-      productId,
-      batchNumber,
-      manufacturedOn,
-      expiresOn,
-      quantityReceived: quantity,
-      quantityRemaining: quantity,
-    },
-  });
+  const [product, existing] = await Promise.all([
+    db.product.findUnique({ where: { id: productId }, select: { name: true } }),
+    db.productBatch.findUnique({ where: { productId_batchNumber: { productId, batchNumber } }, select: { id: true } }),
+  ]);
+  if (!product) return { ok: false, message: "That product no longer exists. Reload the page and pick it again." };
+  const DUPLICATE_BATCH = `${product.name} already has a batch numbered ${batchNumber}. Check the number on the pack; each batch number can be received once.`;
+  if (existing) return { ok: false, message: DUPLICATE_BATCH };
+
+  let batch: { id: string };
+  try {
+    batch = await db.productBatch.create({
+      data: {
+        productId,
+        batchNumber,
+        manufacturedOn,
+        expiresOn,
+        quantityReceived: quantity,
+        quantityRemaining: quantity,
+      },
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, message: DUPLICATE_BATCH };
+    throw error;
+  }
 
   // The product's stock total follows automatically: a database trigger keeps
   // it equal to the sum of its batches.
@@ -324,25 +362,51 @@ export async function saveStore(_prev: ActionResult, form: FormData): Promise<Ac
   const session = await requirePermission("stores:write");
   if (!session) return { ok: false, message: NOT_ALLOWED };
 
+  const id = String(form.get("id") ?? "") || null;
   const name = String(form.get("name") ?? "").trim();
   const city = String(form.get("city") ?? "").trim();
   if (!name || !city) return { ok: false, message: "A store needs at least a name and a city." };
+  const postalCode = String(form.get("postalCode") ?? "").trim();
+  if (postalCode && !/^\d{6}$/.test(postalCode)) return { ok: false, message: "Enter a 6-digit pincode, or leave it blank." };
 
-  const store = await db.storeLocation.create({
-    data: {
-      name,
-      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
-      addressLine1: String(form.get("addressLine1") ?? ""),
-      addressLine2: String(form.get("addressLine2") ?? "") || null,
-      city,
-      state: String(form.get("state") ?? ""),
-      postalCode: String(form.get("postalCode") ?? ""),
-      phone: String(form.get("phone") ?? "") || null,
-      openingHours: String(form.get("openingHours") ?? "") || null,
-      latitude: num(form, "latitude") ?? null,
-      longitude: num(form, "longitude") ?? null,
-    },
-  });
+  const fields = {
+    name,
+    addressLine1: String(form.get("addressLine1") ?? "").trim(),
+    addressLine2: String(form.get("addressLine2") ?? "").trim() || null,
+    city,
+    state: String(form.get("state") ?? "").trim(),
+    postalCode,
+    phone: String(form.get("phone") ?? "").trim() || null,
+    openingHours: String(form.get("openingHours") ?? "").trim() || null,
+    latitude: num(form, "latitude") ?? null,
+    longitude: num(form, "longitude") ?? null,
+  };
+
+  if (id) {
+    // Editing keeps the store's web address stable, so links to it keep working.
+    const before = await db.storeLocation.findUnique({ where: { id } });
+    if (!before) return { ok: false, message: "That store no longer exists." };
+    const isActive = form.get("isActive") === "on";
+    const data = { ...fields, isActive };
+    await db.storeLocation.update({ where: { id }, data });
+    const changes = diffFields(before as unknown as Record<string, unknown>, data);
+    if (Object.keys(changes).length > 0) await audit(session, "UPDATE_STORE", "StoreLocation", id, changes);
+    revalidatePath("/admin/stores");
+    expireTag(STORES_TAG);
+    return { ok: true, message: isActive ? `${name} saved.` : `${name} saved and hidden from the site.` };
+  }
+
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const taken = await db.storeLocation.findUnique({ where: { slug }, select: { name: true } });
+  if (taken) return { ok: false, message: `There's already a store called "${taken.name}". Give this one a distinct name, e.g. with its area.` };
+
+  let store: { id: string };
+  try {
+    store = await db.storeLocation.create({ data: { ...fields, slug } });
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, message: "A store with that name was just added. Give this one a distinct name." };
+    throw error;
+  }
 
   await audit(session, "CREATE_STORE", "StoreLocation", store.id, { name, city });
   revalidatePath("/admin/stores");

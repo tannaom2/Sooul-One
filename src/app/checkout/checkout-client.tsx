@@ -393,7 +393,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
                       <div className="max-w-xs">
                         <label className="label" htmlFor="couponCode">Discount code (optional)</label>
                         <input id="couponCode" className="field" autoComplete="off" spellCheck={false} value={form.couponCode} onChange={(e) => set("couponCode", e.target.value.toUpperCase())} />
-                        {couponRejected && form.couponCode && <p className="mt-1 text-micro text-alert">That code isn&rsquo;t valid for this order.</p>}
+                        {couponRejected && form.couponCode && <p className="mt-1 text-micro text-alert">{couponRejected}</p>}
                       </div>
 
                       {/* Unchecked by default, and separate from the order. A phone number
