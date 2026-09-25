@@ -519,6 +519,7 @@ model AdminUser {
   /// phone that is still signed in is signed out the moment access is reset.
   sessionVersion Int         @default(0)
   auditLogs    AdminAuditLog[]
+  recoveryCodes AdminRecoveryCode[]
   createdAt    DateTime        @default(now())
 }
 
@@ -669,4 +670,19 @@ model StoreSettings {
   /// Bundle offers applied in the basket and checkout.
   bundlesEnabled Boolean  @default(true)
   updatedAt      DateTime @updatedAt
+}
+
+/// Single-use backup codes for two-factor sign-in, for when the authenticator
+/// phone is lost. Only a keyed fingerprint is stored (HMAC with the server's
+/// JWT_SECRET, src/lib/recovery-codes.ts), so a copy of the database alone
+/// can't be turned back into working codes.
+model AdminRecoveryCode {
+  id          String    @id @default(cuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  codeHash    String
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([adminUserId, codeHash])
 }

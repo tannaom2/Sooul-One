@@ -10,6 +10,7 @@ import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
 import { getReadiness } from "@/server/launch-readiness";
 import { getStoreControls } from "@/server/store-settings";
+import { recoveryCodeStatus } from "@/server/recovery-codes";
 import { stockView } from "@/lib/stock-view";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +113,7 @@ export default async function Dashboard() {
 
   // A paused store is the first thing anyone signing in should see.
   const controls = await getStoreControls();
+  const recovery = await recoveryCodeStatus(session.adminUserId).catch(() => ({ remaining: 10, issued: true }));
 
   // Only items this person can act on, and only when there is something to do.
   const attention = [
@@ -123,6 +125,13 @@ export default async function Dashboard() {
     !controls.codEnabled && {
       href: can(session.role, "settings:manage") ? "/admin/controls#cod" : "/admin#cod",
       text: "Cash on delivery is switched off",
+    },
+    (!recovery.issued || recovery.remaining <= 2) && {
+      href: "/admin/account",
+      text: recovery.issued
+        ? `Only ${recovery.remaining} recovery ${recovery.remaining === 1 ? "code" : "codes"} left: make a new set`
+        : "Set up recovery codes, so losing your phone doesn't lock you out",
+      warn: true,
     },
     launchBlockers > 0 && {
       href: "/admin/launch",

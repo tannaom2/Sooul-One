@@ -139,6 +139,8 @@ export async function resetAccess(_prev: TeamResult, form: FormData): Promise<Te
   const result = await applyChange(id, { resetAccess: true }, (t) => ({
     passwordHash,
     mfaSecret: null,
+    // The old recovery codes go with the old authenticator; setup issues new ones.
+    recoveryCodes: { deleteMany: {} },
     sessionVersion: t.sessionVersion + 1,
   }));
   if (!result.ok) return result;

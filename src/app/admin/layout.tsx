@@ -113,7 +113,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {session.email}
           </p>
           <p className="mb-2">{session.role.toLowerCase()}</p>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <Link href="/admin/account" className="hover:text-ink hover:underline">
+              Account security
+            </Link>
             <Link href="/" className="hover:text-ink hover:underline">
               View store
             </Link>

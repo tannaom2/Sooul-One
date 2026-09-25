@@ -15,6 +15,8 @@ import {
   verifyTotp,
 } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, isValidSetupKey } from "@/lib/team-rules";
+import { looksLikeRecoveryCode } from "@/lib/recovery-codes";
+import { recoveryCodeStatus, spendRecoveryCode } from "@/server/recovery-codes";
 
 /**
  * Admin sign-in, as deliberate steps.
@@ -135,6 +137,20 @@ async function verifyMfa(form: FormData): Promise<LoginState> {
     return { stage: "PASSWORD", error: "Sign in again." };
   }
 
+  // A recovery code (lost phone) is accepted in place of the authenticator's.
+  // Each works once, and using one is always logged, with how many are left.
+  if (looksLikeRecoveryCode(code)) {
+    if (!(await spendRecoveryCode(user.id, code))) {
+      await audit(session, "MFA_FAILED", "AdminUser", user.id, { with: "recovery_code" });
+      return { stage: "MFA", error: "That recovery code isn't right, or it has already been used." };
+    }
+    const { remaining } = await recoveryCodeStatus(user.id);
+    await issueSession({ ...session, mfaVerified: true });
+    await db.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await audit(session, "SIGN_IN_WITH_RECOVERY_CODE", "AdminUser", user.id, { remaining });
+    redirect("/admin/account?recovered=1");
+  }
+
   // Worth logging on its own: a wrong code after a right password means
   // someone has the password.
   if (!verifyTotp(code, user.mfaSecret)) {
@@ -206,7 +222,10 @@ async function completeEnrolment(form: FormData): Promise<LoginState> {
   await issueSession({ ...session, mfaVerified: true, sessionVersion: updated.sessionVersion });
   await audit(session, "MFA_ENROLLED", "AdminUser", user.id);
 
-  redirect("/admin");
+  // Straight on to making recovery codes. Shown on their own page rather than
+  // here: signing in swaps this page's layout for the console's, which would
+  // discard anything this form was about to display.
+  redirect("/admin/account?welcome=1");
 }
 
 export async function signOut() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { authenticate, type LoginState } from "./actions";
 import { keepFormValues } from "@/components/keep-form-values";
 
@@ -14,6 +14,8 @@ const INTRO: Record<LoginState["stage"], string> = {
 
 export default function AdminLogin() {
   const [state, submit, pending] = useActionState(authenticate, INITIAL);
+  // Recovery codes contain letters, so the 6-digit field's number keyboard won't do.
+  const [useRecovery, setUseRecovery] = useState(false);
   const button = (idle: string) => (
     <button className="btn btn-solid" disabled={pending}>
       {pending ? "Checking…" : idle}
@@ -29,18 +31,24 @@ export default function AdminLogin() {
         <form action={submit} className="mt-8 grid gap-4">
           <input type="hidden" name="step" value="mfa" />
           <div>
-            <label className="label" htmlFor="code">Authentication code</label>
+            <label className="label" htmlFor="code">{useRecovery ? "Recovery code" : "Authentication code"}</label>
             <input
+              key={useRecovery ? "recovery" : "totp"}
               id="code"
               name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
+              inputMode={useRecovery ? "text" : "numeric"}
+              autoComplete={useRecovery ? "off" : "one-time-code"}
+              autoCapitalize={useRecovery ? "characters" : undefined}
+              spellCheck={false}
               autoFocus
               className="field tabular tracking-[0.3em]"
-              placeholder="000000"
+              placeholder={useRecovery ? "XXXXX-XXXXX" : "000000"}
             />
           </div>
-          {button("Verify code")}
+          {button(useRecovery ? "Use recovery code" : "Verify code")}
+          <button type="button" onClick={() => setUseRecovery((v) => !v)} className="justify-self-start text-small underline">
+            {useRecovery ? "Use my authenticator app instead" : "Lost your phone? Use a recovery code"}
+          </button>
         </form>
       )}
 
