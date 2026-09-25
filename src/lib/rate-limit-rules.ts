@@ -63,6 +63,27 @@ export function signInBlocked(counts: Record<keyof typeof SIGN_IN_LIMITS, number
 }
 
 /**
+ * Public storefront endpoints, per IP. Deliberately generous: Indian mobile
+ * carriers put many customers behind one IP address (carrier-grade NAT), so
+ * these stop floods and scripts, never a busy evening. Each is several times
+ * what one real shopper could do.
+ */
+export const PUBLIC_LIMITS = {
+  /** Reviews are moderated anyway; this stops spam filling the queue. */
+  reviews: { max: 10, windowSeconds: 60 * 60 },
+  /** Each order holds stock, so scripted orders could empty the shelves. */
+  createOrder: { max: 20, windowSeconds: 10 * 60 },
+  /** Re-quotes as the shopper types; each one reads the basket and stock. */
+  quote: { max: 300, windowSeconds: 10 * 60 },
+  /** Each new pincode is a call to India Post on our behalf. */
+  pincode: { max: 60, windowSeconds: 10 * 60 },
+  /** Browser analytics events; a flood would bloat the events table. */
+  events: { max: 600, windowSeconds: 10 * 60 },
+} as const satisfies Record<string, Limit>;
+
+export type PublicScope = keyof typeof PUBLIC_LIMITS;
+
+/**
  * The second factor and first-time setup. Reaching these needs the right
  * password already, so they're keyed on the account.
  */

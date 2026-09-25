@@ -1,6 +1,9 @@
 import "server-only";
-import { after } from "next/server";
+import { NextResponse, after } from "next/server";
+import { headers } from "next/headers";
 import { db } from "@/lib/db";
+import { PUBLIC_LIMITS, clientIp, type PublicScope } from "@/lib/rate-limit-rules";
+import { reportError } from "@/lib/observability";
 
 /**
  * Fixed-window attempt counters in Postgres (RateLimit table). They survive
@@ -41,6 +44,26 @@ export async function hit(keys: readonly string[], windowSeconds: number): Promi
 export async function overLimit(key: string, limit: { max: number; windowSeconds: number }): Promise<boolean> {
   const counts = await hit([key], limit.windowSeconds);
   return (counts.get(key) ?? 0) > limit.max;
+}
+
+/**
+ * For a public route: a 429 response when this IP is over the scope's limit,
+ * or null to carry on. Fails open: if the counter can't be read (a database
+ * hiccup), the request goes ahead, since blocking real shoppers is worse than
+ * a brief gap in flood protection.
+ */
+export async function limitPublic(scope: PublicScope): Promise<NextResponse | null> {
+  const limit = PUBLIC_LIMITS[scope];
+  try {
+    if (!(await overLimit(`${scope}:ip:${clientIp(await headers())}`, limit))) return null;
+  } catch (error) {
+    reportError("rate-limit", error, { scope });
+    return null;
+  }
+  return NextResponse.json(
+    { message: "Too many requests from your connection. Wait a few minutes and try again." },
+    { status: 429, headers: { "Retry-After": String(limit.windowSeconds) } },
+  );
 }
 
 /** Forget these keys, e.g. an account's failures after a successful sign-in. */

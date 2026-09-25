@@ -18,6 +18,7 @@ import { recordOrderEvent } from "@/lib/order-events";
 import { getCheckoutState } from "@/server/store-settings";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import { reportError } from "@/lib/observability";
+import { limitPublic } from "@/server/rate-limit";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -48,6 +49,9 @@ class SoldOut extends Error {
 class CouponUsedUp extends Error {}
 
 export async function POST(request: Request) {
+  const limited = await limitPublic("createOrder");
+  if (limited) return limited;
+
   const sessionId = await readSessionId();
   if (!sessionId) {
     return NextResponse.json({ message: "Your basket is empty." }, { status: 400 });

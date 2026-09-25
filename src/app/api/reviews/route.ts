@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isSellable } from "@/lib/basket-rules";
 import { reviewInputSchema } from "@/lib/validation/review";
+import { limitPublic } from "@/server/rate-limit";
 
 /**
  * Review submission.
@@ -18,6 +19,9 @@ import { reviewInputSchema } from "@/lib/validation/review";
  * approves one.
  */
 export async function POST(request: Request) {
+  const limited = await limitPublic("reviews");
+  if (limited) return limited;
+
   const parsed = reviewInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(

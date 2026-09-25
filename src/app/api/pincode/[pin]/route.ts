@@ -4,6 +4,7 @@ import { estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
 import { OUTSIDE_AREA_MESSAGE, isServiceable } from "@/lib/checkout/service-area";
 import { lookupPincode } from "@/server/pincode";
 import { reportError } from "@/lib/observability";
+import { limitPublic } from "@/server/rate-limit";
 
 /**
  * City, state and delivery estimate for a pincode, for checkout autofill,
@@ -15,6 +16,8 @@ import { reportError } from "@/lib/observability";
 export async function GET(_request: Request, { params }: { params: Promise<{ pin: string }> }) {
   const { pin } = await params;
   if (!PINCODE.test(pin)) return NextResponse.json({ message: "Enter a 6-digit pincode." }, { status: 400 });
+  const limited = await limitPublic("pincode");
+  if (limited) return limited;
 
   const arrivesBy = estimateDeliveryDate(new Date(), zoneForPincode(pin)).toISOString();
   try {

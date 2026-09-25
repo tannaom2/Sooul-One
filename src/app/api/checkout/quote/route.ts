@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { quoteCart, readSessionId } from "@/server/cart";
+import { limitPublic } from "@/server/rate-limit";
 
 const schema = z.object({
   pincode: z.string().regex(/^\d{6}$/).optional(),
@@ -12,6 +13,8 @@ const schema = z.object({
 export async function POST(request: Request) {
   const sessionId = await readSessionId();
   if (!sessionId) return NextResponse.json({ message: "Your basket is empty." }, { status: 400 });
+  const limited = await limitPublic("quote");
+  if (limited) return limited;
 
   const parsed = schema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
