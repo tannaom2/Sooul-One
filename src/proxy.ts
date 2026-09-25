@@ -5,9 +5,14 @@ import {
   SESSION_COOKIE,
   SESSION_COOKIE_OPTIONS,
 } from "@/lib/session-cookie";
+import { contentSecurityPolicy, newNonce } from "@/lib/csp";
 
 /**
- * Runs before every page request. Two jobs:
+ * Runs before every page request. Three jobs:
+ *
+ * 0. Security: a fresh script nonce and Content-Security-Policy for every
+ *    request (src/lib/csp.ts). The policy goes on the request too, which is
+ *    where Next.js reads the nonce to stamp its own scripts.
  *
  * 1. Storefront: issue the guest session cookie up front. Server Components
  *    are not allowed to set cookies, so doing it during page render (as the
@@ -41,7 +46,9 @@ export function proxy(request: NextRequest) {
       : null;
   if (newSessionId) request.cookies.set(SESSION_COOKIE, newSessionId);
 
+  const csp = contentSecurityPolicy(newNonce(), { dev: process.env.NODE_ENV === "development" });
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("content-security-policy", csp);
   requestHeaders.set("x-invoke-path", pathname);
   requestHeaders.delete("x-new-session");
   if (newSessionId) requestHeaders.set("x-new-session", "1");
@@ -54,6 +61,7 @@ export function proxy(request: NextRequest) {
   }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
   if (newSessionId) response.cookies.set(SESSION_COOKIE, newSessionId, SESSION_COOKIE_OPTIONS);
 
   // Sliding expiry: page views only. Not the owner console or APIs, and not

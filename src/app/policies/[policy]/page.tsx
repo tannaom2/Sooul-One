@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 
-export const dynamic = "force-static";
+// Rendered per request, not prebuilt: every page needs its own script nonce
+// for the Content-Security-Policy (src/lib/csp.ts), and a prebuilt page has none.
+export const dynamic = "force-dynamic";
 
 /**
  * Policy pages — Privacy, Terms, Refunds, Shipping.
@@ -118,10 +120,6 @@ const POLICIES: Record<string, Policy> = {
     ],
   },
 };
-
-export function generateStaticParams() {
-  return Object.keys(POLICIES).map((policy) => ({ policy }));
-}
 
 export default async function PolicyPage({ params }: { params: Promise<{ policy: string }> }) {
   const { policy: slug } = await params;

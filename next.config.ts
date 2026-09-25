@@ -10,23 +10,8 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
-  {
-    // Razorpay's hosted checkout needs script/frame access; Cloudinary serves
-    // images. Nothing else is permitted a network origin.
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: https://res.cloudinary.com",
-      "frame-src https://api.razorpay.com https://checkout.razorpay.com",
-      "connect-src 'self' https://api.razorpay.com",
-      "form-action 'self'",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-    ].join("; "),
-  },
+  // Content-Security-Policy is set per request in src/proxy.ts, because it
+  // carries a fresh script nonce each time (src/lib/csp.ts).
 ];
 
 const nextConfig: NextConfig = {
