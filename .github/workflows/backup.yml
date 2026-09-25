@@ -1,0 +1,95 @@
+name: Database backup
+
+# Nightly encrypted, verified backup of the production database (docs/DR.md).
+#
+#   1. Dump with Postgres 18's own pg_dump (it must be at least the server's version).
+#   2. Restore that dump into a throwaway Postgres and compare every table's
+#      row count with the live database; any difference fails the job.
+#   3. Encrypt to the public key in .github/backup-recipient.txt (age), delete
+#      the plain dump, and keep the encrypted file for 30 days. Only the
+#      owner's private key, held in their password manager, can open it.
+#
+# Live mode needs one repository secret, BACKUP_DATABASE_URL: the database's
+# DIRECT (not pooled) connection string. Until it's set, the job runs in
+# rehearsal mode against a freshly migrated and seeded test database, so the
+# whole pipeline is proven either way. A failed scheduled run emails the
+# account that owns this workflow.
+on:
+  schedule:
+    - cron: "30 21 * * *" # 03:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      restored: # the dump is restored here to prove it works
+        image: postgres:18
+        env:
+          POSTGRES_USER: drill
+          POSTGRES_PASSWORD: drill
+          POSTGRES_DB: drill
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U drill" --health-interval 5s --health-timeout 5s --health-retries 10
+      rehearsal: # stands in for production until BACKUP_DATABASE_URL is set
+        image: postgres:18
+        env:
+          POSTGRES_USER: rehearsal
+          POSTGRES_PASSWORD: rehearsal
+          POSTGRES_DB: rehearsal
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rehearsal" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MODE: ${{ secrets.BACKUP_DATABASE_URL != '' && 'live' || 'rehearsal' }}
+      SOURCE_URL: ${{ secrets.BACKUP_DATABASE_URL || 'postgresql://rehearsal:rehearsal@localhost:5434/rehearsal' }}
+      RESTORED_URL: postgresql://drill:drill@localhost:5433/drill
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: "Rehearsal only: build a test database to back up"
+        if: env.MODE == 'rehearsal'
+        env:
+          DATABASE_URL: ${{ env.SOURCE_URL }}
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
+
+      - name: Dump
+        run: |
+          FILE="sooulone-$(date -u +%Y%m%d-%H%M)-$MODE.dump"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          docker run --rm --network host -v "$PWD:/work" postgres:18 \
+            pg_dump "$SOURCE_URL" --format=custom --no-owner --no-privileges --file="/work/$FILE"
+          ls -l "$FILE"
+
+      - name: Prove the dump restores
+        run: |
+          docker run --rm --network host -v "$PWD:/work" postgres:18 \
+            pg_restore --no-owner --no-privileges --exit-on-error --dbname="$RESTORED_URL" "/work/$FILE"
+          npx tsx scripts/backup-verify.mts
+
+      - name: Encrypt and remove the plain dump
+        run: npx tsx scripts/backup-encrypt.mts "$FILE" backup-out
+
+      - name: Keep the encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILE }}
+          path: backup-out/
+          retention-days: ${{ env.MODE == 'live' && 30 || 3 }}
+          if-no-files-found: error

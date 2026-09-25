@@ -1,0 +1,3 @@
+# SooulOne backup public key (age). Backups are encrypted to it; see docs/DR.md.
+# created 2026-09-25T05:20:40.356Z
+age1hkcyzdr6fnxugn3sll6mrfytez4su7c3294rhns0q6altxnqe3lq6dv7hw
