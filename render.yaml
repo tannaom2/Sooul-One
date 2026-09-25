@@ -11,12 +11,20 @@ services:
     runtime: node
     plan: starter
     region: singapore # closest to an India-based customer base
-    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run build
+    # Migrations run in preDeployCommand, after a successful build and before
+    # the new version takes traffic: a failed build can't leave the database
+    # migrated ahead of the code, and a failed migration keeps the old version live.
+    buildCommand: npm ci && npx prisma generate && npm run build
+    preDeployCommand: npx prisma migrate deploy
     startCommand: npm run start
     healthCheckPath: /api/health
-    autoDeploy: true
+    # Deploy only commits whose GitHub checks (CI) have passed.
+    autoDeployTrigger: checksPass
     envVars:
       - key: DATABASE_URL
+        sync: false
+      # Direct (unpooled) connection, used only by migrations in preDeployCommand.
+      - key: DIRECT_URL
         sync: false
       - key: JWT_SECRET
         generateValue: true

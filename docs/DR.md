@@ -56,6 +56,13 @@ For mistakes inside the last few days (the window depends on the Neon plan).
 - If more than a few minutes of orders were lost, pause orders (Store controls) while you reconcile.
 - Write a short note of what happened, the restore point used, and what was re-entered.
 
+## Database settings
+
+- **Two connection strings.** `DATABASE_URL` is the **pooled** one, used by the app. `DIRECT_URL` is the **direct** one, used only by migrations (Prisma's migration lock is unreliable through the pooler). `BACKUP_DATABASE_URL` (a GitHub secret) is also direct.
+- **Timeouts** are set on the database itself (migration `20260927010000`): 30 s per statement, 10 s waiting for a lock, 60 s idle inside a transaction. New connections pick them up at once; the pooler's existing connections pick them up as they're recycled, or immediately after a compute restart in the Neon console.
+- **Rules on values** (CHECK constraints) stop impossible data whatever writes it: negative prices or totals, ratings outside 1–5, basket quantities outside 1–20, expiry before manufacture, stock below zero.
+- **App-only role:** `docs/db-app-role.sql` creates a role that can change rows but not tables. Set it up on the production database when it moves to Singapore.
+
 ## Keys and secrets
 
 Keep these in the owner's password manager. They can't be recovered from anywhere else:

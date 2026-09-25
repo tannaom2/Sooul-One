@@ -114,7 +114,8 @@ that you actually use:
 
 | Variable | Where it comes from |
 |---|---|
-| `DATABASE_URL` | Neon or Supabase |
+| `DATABASE_URL` | Neon or Supabase, the **pooled** connection string |
+| `DIRECT_URL` | The same database's **direct** (unpooled) connection string, used only for migrations |
 | `JWT_SECRET` | Render can generate this — click "Generate" |
 | `SITE_URL` | Your live URL, e.g. `https://soulone.onrender.com` — used for the sitemap and page metadata |
 | `ADMIN_PATH` | Anything non-obvious |
@@ -217,8 +218,25 @@ git commit -m "What changed"
 git push
 ```
 
-Render redeploys `main` automatically. Migrations run as part of the build, so
-schema changes ship with the code that needs them.
+Render redeploys `main` automatically, but only once CI has passed on that commit
+(`autoDeployTrigger: checksPass`). Migrations run in the **pre-deploy** step: after
+the build succeeds and before the new version takes traffic. If a migration fails,
+the old version keeps running.
+
+### Changing the database schema safely
+
+The new code and the old code both run against the same database for a short
+while during every deploy, so every migration must work with **both**. Make
+breaking changes in two deploys ("expand, then contract"):
+
+1. **Expand.** Add the new column or table, nullable or with a default. Deploy code
+   that writes both old and new, and reads the new with a fallback.
+2. **Backfill** existing rows if needed, in a migration or a one-off script.
+3. **Contract**, in a later deploy once nothing reads the old one: drop the old
+   column or make the new one required.
+
+Never rename or drop a column in the same deploy as the code change. Anything that
+deletes data needs a fresh backup first (docs/DR.md).
 
 To roll back, use **Deploys → Rollback** in Render. Note that this reverts the
 code but **not** the database — a migration that dropped a column is not undone

@@ -26,6 +26,10 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"),
+    // Migrations use the DIRECT connection when one is set: Prisma's migration
+    // lock (a Postgres advisory lock) isn't reliable through Neon's pooler
+    // (PgBouncer), which is why migrate deploy kept timing out on "acquire a
+    // postgres advisory lock". The app itself keeps the pooled DATABASE_URL.
+    url: process.env.DIRECT_URL || env("DATABASE_URL"),
   },
 });
