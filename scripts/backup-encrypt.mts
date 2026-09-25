@@ -7,7 +7,7 @@
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { encryptBytes, readRecipient, sha256 } from "./backup-lib.mts";
+import { encryptBytes, readRecipient, sha256 } from "./backup-lib";
 
 const [dumpPath, outDir] = process.argv.slice(2);
 if (!dumpPath || !outDir) {

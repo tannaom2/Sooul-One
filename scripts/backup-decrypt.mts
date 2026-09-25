@@ -6,7 +6,7 @@
  *   npx tsx scripts/backup-decrypt.mts <backup.dump.age> <private-key-file>
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { decryptBytes, readIdentity, sha256 } from "./backup-lib.mts";
+import { decryptBytes, readIdentity, sha256 } from "./backup-lib";
 
 const [agePath, keyPath] = process.argv.slice(2);
 if (!agePath || !keyPath) {

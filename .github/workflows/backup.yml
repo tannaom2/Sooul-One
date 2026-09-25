@@ -24,7 +24,7 @@ on:
     paths:
       - ".github/workflows/backup.yml"
       - ".github/backup-recipient.txt"
-      - "scripts/backup-*.mts"
+      - "scripts/backup-*"
 
 permissions:
   contents: read

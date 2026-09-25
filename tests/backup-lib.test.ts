@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as age from "age-encryption";
-import { compareCounts, decryptBytes, encryptBytes, readIdentity, readRecipient, sha256 } from "../scripts/backup-lib.mts";
+import { compareCounts, decryptBytes, encryptBytes, readIdentity, readRecipient, sha256 } from "../scripts/backup-lib";
 
 describe("backup encryption", () => {
   it("opens only with the matching private key", async () => {

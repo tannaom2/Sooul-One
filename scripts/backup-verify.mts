@@ -7,7 +7,7 @@
  *   SOURCE_URL=... RESTORED_URL=... npx tsx scripts/backup-verify.mts
  */
 import pg from "pg";
-import { compareCounts } from "./backup-lib.mts";
+import { compareCounts } from "./backup-lib";
 
 async function counts(url: string): Promise<Record<string, number>> {
   const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 30000 });
