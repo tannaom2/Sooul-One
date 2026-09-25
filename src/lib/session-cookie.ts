@@ -5,12 +5,21 @@
  */
 export const SESSION_COOKIE = "soulone_cart";
 
+/**
+ * A year, renewed on every page visit (src/proxy.ts), so a basket is lost only
+ * after a year with no visit. Peers' session cookies (Shopify's
+ * _shopify_essential, Magento's persistent cart) work the same way. Under
+ * Chrome's 400-day cap, and set by the server, so Safari's 7-day limit on
+ * script-written cookies doesn't apply.
+ */
+const BASKET_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
 export const SESSION_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
   secure: process.env.NODE_ENV === "production",
   path: "/",
-  maxAge: 60 * 60 * 24 * 30,
+  maxAge: BASKET_COOKIE_MAX_AGE,
 };
 
 /**
@@ -25,5 +34,5 @@ export const BASKET_COUNT_COOKIE_OPTIONS = {
   sameSite: "lax" as const,
   secure: process.env.NODE_ENV === "production",
   path: "/",
-  maxAge: 60 * 60 * 24 * 30,
+  maxAge: BASKET_COOKIE_MAX_AGE,
 };

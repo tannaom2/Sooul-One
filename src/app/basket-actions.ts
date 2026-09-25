@@ -6,6 +6,7 @@ import {
   getBasketSnapshot,
   getOrCreateSessionId,
   readSessionId,
+  removeUnavailable,
   updateQuantity,
   writeBasketCount,
 } from "@/server/cart";
@@ -75,6 +76,19 @@ export async function addToBasket(productId: string, quantity: number): Promise<
   } catch (error) {
     reportError("basket/add-snapshot", error);
     return { ok: false, message: "Added, but your basket didn't refresh. Open it again to see it." };
+  }
+}
+
+/** Drop what can't ship and trim what partly can, so the basket can check out. */
+export async function removeUnavailableItems(): Promise<BasketResult> {
+  const sessionId = await readSessionId();
+  if (!sessionId) return { ok: true, basket: EMPTY_BASKET };
+  try {
+    await removeUnavailable(sessionId);
+    return { ok: true, basket: await snapshotFor(sessionId) };
+  } catch (error) {
+    reportError("basket/remove-unavailable", error);
+    return { ok: false, message: TRY_AGAIN };
   }
 }
 

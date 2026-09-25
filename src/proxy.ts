@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/session-cookie";
+import {
+  BASKET_COUNT_COOKIE,
+  BASKET_COUNT_COOKIE_OPTIONS,
+  SESSION_COOKIE,
+  SESSION_COOKIE_OPTIONS,
+} from "@/lib/session-cookie";
 
 /**
  * Runs before every page request. Two jobs:
@@ -8,7 +13,10 @@ import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/session-cookie";
  *    are not allowed to set cookies, so doing it during page render (as the
  *    funnel tracking once did) threw — and the error was swallowed, which is
  *    why "Visited the site" read zero. Here it can be set, and it's also put
- *    on the request so the page rendering right now already sees it.
+ *    on the request so the page rendering right now already sees it. An
+ *    existing basket cookie (and its badge count) is re-issued with a fresh
+ *    year on every page visit: a sliding expiry, so a returning shopper's
+ *    basket is still there.
  *
  * 2. Owner console: bounce requests with no admin cookie at all. This only
  *    checks the cookie is PRESENT — real verification (signature, expiry, MFA,
@@ -47,6 +55,16 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   if (newSessionId) response.cookies.set(SESSION_COOKIE, newSessionId, SESSION_COOKIE_OPTIONS);
+
+  // Sliding expiry: page views only. Not the owner console or APIs, and not
+  // POSTs: a basket Server Action posts to the page path and rewrites the
+  // badge count itself, which a re-issued old count here would contradict.
+  const existing = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!newSessionId && existing && !isAdmin && !isApi && request.method === "GET") {
+    response.cookies.set(SESSION_COOKIE, existing, SESSION_COOKIE_OPTIONS);
+    const count = request.cookies.get(BASKET_COUNT_COOKIE)?.value;
+    if (count) response.cookies.set(BASKET_COUNT_COOKIE, count, BASKET_COUNT_COOKIE_OPTIONS);
+  }
   return response;
 }
 

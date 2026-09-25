@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { quoteCart, readSessionId } from "@/server/cart";
+import { priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
 import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
+import { RemoveUnavailableButton } from "@/components/remove-unavailable-button";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { formatDate } from "@/lib/format";
 import { reportError } from "@/lib/observability";
@@ -59,6 +60,7 @@ export default async function CartPage() {
             {quote.lines.map((line) => {
               const item = itemById.get(line.productId) as any;
               const blocked = line.status !== "OK";
+              const priceNote = item ? priceNoteFor(item) : null;
 
               return (
                 <li key={line.productId} className="shelf-row flex gap-4 py-5">
@@ -101,6 +103,9 @@ export default async function CartPage() {
                       <p className="mt-3 border-l-4 border-alert bg-shelf px-3 py-2 text-small">
                         {line.customerMessage}
                       </p>
+                    )}
+                    {priceNote && (
+                      <p className="mt-3 border-l-4 border-[--color-rule] bg-shelf px-3 py-2 text-small">{priceNote}</p>
                     )}
                   </div>
                 </li>
@@ -156,12 +161,10 @@ export default async function CartPage() {
                 </Link>
               ) : (
                 <>
-                  <button disabled className="btn btn-solid w-full">
-                    Checkout
-                  </button>
-                  <p className="mt-2 text-small text-alert">
-                    Remove or reduce the flagged items to continue.
+                  <p className="mb-2 text-small text-alert">
+                    Some items can&rsquo;t ship as they are. Remove them to check out with the rest.
                   </p>
+                  <RemoveUnavailableButton />
                 </>
               )}
               <p className="mt-3 text-micro text-ink-faint">

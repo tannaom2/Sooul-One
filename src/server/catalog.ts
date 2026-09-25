@@ -8,6 +8,7 @@ import { productAvailability, type AvailabilityState } from "@/lib/checkout/avai
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { ageLabel, sugarLabel, unitPriceLabel } from "@/lib/label-facts";
 import { formatINR } from "@/lib/money";
+import { SELLABLE_PRODUCT_WHERE } from "@/lib/basket-rules";
 
 /**
  * Catalog reads.
@@ -185,7 +186,7 @@ export const getBrandBySlug = unstable_cache(
 export const getProductsByBrand = unstable_cache(
   async (brandSlug: string): Promise<ProductSummary[]> => {
     const rows = await db.product.findMany({
-      where: { isActive: true, brand: { slug: brandSlug } },
+      where: { ...SELLABLE_PRODUCT_WHERE, brand: { slug: brandSlug, isActive: true } },
       include: LIST_INCLUDE,
       orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
     });
@@ -198,7 +199,7 @@ export const getProductsByBrand = unstable_cache(
 export const getGummiesProducts = unstable_cache(
   async (): Promise<ProductSummary[]> => {
     const rows = await db.product.findMany({
-      where: { isActive: true, regulatoryType: "HEALTH_SUPPLEMENT" },
+      where: { ...SELLABLE_PRODUCT_WHERE, regulatoryType: "HEALTH_SUPPLEMENT" },
       include: LIST_INCLUDE,
       orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
     });
@@ -211,7 +212,7 @@ export const getGummiesProducts = unstable_cache(
 export const getFeatured = unstable_cache(
   async (limit = 6): Promise<ProductSummary[]> => {
     const rows = await db.product.findMany({
-      where: { isActive: true, isFeatured: true },
+      where: { ...SELLABLE_PRODUCT_WHERE, isFeatured: true },
       include: LIST_INCLUDE,
       take: limit,
     });

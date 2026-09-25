@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { displayPrice, getProductBySlug } from "@/server/catalog";
+import { isSellable } from "@/lib/basket-rules";
 import Link from "next/link";
 import { VegMark, Price, BRAND_ACCENT, Rating } from "@/components/ui";
 import { ProductGallery } from "@/components/product/product-gallery";
@@ -26,7 +27,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const product: any = await getProductBySlug(slug);
-  if (!product || !product.isActive) return {};
+  if (!product || !isSellable(product)) return {};
 
   const title = `${product.name} — ${product.brand?.name ?? "SooulOne"}`;
   const description = product.shortDescription;
@@ -62,7 +63,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   // disguised as "product doesn't exist" — an outage and a bad slug need
   // different responses, and only one of them is this page's job to detect.
   const product: any = await getProductBySlug(slug);
-  if (!product || !product.isActive) notFound();
+  if (!product || !isSellable(product)) notFound();
 
   // The session cookie is issued by proxy.ts before this renders, so it's the
   // same identity the cart and checkout events join against. recordEvent

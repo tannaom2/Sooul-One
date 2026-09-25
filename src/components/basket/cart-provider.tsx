@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { addToBasket, loadBasket, setBasketQuantity } from "@/app/basket-actions";
+import { addToBasket, loadBasket, removeUnavailableItems, setBasketQuantity } from "@/app/basket-actions";
 import type { BasketSnapshot } from "@/lib/basket-types";
 import { track } from "@/lib/track";
 
@@ -30,6 +30,8 @@ interface CartContextValue {
   /** Resolves true when the server accepted the add. */
   add: (productId: string, quantity: number) => Promise<boolean>;
   setQuantity: (itemId: string, quantity: number) => Promise<void>;
+  /** Drop what can't ship, trim what partly can. */
+  removeUnavailable: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -126,6 +128,20 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
     [accept, addOptimistic],
   );
 
+  const removeUnavailable = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        setError(null);
+        startTransition(async () => {
+          const result = await removeUnavailableItems();
+          if (result.ok) accept(result.basket);
+          else setError(result.message);
+          resolve();
+        });
+      }),
+    [accept],
+  );
+
   // Report the prompts the shopper actually saw, once each per page view.
   useEffect(() => {
     const b = state.basket;
@@ -152,6 +168,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         closeBasket,
         add,
         setQuantity,
+        removeUnavailable,
         refresh,
       }}
     >

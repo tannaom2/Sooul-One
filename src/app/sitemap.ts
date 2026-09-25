@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { db } from "@/lib/db";
+import { SELLABLE_PRODUCT_WHERE } from "@/lib/basket-rules";
 
 const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
@@ -34,7 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   const products = await db.product.findMany({
-    where: { isActive: true },
+    where: SELLABLE_PRODUCT_WHERE,
     select: { slug: true, updatedAt: true },
   });
 

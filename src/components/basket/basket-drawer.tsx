@@ -14,7 +14,7 @@ import { QuantityStepper } from "./quantity-stepper";
  * backdrop close it, and focus returns to whatever opened it.
  */
 export function BasketDrawer() {
-  const { basket, count, isOpen, pending, error, closeBasket, setQuantity, add } = useCart();
+  const { basket, count, isOpen, pending, error, closeBasket, setQuantity, add, removeUnavailable } = useCart();
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
@@ -168,6 +168,7 @@ export function BasketDrawer() {
                         </span>
                       </div>
                       {line.message && <p className="mt-2 border-l-4 border-alert bg-shelf px-2 py-1 text-micro">{line.message}</p>}
+                      {line.priceNote && <p className="mt-2 border-l-4 border-[--color-rule] bg-shelf px-2 py-1 text-micro">{line.priceNote}</p>}
                     </div>
                   </li>
                 ))}
@@ -200,7 +201,12 @@ export function BasketDrawer() {
                 Checkout · {formatINR(basket.totalPaise)}
               </Link>
             ) : (
-              <p className="mt-3 text-small text-alert">Remove or reduce the flagged items to check out.</p>
+              <>
+                <p className="mt-3 text-small text-alert">Some items can&rsquo;t ship as they are.</p>
+                <button type="button" onClick={() => void removeUnavailable()} disabled={pending} className="btn btn-solid mt-2 w-full">
+                  Remove unavailable items
+                </button>
+              </>
             )}
             <Link href="/cart" onClick={closeBasket} className="mt-2 block text-center text-small underline">
               View full basket

@@ -12,7 +12,8 @@ import { decimalToPaise } from "@/lib/format";
 import { DEFAULT_SHIPPING_POLICY, buildQuote, type QuoteLineInput } from "@/lib/checkout/quote";
 import { freeDeliveryProgress, nextOfferNudge } from "@/lib/checkout/basket-nudges";
 import { MAX_LINE_QUANTITY, type BasketSnapshot } from "@/lib/basket-types";
-import { formatINR } from "@/lib/money";
+import { formatINR, formatPriceTag } from "@/lib/money";
+import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
 import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
@@ -59,12 +60,46 @@ const CART_ITEM_INCLUDE = {
   product: {
     include: {
       brand: true,
+      category: { select: { isActive: true } },
       batches: { orderBy: { expiresOn: "asc" as const } },
       images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
     },
   },
   variant: true,
 };
+
+type PricedProduct = {
+  basePrice: { toString(): string };
+  discountActive: boolean;
+  discountPercent: { toString(): string } | null;
+};
+
+/**
+ * The unit price the shopper pays now: a variant's own price replaces the
+ * base, and the product's discount applies on top of whichever it is.
+ */
+function liveUnitPrice(product: PricedProduct, variant?: { priceOverride: { toString(): string } | null } | null) {
+  const listPaise = variant?.priceOverride ? decimalToPaise(variant.priceOverride) : decimalToPaise(product.basePrice);
+  return resolveUnitPrice(listPaise, {
+    active: Boolean(product.discountActive),
+    percent: product.discountPercent == null ? null : Number(product.discountPercent.toString()),
+  });
+}
+
+/** priceAtAdd is stored in rupees (Decimal 10,2). */
+const paiseToDecimal = (paise: number) => (paise / 100).toFixed(2);
+
+/**
+ * "Price has gone up/dropped since you added this", or null. priceAtAdd is
+ * the price the shopper saw, refreshed whenever they act on the line.
+ */
+export function priceNoteFor(item: {
+  priceAtAdd: { toString(): string };
+  product: PricedProduct;
+  variant?: { priceOverride: { toString(): string } | null } | null;
+}): string | null {
+  return priceChangeNote(decimalToPaise(item.priceAtAdd), liveUnitPrice(item.product, item.variant).pricePaise, formatPriceTag);
+}
 
 export async function getCart(sessionId: string) {
   return db.cart.findUnique({
@@ -78,29 +113,29 @@ export async function addToCart(sessionId: string, productId: string, quantity: 
     (await db.cart.findUnique({ where: { sessionId } })) ??
     (await db.cart.create({ data: { sessionId } }));
 
-  const product = await db.product.findUnique({ where: { id: productId } });
-  if (!product || !product.isActive) throw new Error("That product isn't available.");
+  const product = await db.product.findUnique({
+    where: { id: productId },
+    include: { brand: { select: { isActive: true } }, category: { select: { isActive: true } } },
+  });
+  if (!product || !isSellable(product)) throw new Error("That product isn't available.");
   if (product.retailOnly) throw new Error("That product is sold in our stores only.");
 
+  // The price the shopper is looking at, snapshotted server-side (never taken
+  // from the client). It only drives the "price changed" note: the quote
+  // always charges the live price, so a stale basket can't lock in a
+  // withdrawn promotion. Adding again means they've seen the current price.
+  const priceAtAdd = paiseToDecimal(liveUnitPrice(product).pricePaise);
   const existing = await db.cartItem.findFirst({ where: { cartId: cart.id, productId } });
 
   if (existing) {
     await db.cartItem.update({
       where: { id: existing.id },
       // Capped per line, matching the quantity control; repeated adds used to grow without limit.
-      data: { quantity: Math.min(MAX_LINE_QUANTITY, existing.quantity + quantity) },
+      data: { quantity: Math.min(MAX_LINE_QUANTITY, existing.quantity + quantity), priceAtAdd },
     });
   } else {
     await db.cartItem.create({
-      data: {
-        cartId: cart.id,
-        productId,
-        quantity: Math.min(MAX_LINE_QUANTITY, quantity),
-        // Price is snapshotted server-side at add time, never taken from the
-        // client. The quote re-reads the live price at checkout so a stale
-        // basket cannot lock in a withdrawn promotion.
-        priceAtAdd: product.basePrice,
-      },
+      data: { cartId: cart.id, productId, quantity: Math.min(MAX_LINE_QUANTITY, quantity), priceAtAdd },
     });
   }
 
@@ -115,10 +150,43 @@ export async function updateQuantity(sessionId: string, itemId: string, quantity
     await db.cartItem.deleteMany({ where: { id: itemId, cartId: cart.id } });
     return;
   }
-  await db.cartItem.updateMany({
+  const item = await db.cartItem.findFirst({
     where: { id: itemId, cartId: cart.id },
-    data: { quantity: Math.min(MAX_LINE_QUANTITY, quantity) },
+    include: { product: true, variant: true },
   });
+  if (!item) return;
+  await db.cartItem.update({
+    where: { id: item.id },
+    // Changing the quantity with the current price on screen acknowledges it,
+    // so the "price changed" note clears.
+    data: {
+      quantity: Math.min(MAX_LINE_QUANTITY, quantity),
+      priceAtAdd: paiseToDecimal(liveUnitPrice(item.product, item.variant).pricePaise),
+    },
+  });
+}
+
+/**
+ * "Remove unavailable items": drop lines that can't ship at all and trim the
+ * ones that can only partly ship to what's in stock. Uses the same quote
+ * checkout does, so what's left can check out.
+ */
+export async function removeUnavailable(sessionId: string): Promise<void> {
+  const result = await quoteCart(sessionId);
+  if (!result) return;
+  const itemIdByProduct = new Map(result.cartItems.map((i) => [i.productId, i.id]));
+  const { remove, trim } = unavailableFixes(
+    result.quote.lines.map((l) => ({
+      itemId: itemIdByProduct.get(l.productId) ?? "",
+      quantity: l.quantityRequested,
+      quantityAvailable: l.quantityAvailable,
+    })),
+  );
+  const cartFilter = { cart: { sessionId } };
+  await db.$transaction([
+    db.cartItem.deleteMany({ where: { id: { in: remove.filter(Boolean) }, ...cartFilter } }),
+    ...trim.map((t) => db.cartItem.updateMany({ where: { id: t.itemId, ...cartFilter }, data: { quantity: t.quantity } })),
+  ]);
 }
 
 export async function clearCart(sessionId: string) {
@@ -165,15 +233,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   const gstTreatment = gstTreatmentFor(context.state, SELLER_STATE);
 
   const lines: QuoteLineInput[] = cart.items.map((item: any) => {
-    // A variant's own price replaces the base; the product's discount then
-    // applies on top of whichever it is.
-    const listPaise = item.variant?.priceOverride
-      ? decimalToPaise(item.variant.priceOverride)
-      : decimalToPaise(item.product.basePrice);
-    const price = resolveUnitPrice(listPaise, {
-      active: Boolean(item.product.discountActive),
-      percent: item.product.discountPercent == null ? null : Number(item.product.discountPercent.toString()),
-    });
+    const price = liveUnitPrice(item.product, item.variant);
 
     return {
       productId: item.productId,
@@ -193,7 +253,9 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
       })),
       stockQuantity: item.product.stockQuantity,
       retailOnly: item.product.retailOnly,
-      active: item.product.isActive,
+      // A basket can outlive its products: switching off the product, its
+      // brand or its category takes it off sale here too.
+      active: isSellable(item.product),
     };
   });
 
@@ -266,6 +328,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
       lineTotalPaise: line.grossPaise,
       status: line.status,
       message: line.customerMessage ?? null,
+      priceNote: item ? priceNoteFor(item) : null,
     };
   });
 
@@ -277,7 +340,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   let nextOffer: BasketSnapshot["nextOffer"] = null;
   if (nudge) {
     const suggested = await db.product.findMany({
-      where: { id: { in: [...nudge.suggestProductIds] }, isActive: true, retailOnly: false },
+      where: { id: { in: [...nudge.suggestProductIds] }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
       select: { id: true, slug: true, name: true, basePrice: true, discountActive: true, discountPercent: true },
       take: 3,
     });

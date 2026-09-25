@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { isSellable } from "@/lib/basket-rules";
 import { reviewInputSchema } from "@/lib/validation/review";
 
 /**
@@ -25,8 +26,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const product = await db.product.findUnique({ where: { id: parsed.data.productId } });
-  if (!product || !product.isActive) {
+  const product = await db.product.findUnique({
+    where: { id: parsed.data.productId },
+    include: { brand: { select: { isActive: true } }, category: { select: { isActive: true } } },
+  });
+  if (!product || !isSellable(product)) {
     return NextResponse.json({ message: "That product isn't available." }, { status: 400 });
   }
 

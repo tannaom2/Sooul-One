@@ -21,6 +21,8 @@ export interface BasketLine {
   readonly lineTotalPaise: number;
   readonly status: "OK" | "PARTIAL" | "BLOCKED";
   readonly message: string | null;
+  /** Set when the unit price moved since the shopper added the item. */
+  readonly priceNote: string | null;
 }
 
 export interface BasketOffer {
