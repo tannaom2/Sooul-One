@@ -576,15 +576,31 @@ model OrderEvent {
   id         String   @id @default(cuid())
   orderId    String
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  /// PLACED | PAYMENT_CAPTURED | PAYMENT_FAILED | REFUNDED | STATUS_CHANGED | EMAIL_SENT | NOTE
-  type       String
-  /// CUSTOMER | SYSTEM | ADMIN
-  actorType  String
+  type       OrderEventType
+  actorType  OrderEventActor
   actorEmail String?
   detail     Json?
   createdAt  DateTime @default(now())
 
   @@index([orderId, createdAt])
+}
+
+/// What happened on an order's timeline (src/lib/order-events.ts).
+enum OrderEventType {
+  PLACED
+  PAYMENT_CAPTURED
+  PAYMENT_FAILED
+  REFUNDED
+  STATUS_CHANGED
+  EMAIL_SENT
+  NOTE
+}
+
+/// Who made an order event happen.
+enum OrderEventActor {
+  CUSTOMER
+  SYSTEM
+  ADMIN
 }
 
 /// A funnel step, keyed by the same guest session cookie the cart already

@@ -1,18 +1,12 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import type { OrderEventActor as ActorType, OrderEventType, Prisma } from "@prisma/client";
 import { db } from "./db";
 import { reportError } from "@/lib/observability";
 
-export type OrderEventType =
-  | "PLACED"
-  | "PAYMENT_CAPTURED"
-  | "PAYMENT_FAILED"
-  | "REFUNDED"
-  | "STATUS_CHANGED"
-  | "EMAIL_SENT"
-  | "NOTE";
+// Database enums, so a misspelt event type fails the build and the insert.
+export type { OrderEventType };
 
-export type OrderEventActor = { type: "CUSTOMER" | "SYSTEM" | "ADMIN"; email?: string | null };
+export type OrderEventActor = { type: ActorType; email?: string | null };
 
 /**
  * Append an event to an order's timeline. Never throws: a timeline write
