@@ -18,6 +18,13 @@ on:
   schedule:
     - cron: "30 21 * * *" # 03:00 IST
   workflow_dispatch:
+  # Any change to the pipeline itself is exercised straight away.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backup.yml"
+      - ".github/backup-recipient.txt"
+      - "scripts/backup-*.mts"
 
 permissions:
   contents: read
