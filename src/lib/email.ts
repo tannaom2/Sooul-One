@@ -5,6 +5,7 @@ import { emailButton, esc, renderOrderConfirmation } from "./email-templates";
 import { orderStatusUrl } from "./order-access";
 import { reportError } from "@/lib/observability";
 import { isUndeliverableTestAddress } from "./email-recipient";
+import type { ShippingNoticeOrder, StoredOrder } from "./stored-order";
 
 /**
  * Transactional email.
@@ -109,11 +110,9 @@ function wrap(heading: string, bodyHtml: string): string {
 </body></html>`;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /* ----------------------------------------------------------------- senders */
 
-export async function sendOrderConfirmation(order: any): Promise<Sent> {
+export async function sendOrderConfirmation(order: StoredOrder): Promise<Sent> {
   const to = order.guestEmail ?? order.customer?.email;
   if (!to) {
     console.warn("[email] order has no address to send to", order.orderNumber);
@@ -127,7 +126,7 @@ export async function sendOrderConfirmation(order: any): Promise<Sent> {
   return send(to, subject, html, text);
 }
 
-export async function sendShippingNotification(order: any): Promise<Sent> {
+export async function sendShippingNotification(order: ShippingNoticeOrder): Promise<Sent> {
   const to = order.guestEmail ?? order.customer?.email;
   if (!to) return { delivered: false, reason: "no_recipient" };
 

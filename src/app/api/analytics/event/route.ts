@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { MAX_EVENT_BYTES, clientEventSchema, toStoredEvent } from "@/lib/client-events";
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const parsed = clientEventSchema.safeParse(body);
   if (parsed.success) {
     const { type, metadata } = toStoredEvent(parsed.data);
-    void recordEvent(sessionId, type, { metadata });
+    after(() => recordEvent(sessionId, type, { metadata }));
   }
   return new NextResponse(null, { status: 204 });
 }

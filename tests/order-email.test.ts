@@ -4,6 +4,7 @@ import { esc, renderOrderConfirmation } from "../src/lib/email-templates";
 
 const order = (over: Record<string, unknown> = {}) => ({
   orderNumber: "SO-TEST-01",
+  accessToken: null,
   placedAt: "2026-09-19T10:00:00Z",
   paymentGateway: "RAZORPAY",
   subtotal: "940.00",

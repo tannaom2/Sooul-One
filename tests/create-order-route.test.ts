@@ -244,6 +244,27 @@ describe("cash on delivery", () => {
     expect(h.db.consentRecord.create).not.toHaveBeenCalled();
   });
 
+  it("splits a line across batches so the rows add back up to the paisa", async () => {
+    // 3 units at ₹100.01, one from each of three batches. Rounding each row
+    // on its own gives 3 × ₹33.34 = ₹100.02.
+    const result = quoteResult();
+    Object.assign(result.quote.lines[0], {
+      quantityAvailable: 3,
+      grossPaise: 10001,
+      listGrossPaise: 10001,
+      allocations: [
+        { batchId: "b1", quantity: 1 },
+        { batchId: "b2", quantity: 1 },
+        { batchId: "b3", quantity: 1 },
+      ],
+    });
+    h.quoteCart.mockResolvedValue(result);
+    await post(INPUT);
+    const rows = h.tx.orderItem.createMany.mock.calls[0][0].data as { lineTotal: string }[];
+    const totalPaise = rows.reduce((sum, r) => sum + Math.round(Number(r.lineTotal) * 100), 0);
+    expect(totalPaise).toBe(10001);
+  });
+
   it("answers 'just sold out' when another checkout took the stock", async () => {
     h.takeStock.mockResolvedValue("Masala Makhana");
     const res = await post(INPUT);

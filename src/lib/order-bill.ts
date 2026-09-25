@@ -8,8 +8,7 @@
 
 import { decimalToPaise } from "./format";
 import type { Paise } from "./money";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { asAddress, type StoredOrder } from "./stored-order";
 
 export interface BillLine {
   readonly name: string;
@@ -44,11 +43,11 @@ export interface OrderBill {
   };
 }
 
-export function buildOrderBill(order: any): OrderBill {
+export function buildOrderBill(order: StoredOrder): OrderBill {
   // One order row per batch drawn; the customer should see one line per product.
   const grouped = new Map<string, { name: string; quantity: number; unit: Paise; list: Paise; total: Paise }>();
 
-  for (const item of order.items ?? []) {
+  for (const item of order.items) {
     const unit = decimalToPaise(item.unitPriceSnapshot);
     // Orders placed before discounts existed have no list snapshot: no saving to show.
     const list = item.listUnitPriceSnapshot != null ? decimalToPaise(item.listUnitPriceSnapshot) : unit;
@@ -77,7 +76,7 @@ export function buildOrderBill(order: any): OrderBill {
   const couponAmount = decimalToPaise(order.discountAmount);
   const subtotalPaise = decimalToPaise(order.subtotal);
 
-  const a = order.shippingAddress ?? {};
+  const a = asAddress(order.shippingAddress);
   const cityLine = [a.city, [a.state, a.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
   return {

@@ -11,8 +11,6 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Your basket — SooulOne" };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 export default async function CartPage() {
   const sessionId = await readSessionId();
   let result = null;
@@ -48,7 +46,7 @@ export default async function CartPage() {
   }
 
   const { quote, cartItems, estimatedDeliveryDate } = result;
-  const itemById = new Map(cartItems.map((i: any) => [i.productId, i]));
+  const itemById = new Map(cartItems.map((i) => [i.productId, i]));
 
   return (
     <>
@@ -58,7 +56,7 @@ export default async function CartPage() {
         <div>
           <ul>
             {quote.lines.map((line) => {
-              const item = itemById.get(line.productId) as any;
+              const item = itemById.get(line.productId);
               const blocked = line.status !== "OK";
               const priceNote = item ? priceNoteFor(item) : null;
 

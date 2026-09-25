@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
@@ -83,10 +83,13 @@ export async function POST(request: Request) {
       });
 
       if (order.sessionId) {
-        void recordEvent(order.sessionId, "ORDER_PAID", {
-          orderId: order.id,
-          metadata: { totalPaise: payment.amountPaise, method: "RAZORPAY" },
-        });
+        const sessionId = order.sessionId;
+        after(() =>
+          recordEvent(sessionId, "ORDER_PAID", {
+            orderId: order.id,
+            metadata: { totalPaise: payment.amountPaise, method: "RAZORPAY" },
+          }),
+        );
       }
       break;
     }

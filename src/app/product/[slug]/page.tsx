@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { displayPrice, getProductBySlug } from "@/server/catalog";
 import { isSellable } from "@/lib/basket-rules";
 import Link from "next/link";
@@ -69,7 +70,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   // same identity the cart and checkout events join against. recordEvent
   // never throws, so a funnel miss can't stop the page rendering.
   const sessionId = await readSessionId();
-  if (sessionId) void recordEvent(sessionId, "PRODUCT_VIEW", { productId: product.id });
+  if (sessionId) after(() => recordEvent(sessionId, "PRODUCT_VIEW", { productId: product.id }));
 
   const isSupplement = product.regulatoryType === "HEALTH_SUPPLEMENT";
   const price = displayPrice(product);

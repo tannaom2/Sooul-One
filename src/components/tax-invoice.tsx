@@ -4,25 +4,24 @@ import { buildInvoice, stateCode } from "@/lib/invoice";
 import type { GstTreatment } from "@/lib/money";
 import type { BusinessProfile } from "@/server/business";
 import { PrintButton } from "./print-button";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { asAddress, type StoredAmount, type StoredOrder } from "@/lib/stored-order";
 
 const date = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" });
 const money = (paise: number) => formatINR(paise);
-const paiseOrNull = (v: unknown) => (v == null ? null : decimalToPaise(v as any));
+const paiseOrNull = (v: StoredAmount | null | undefined) => (v == null ? null : decimalToPaise(v));
 
 /**
  * A GST tax invoice for one shipped order, built by buildInvoice from the tax
  * recorded at checkout. Rendered on the customer's order link and in admin;
  * prints cleanly (site header, footer and admin sidebar are hidden in print).
  */
-export function TaxInvoice({ order, seller }: { order: any; seller: BusinessProfile }) {
+export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: BusinessProfile }) {
   const invoice = buildInvoice({
     gstTreatment: (order.gstTreatment as GstTreatment | null) ?? null,
     shippingPaise: decimalToPaise(order.shippingAmount),
     shippingTaxPaise: paiseOrNull(order.shippingTaxAmount),
     totalPaise: decimalToPaise(order.totalAmount),
-    items: order.items.map((i: any) => ({
+    items: order.items.map((i) => ({
       productId: i.productId,
       productNameSnapshot: i.productNameSnapshot,
       hsnCode: i.hsnCode ?? i.product?.hsnCode ?? null,
@@ -33,8 +32,8 @@ export function TaxInvoice({ order, seller }: { order: any; seller: BusinessProf
       taxPaise: paiseOrNull(i.taxAmount),
     })),
   });
-  const ship = order.shippingAddress ?? {};
-  const bill = order.billingAddress ?? ship;
+  const ship = asAddress(order.shippingAddress);
+  const bill = order.billingAddress ? asAddress(order.billingAddress) : ship;
   const supplyCode = stateCode(ship.state);
   const intra = invoice.treatment === "INTRA_STATE";
   const sellerName = seller.legalName ?? "Seller name not yet set";
@@ -67,20 +66,22 @@ export function TaxInvoice({ order, seller }: { order: any; seller: BusinessProf
               <dt className="text-ink-soft">Invoice no.</dt>
               <dd className="tabular font-semibold">{order.invoiceNumber}</dd>
               <dt className="text-ink-soft">Invoice date</dt>
-              <dd>{date.format(order.invoiceDate)}</dd>
+              <dd>{order.invoiceDate ? date.format(new Date(order.invoiceDate)) : "—"}</dd>
               <dt className="text-ink-soft">Order</dt>
               <dd className="tabular">{order.orderNumber}</dd>
               <dt className="text-ink-soft">Order date</dt>
-              <dd>{date.format(order.placedAt)}</dd>
+              <dd>{date.format(new Date(order.placedAt))}</dd>
             </dl>
           </div>
         </div>
 
         <div className="grid gap-4 border-b border-ink p-4 sm:grid-cols-3">
-          {[
-            ["Bill to", bill],
-            ["Ship to", ship],
-          ].map(([label, a]: any) => (
+          {(
+            [
+              ["Bill to", bill],
+              ["Ship to", ship],
+            ] as const
+          ).map(([label, a]) => (
             <div key={label}>
               <p className="font-semibold">{label}</p>
               <p>{a.name}</p>

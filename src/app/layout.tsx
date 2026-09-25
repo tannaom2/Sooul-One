@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import { BASKET_COUNT_COOKIE } from "@/lib/session-cookie";
 import { CartProvider } from "@/components/basket/cart-provider";
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
@@ -189,7 +190,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const isAdmin = path.startsWith("/admin");
   if (requestHeaders.get("x-new-session") === "1") {
     const sessionId = await readSessionId();
-    if (sessionId) void recordEvent(sessionId, "VISIT", { metadata: { path } });
+    if (sessionId) after(() => recordEvent(sessionId, "VISIT", { metadata: { path } }));
   }
 
   return (

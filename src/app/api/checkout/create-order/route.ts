@@ -148,6 +148,9 @@ export async function POST(request: Request) {
       ? line.allocations.map((a) => ({ batchId: a.batchId, quantity: a.quantity }))
       : [{ batchId: null, quantity: line.quantityAvailable }];
     const weights = allocations.map((a) => a.quantity);
+    // Split exactly, so the rows always add back up to the line (audit L4:
+    // rounding each batch's total separately could drift by a paisa).
+    const gross = apportion(line.grossPaise, weights);
     const taxable = apportion(line.taxablePaise, weights);
     const tax = apportion(line.taxPaise, weights);
     return allocations.map((allocation, i) => ({
@@ -158,7 +161,7 @@ export async function POST(request: Request) {
       unitPriceSnapshot: fromPaise(Math.round(unit)),
       listUnitPriceSnapshot: fromPaise(Math.round(line.listGrossPaise / Math.max(line.quantityAvailable, 1))),
       quantity: allocation.quantity,
-      lineTotal: fromPaise(Math.round(unit * allocation.quantity)),
+      lineTotal: fromPaise(gross[i]),
       hsnCode: hsnByProduct.get(line.productId) ?? null,
       taxRatePercent: line.taxRatePercent,
       taxableAmount: fromPaise(taxable[i]),

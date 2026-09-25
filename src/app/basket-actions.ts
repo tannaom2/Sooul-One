@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { z } from "zod";
 import {
   addToCart,
@@ -66,10 +67,12 @@ export async function addToBasket(productId: string, quantity: number): Promise<
     return { ok: false, message: known ? (error as Error).message : TRY_AGAIN };
   }
 
-  void recordEvent(sessionId, "ADD_TO_CART", {
-    productId: parsed.data.productId,
-    metadata: { quantity: parsed.data.quantity },
-  });
+  after(() =>
+    recordEvent(sessionId, "ADD_TO_CART", {
+      productId: parsed.data.productId,
+      metadata: { quantity: parsed.data.quantity },
+    }),
+  );
 
   try {
     return { ok: true, basket: await snapshotFor(sessionId) };

@@ -5,6 +5,9 @@ import type { DiscountType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { audit, requirePermission } from "@/lib/auth";
 import type { ActionResult } from "../actions";
+import { bundleOfferProblem } from "@/lib/validation/bundle";
+import { decimalToPaise } from "@/lib/format";
+import { resolveUnitPrice } from "@/lib/pricing";
 
 /**
  * Bundle CRUD.
@@ -32,7 +35,7 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
   const brandId = String(form.get("brandId") ?? "");
   const discountType = String(form.get("discountType") ?? "") as DiscountType;
   const discountValue = Number(form.get("discountValue") ?? 0);
-  const minItems = Math.max(2, Number(form.get("minItems") ?? 2));
+  const minItems = Number(form.get("minItems") || 2);
   const maxItemsRaw = form.get("maxItems");
   const maxItems = maxItemsRaw ? Number(maxItemsRaw) : null;
   const eligibleProductIds = form.getAll("eligibleProductIds").map(String);
@@ -40,12 +43,26 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
   if (!name || !brandId) {
     return { ok: false, message: "A bundle needs a name and a brand." };
   }
-  if (!["PERCENTAGE", "FLAT"].includes(discountType) || !Number.isFinite(discountValue) || discountValue <= 0) {
-    return { ok: false, message: "Set a valid discount type and value." };
-  }
-  if (eligibleProductIds.length < 2) {
-    return { ok: false, message: "Pick at least two eligible products — a bundle needs something to combine." };
-  }
+  // Prices as shoppers see them today, so a flat discount can be checked
+  // against the cheapest bundle it could apply to.
+  const eligible = await db.product.findMany({
+    where: { id: { in: eligibleProductIds } },
+    select: { basePrice: true, discountActive: true, discountPercent: true },
+  });
+  const problem = bundleOfferProblem({
+    discountType,
+    discountValue,
+    minItems,
+    maxItems,
+    eligiblePricesPaise: eligible.map(
+      (p) =>
+        resolveUnitPrice(decimalToPaise(p.basePrice), {
+          active: p.discountActive,
+          percent: p.discountPercent == null ? null : Number(p.discountPercent.toString()),
+        }).pricePaise,
+    ),
+  });
+  if (problem) return { ok: false, message: problem };
 
   const bundle = await db.bundle.create({
     data: {

@@ -7,10 +7,10 @@ import { orderTokenMatches } from "@/lib/order-access";
 import { BasketSync } from "@/components/basket/basket-sync";
 import { OrderTracker } from "@/components/order-tracker";
 import { orderProgress } from "@/lib/order-progress";
+import { asAddress } from "@/lib/stored-order";
 
 export const dynamic = "force-dynamic";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const STATUS_COPY: Record<string, string> = {
   PENDING_PAYMENT: "Waiting for payment to confirm. This usually takes a moment.",
@@ -39,7 +39,7 @@ export default async function OrderPage({
   // "order not found" — a shopper landing here right after paying should
   // never be told their order doesn't exist because of a transient outage
   // that a retry would clear.
-  const order: any = await db.order.findUnique({
+  const order = await db.order.findUnique({
     where: { orderNumber },
     include: {
       items: true,
@@ -51,7 +51,7 @@ export default async function OrderPage({
   // page can't be used to confirm which order numbers exist.
   if (!order || !orderTokenMatches(t, order.accessToken)) notFound();
 
-  const address = order.shippingAddress as any;
+  const address = asAddress(order.shippingAddress);
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-16">
@@ -78,7 +78,7 @@ export default async function OrderPage({
         </div>
 
         <dl>
-          {order.items.map((item: any) => (
+          {order.items.map((item) => (
             <div className="panel-row" key={item.id}>
               <dt>
                 {item.productNameSnapshot}

@@ -54,8 +54,6 @@ export async function readSessionId(): Promise<string | null> {
   return store.get(SESSION_COOKIE)?.value ?? null;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 const CART_ITEM_INCLUDE = {
   product: {
     include: {
@@ -109,9 +107,9 @@ export async function getCart(sessionId: string) {
 }
 
 export async function addToCart(sessionId: string, productId: string, quantity: number) {
-  const cart =
-    (await db.cart.findUnique({ where: { sessionId } })) ??
-    (await db.cart.create({ data: { sessionId } }));
+  // One statement, so two first adds at once (a double tap) can't both try to
+  // create the basket and trip the unique session (audit L5).
+  const cart = await db.cart.upsert({ where: { sessionId }, create: { sessionId }, update: {} });
 
   const product = await db.product.findUnique({
     where: { id: productId },
@@ -232,7 +230,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
 
   const gstTreatment = gstTreatmentFor(context.state, SELLER_STATE);
 
-  const lines: QuoteLineInput[] = cart.items.map((item: any) => {
+  const lines: QuoteLineInput[] = cart.items.map((item) => {
     const price = liveUnitPrice(item.product, item.variant);
 
     return {
@@ -245,7 +243,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
       quantity: item.quantity,
       taxRatePercent: Number(item.product.taxRatePercent?.toString?.() ?? 18),
       shelfLifeDays: item.product.shelfLifeDays ?? undefined,
-      batches: (item.product.batches ?? []).map((b: any) => ({
+      batches: item.product.batches.map((b) => ({
         id: b.id,
         batchNumber: b.batchNumber,
         expiresOn: new Date(b.expiresOn),
@@ -259,14 +257,14 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     };
   });
 
-  const bundles: BundleRule[] = bundleRows.map((b: any) => ({
+  const bundles: BundleRule[] = bundleRows.map((b) => ({
     id: b.id,
     name: b.name,
     minItems: b.minItems,
     maxItems: b.maxItems,
     discountType: b.discountType,
     discountValue: Number(b.discountValue.toString()),
-    eligibleProductIds: b.eligibleProducts.map((e: any) => e.productId),
+    eligibleProductIds: b.eligibleProducts.map((e) => e.productId),
   }));
 
   let coupon;
@@ -310,10 +308,10 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   const result = await quoteCart(sessionId);
   if (!result) return null;
   const { quote, cartItems, bundles } = result;
-  const itemById = new Map(cartItems.map((i: any) => [i.productId, i]));
+  const itemById = new Map(cartItems.map((i) => [i.productId, i]));
 
   const lines = quote.lines.map((line) => {
-    const item: any = itemById.get(line.productId);
+    const item = itemById.get(line.productId);
     return {
       itemId: item?.id ?? "",
       productId: line.productId,
