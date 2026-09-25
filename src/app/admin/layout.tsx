@@ -21,6 +21,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     items: [
       { href: "/admin/orders", label: "Orders", permission: "orders:view" },
       { href: "/admin/products", label: "Products", permission: "products:view" },
+      { href: "/admin/categories", label: "Categories", permission: "products:write" },
       { href: "/admin/bundles", label: "Bundles", permission: "bundles:write" },
       { href: "/admin/coupons", label: "Discount codes", permission: "products:pricing" },
       { href: "/admin/batches", label: "Stock batches", permission: "batches:write" },

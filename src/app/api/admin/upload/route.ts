@@ -29,6 +29,12 @@ export async function POST(request: Request) {
   if (!productId) {
     return NextResponse.json({ message: "Save the product before adding images." }, { status: 400 });
   }
+  // Checked before uploading (audit M4): uploading first and then failing to
+  // attach the image left paid-for files in Cloudinary that nothing uses.
+  const product = await db.product.findUnique({ where: { id: productId }, select: { id: true } });
+  if (!product) {
+    return NextResponse.json({ message: "That product no longer exists. Reload the page." }, { status: 404 });
+  }
 
   const result = await uploadProductImage(file);
   if (!result.ok) {
