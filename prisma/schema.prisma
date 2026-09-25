@@ -704,3 +704,14 @@ model AdminRecoveryCode {
 
   @@unique([adminUserId, codeHash])
 }
+
+/// Fixed-window attempt counters for sign-in and public endpoints
+/// (src/server/rate-limit.ts). In the database so they survive deploys and are
+/// shared by every app instance. Keys look like "signin:ip:1.2.3.4".
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+
+  @@index([windowStart])
+}

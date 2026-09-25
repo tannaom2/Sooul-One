@@ -7,10 +7,11 @@
  * a session mechanism with the storefront. A bug in customer login must not be
  * a path into the dashboard.
  *
- * Three layers, none of which is sufficient alone:
- *   1. A non-obvious console path (ADMIN_PATH) — removes it from opportunistic
- *      scanning. Not security; it buys quiet, not safety.
- *   2. bcrypt password + TOTP second factor, mandatory for OWNER.
+ * Layers, none of which is sufficient alone:
+ *   1. bcrypt password + TOTP second factor, mandatory for everyone.
+ *   2. Attempt limits counted in the database and keyed on the caller's IP
+ *      (src/lib/rate-limit-rules.ts), so guessing is slow and a stranger
+ *      can't lock the owner out.
  *   3. Short-lived JWT in an httpOnly, SameSite=Strict cookie, so no script on
  *      the page can read it and no cross-site form can replay it.
  */
@@ -196,11 +197,6 @@ export async function audit(
   } catch (error) {
     reportError("audit", error, { action, entityType, entityId });
   }
-}
-
-/** Console base path. Defaults to something guessable only if unset. */
-export function adminPath(): string {
-  return process.env.ADMIN_PATH?.replace(/^\/+|\/+$/g, "") || "admin";
 }
 
 /**

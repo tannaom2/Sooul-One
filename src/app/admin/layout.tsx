@@ -6,6 +6,9 @@ import { can, type Permission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
+// Never in search results, even if a link to it leaks.
+export const metadata = { robots: { index: false, follow: false } };
+
 type NavItem = { href: string; label: string; permission: Permission };
 
 // Grouped by the job being done, not by database table. Hiding a link is

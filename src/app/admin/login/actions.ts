@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { generateURI } from "otplib";
 import QRCode from "qrcode";
 import { db } from "@/lib/db";
@@ -17,6 +18,8 @@ import {
 import { MIN_PASSWORD_LENGTH, isValidSetupKey } from "@/lib/team-rules";
 import { looksLikeRecoveryCode } from "@/lib/recovery-codes";
 import { recoveryCodeStatus, spendRecoveryCode } from "@/server/recovery-codes";
+import { MFA_LIMIT, SIGN_IN_WINDOW_SECONDS, clientIp, signInBlocked, signInKeys } from "@/lib/rate-limit-rules";
+import { clearHits, hit, overLimit } from "@/server/rate-limit";
 
 /**
  * Admin sign-in, as deliberate steps.
@@ -32,29 +35,11 @@ import { recoveryCodeStatus, spendRecoveryCode } from "@/server/recovery-codes";
  * they choose their own and set up an authenticator before getting in.
  */
 
-/**
- * In-memory attempt counter.
- *
- * Adequate for a single Render instance, which is what Section 10's cost
- * profile describes. It resets on deploy and does not span instances, so if
- * this ever runs on more than one container it must move to the database or a
- * shared cache. Flagged rather than silently assumed.
+/*
+ * Attempt limits (src/lib/rate-limit-rules.ts) are counted in the database, so
+ * they survive deploys and span instances. Sign-in locks are keyed on the
+ * caller's IP, so a stranger typing the owner's email can't lock the owner out.
  */
-const attempts = new Map<string, { count: number; firstAt: number }>();
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
-
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const record = attempts.get(key);
-
-  if (!record || now - record.firstAt > WINDOW_MS) {
-    attempts.set(key, { count: 1, firstAt: now });
-    return false;
-  }
-  record.count += 1;
-  return record.count > MAX_ATTEMPTS;
-}
 
 export interface LoginState {
   stage: "PASSWORD" | "MFA" | "ENROL";
@@ -90,8 +75,15 @@ async function signIn(form: FormData): Promise<LoginState> {
   // The email is attacker-supplied on a failed attempt, so it's truncated.
   const actor = { adminUserId: user?.id ?? null, email: email.slice(0, 200) || "(blank)" };
 
-  if (rateLimited(email || "anonymous")) {
-    await audit(actor, "SIGN_IN_LOCKED", "AdminUser", user?.id ?? "-");
+  const keys = signInKeys(email, clientIp(await headers()));
+  const counts = await hit(Object.values(keys), SIGN_IN_WINDOW_SECONDS);
+  const count = (name: keyof typeof keys) => counts.get(keys[name]) ?? 0;
+  if (signInBlocked({ accountFromIp: count("accountFromIp"), ip: count("ip"), account: count("account") })) {
+    await audit(actor, "SIGN_IN_LOCKED", "AdminUser", user?.id ?? "-", {
+      accountFromIp: count("accountFromIp"),
+      ip: count("ip"),
+      account: count("account"),
+    });
     return { stage: "PASSWORD", error: "Too many attempts. Wait 15 minutes and try again." };
   }
 
@@ -108,6 +100,8 @@ async function signIn(form: FormData): Promise<LoginState> {
     await audit(actor, "SIGN_IN_FAILED", "AdminUser", user.id, { reason: "wrong_password" });
     return generic;
   }
+  // The right password: this account's failures no longer count against it.
+  await clearHits([keys.accountFromIp, keys.account]);
 
   await issueSession({
     adminUserId: user.id,
@@ -125,7 +119,7 @@ async function verifyMfa(form: FormData): Promise<LoginState> {
   const session = await readSession();
 
   if (!session) return { stage: "PASSWORD", error: "That session expired. Sign in again." };
-  if (rateLimited(`mfa:${session.email}`)) {
+  if (await overLimit(`mfa:${session.adminUserId}`, MFA_LIMIT)) {
     await audit(session, "MFA_LOCKED", "AdminUser", session.adminUserId);
     await clearSession();
     return { stage: "PASSWORD", error: "Too many codes tried. Sign in again." };
@@ -145,6 +139,7 @@ async function verifyMfa(form: FormData): Promise<LoginState> {
       return { stage: "MFA", error: "That recovery code isn't right, or it has already been used." };
     }
     const { remaining } = await recoveryCodeStatus(user.id);
+    await clearHits([`mfa:${user.id}`]);
     await issueSession({ ...session, mfaVerified: true });
     await db.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     await audit(session, "SIGN_IN_WITH_RECOVERY_CODE", "AdminUser", user.id, { remaining });
@@ -158,6 +153,7 @@ async function verifyMfa(form: FormData): Promise<LoginState> {
     return { stage: "MFA", error: "That code isn't right. Check your authenticator and retry." };
   }
 
+  await clearHits([`mfa:${user.id}`]);
   await issueSession({ ...session, mfaVerified: true });
   await db.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await audit(session, "SIGN_IN", "AdminUser", user.id);
@@ -179,7 +175,7 @@ async function completeEnrolment(form: FormData): Promise<LoginState> {
   }
   const retry = (error: string) => enrolState(session.email, setupKey, error);
 
-  if (rateLimited(`enrol:${session.email}`)) {
+  if (await overLimit(`enrol:${session.adminUserId}`, MFA_LIMIT)) {
     await audit(session, "MFA_LOCKED", "AdminUser", session.adminUserId, { during: "enrolment" });
     await clearSession();
     return { stage: "PASSWORD", error: "Too many tries. Sign in again in 15 minutes." };

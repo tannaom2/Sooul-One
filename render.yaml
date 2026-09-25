@@ -42,8 +42,6 @@ services:
         sync: false
       - key: SENTRY_DSN
         sync: false
-      - key: ADMIN_PATH
-        sync: false
       - key: NEXT_PUBLIC_FSSAI_LICENCE_NUMBER
         sync: false
       - key: NEXT_PUBLIC_GSTIN

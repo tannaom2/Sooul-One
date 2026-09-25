@@ -118,7 +118,6 @@ that you actually use:
 | `DIRECT_URL` | The same database's **direct** (unpooled) connection string, used only for migrations |
 | `JWT_SECRET` | Render can generate this — click "Generate" |
 | `SITE_URL` | Your live URL, e.g. `https://soulone.onrender.com` — used for the sitemap and page metadata |
-| `ADMIN_PATH` | Anything non-obvious |
 | `RAZORPAY_KEY_ID` / `_SECRET` | Razorpay dashboard, **live** keys |
 | `RAZORPAY_WEBHOOK_SECRET` | You choose it; must match Razorpay's webhook config |
 | `SELLER_STATE` | The state you're GST-registered in |
