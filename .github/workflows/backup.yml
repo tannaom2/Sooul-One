@@ -73,6 +73,7 @@ jobs:
         env:
           DATABASE_URL: ${{ env.SOURCE_URL }}
         run: |
+          npx prisma generate
           npx prisma migrate deploy
           npx tsx prisma/seed.ts
 
