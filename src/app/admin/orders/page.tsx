@@ -70,7 +70,9 @@ export default async function Orders({
     <div className="grid gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-h2 font-extrabold">Orders</h1>
-        <form method="get" role="search" className="flex w-full gap-2 sm:w-auto">
+        {/* Keyed on the filters so its fields reset when they change from outside it
+            (a status tab, Clear, Back); defaultValue alone only applies on first mount. */}
+        <form key={`${view}|${q}`} method="get" role="search" className="flex w-full gap-2 sm:w-auto">
           {view !== "all" && <input type="hidden" name="view" value={view} />}
           <label htmlFor="order-search" className="sr-only">
             Search orders

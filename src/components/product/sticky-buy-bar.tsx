@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatPriceTag } from "@/lib/money";
 import { useCart } from "../basket/cart-provider";
+import { useBuyQuantity } from "./buy-quantity";
 
 /**
  * Phone-only bar with the price and Add to basket, shown once the main buy
@@ -26,6 +27,8 @@ export function StickyBuyBar({
   note?: string;
 }) {
   const { add, pending } = useCart();
+  // The quantity chosen in the buy box: the bar shows and adds that, not one.
+  const { quantity } = useBuyQuantity();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -48,10 +51,10 @@ export function StickyBuyBar({
     >
       <div className="mx-auto flex max-w-6xl items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="tabular font-display text-lead font-bold">{formatPriceTag(pricePaise)}</p>
+          <p className="tabular font-display text-lead font-bold">{formatPriceTag(pricePaise * quantity)}</p>
           {note && <p className="truncate text-micro text-ink-faint">{note}</p>}
         </div>
-        <button type="button" onClick={() => add(productId, 1)} disabled={pending} className="btn btn-solid px-5" aria-label={`Add ${name} to basket`}>
+        <button type="button" onClick={() => add(productId, quantity)} disabled={pending} className="btn btn-solid px-5" aria-label={quantity > 1 ? `Add ${quantity} of ${name} to basket` : `Add ${name} to basket`}>
           Add to basket
         </button>
       </div>

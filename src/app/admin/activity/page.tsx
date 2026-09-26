@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
@@ -107,28 +108,30 @@ export default async function ActivityPage({
         </p>
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
+      {/* Keyed on the filters so its fields reset when they change from outside it
+          (a status tab, Clear, Back); defaultValue alone only applies on first mount. */}
+      <form key={`${actor ?? ""}|${area ?? ""}`} method="get" className="flex flex-wrap items-end gap-3">
         <label className="text-small">
           <span className="label">Person</span>
-          <select name="actor" defaultValue={actor ?? ""} className="field w-auto">
+          <AutoSubmitSelect name="actor" defaultValue={actor ?? ""} className="field w-auto">
             <option value="">Everyone</option>
             {admins.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.email}
               </option>
             ))}
-          </select>
+          </AutoSubmitSelect>
         </label>
         <label className="text-small">
           <span className="label">Area</span>
-          <select name="area" defaultValue={area ?? ""} className="field w-auto">
+          <AutoSubmitSelect name="area" defaultValue={area ?? ""} className="field w-auto">
             <option value="">All areas</option>
             {Object.entries(AREAS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
             ))}
-          </select>
+          </AutoSubmitSelect>
         </label>
         <button className="btn btn-outline px-4 py-2 text-small">Filter</button>
         {(actor || area) && (

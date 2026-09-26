@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { displayPrice, getOffersForProduct, getProductBySlug } from "@/server/catalog";
 import { ProductCombos } from "@/components/product/product-combos";
+import { BuyBoxPrice, BuyQuantityProvider } from "@/components/product/buy-quantity";
 import { isSellable } from "@/lib/basket-rules";
 import Link from "next/link";
-import { VegMark, Price, BRAND_ACCENT, Rating } from "@/components/ui";
+import { VegMark, BRAND_ACCENT, Rating } from "@/components/ui";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { StickyBuyBar } from "@/components/product/sticky-buy-bar";
 import { AddToBasket } from "@/components/add-to-basket";
@@ -128,6 +129,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const isKids = product.brand?.slug === "kids-vault";
 
   return (
+    <BuyQuantityProvider max={availability.shippableUnits}>
     <article className="mx-auto max-w-6xl px-5 py-8 lg:py-10">
       <nav className="mb-5 text-small text-ink-faint">
         {product.brand?.name} / {product.category?.name}
@@ -184,7 +186,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
           <div id="buy-box" className="panel mt-6">
             <div className="panel-head flex items-center justify-between">
-              <Price pricePaise={price.pricePaise} comparePaise={price.comparePaise} percentOff={price.percentOff} />
+              <BuyBoxPrice unitPaise={price.pricePaise} comparePaise={price.comparePaise} percentOff={price.percentOff} unitName={isSupplement ? "pack" : "item"} />
               <span className="text-micro font-normal text-ink-faint">incl. GST</span>
             </div>
 
@@ -204,6 +206,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   <AddToBasket
                     productId={product.id}
                     productName={product.name}
+                    unitPricePaise={price.pricePaise}
                     pack={isSupplement && product.servingsPerContainer ? { servings: product.servingsPerContainer, pricePaise: price.pricePaise } : undefined}
                   />
                 </>
@@ -406,5 +409,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </div>
       </section>
     </article>
+    </BuyQuantityProvider>
   );
 }

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getBrandBySlug, getProductsByBrand } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
 import { ConcernChips } from "@/components/concern-chips";
+import { GummyBrandTabs } from "@/components/gummy-brand-tabs";
 import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,8 @@ export default async function BrandPage({
         intro={brand?.description ?? undefined}
         accent={ACCENT[slug]}
       />
+
+      <GummyBrandTabs active={slug} />
 
       <ConcernChips
         label="Shop by concern"

@@ -27,6 +27,9 @@ export function ConcernChips({
       key={href}
       href={href}
       scroll={false}
+      // Swapping filters is refining one view, not new pages, so Back leaves the page
+      // instead of stepping through every chip tapped.
+      replace
       aria-current={isActive ? "page" : undefined}
       className={`shrink-0 border px-3 py-1.5 text-small whitespace-nowrap ${isActive ? "font-semibold text-paper" : "border-rule text-ink-soft hover:border-ink hover:text-ink"}`}
       style={{ borderRadius: 999, ...(isActive && { background: accent, borderColor: accent }) }}

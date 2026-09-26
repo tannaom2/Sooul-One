@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
@@ -117,7 +118,9 @@ export default async function AdminProducts({
         {addButton}
       </div>
 
-      <form method="get" role="search" className="flex flex-wrap items-center gap-2">
+      {/* Keyed on the filters so its fields reset when they change from outside it
+          (a status tab, Clear, Back); defaultValue alone only applies on first mount. */}
+      <form key={`${view}|${q}|${brand ?? ""}`} method="get" role="search" className="flex flex-wrap items-center gap-2">
         {view !== "all" && <input type="hidden" name="view" value={view} />}
         <label htmlFor="product-search" className="sr-only">
           Search products
@@ -138,14 +141,14 @@ export default async function AdminProducts({
             <label htmlFor="product-brand" className="sr-only">
               Brand
             </label>
-            <select id="product-brand" name="brand" defaultValue={brand ?? ""} className="field w-auto">
+            <AutoSubmitSelect id="product-brand" name="brand" defaultValue={brand ?? ""} className="field w-auto">
               <option value="">All brands</option>
               {brands.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
-            </select>
+            </AutoSubmitSelect>
           </>
         )}
         <button className="btn btn-outline px-4 py-2 text-small">Search</button>

@@ -189,7 +189,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
 
       if (body.method === "COD") {
         clearDraft();
-        router.push(`/order/${body.orderNumber}?t=${body.accessToken}`);
+        router.replace(`/order/${body.orderNumber}?t=${body.accessToken}`);
         return;
       }
 
@@ -208,7 +208,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
         prefill: { name: clean.name, email: clean.email, contact: clean.phone, ...(pay === "UPI" && { method: "upi" }) },
         handler: () => {
           clearDraft();
-          router.push(`/order/${body.orderNumber}?t=${body.accessToken}`);
+          router.replace(`/order/${body.orderNumber}?t=${body.accessToken}`);
         },
         modal: { ondismiss: () => setBusy(false) },
       }).open();

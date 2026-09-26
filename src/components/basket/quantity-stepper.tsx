@@ -12,6 +12,7 @@ export function QuantityStepper({
   onChange,
   label,
   min = 1,
+  max = MAX_LINE_QUANTITY,
   disabled = false,
 }: {
   value: number;
@@ -19,6 +20,8 @@ export function QuantityStepper({
   /** What the quantity is of, for screen readers: "Roasted Makhana". */
   label: string;
   min?: number;
+  /** Upper limit, e.g. what can actually ship (defaults to the basket's per-line limit). */
+  max?: number;
   disabled?: boolean;
 }) {
   return (
@@ -38,8 +41,8 @@ export function QuantityStepper({
       <button
         type="button"
         className="grid h-11 w-11 place-items-center text-lead disabled:text-ink-faint"
-        onClick={() => onChange(Math.min(MAX_LINE_QUANTITY, value + 1))}
-        disabled={disabled || value >= MAX_LINE_QUANTITY}
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={disabled || value >= max}
         aria-label={`One more ${label}`}
       >
         +

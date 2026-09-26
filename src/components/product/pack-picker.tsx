@@ -15,11 +15,14 @@ export function PackPicker({
   onChange,
   servingsPerPack,
   pricePaise,
+  max = 3,
 }: {
   value: number;
   onChange: (packs: number) => void;
   servingsPerPack: number;
   pricePaise: number;
+  /** Most packs that can ship; larger options are disabled. */
+  max?: number;
 }) {
   const perServing = servingsPerPack > 0 ? pricePaise / servingsPerPack : null;
   return (
@@ -28,14 +31,15 @@ export function PackPicker({
       <div className="grid grid-cols-3 gap-2">
         {[1, 2, 3].map((packs) => {
           const active = packs === value;
+          const unavailable = packs > max;
           return (
             <label
               key={packs}
               // The radio is visually hidden, so the card shows its keyboard focus.
-              className={`cursor-pointer border px-2 py-2.5 text-center has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${active ? "border-ink bg-shelf" : "border-rule"}`}
+              className={`${unavailable ? "cursor-not-allowed opacity-50" : "cursor-pointer"} border px-2 py-2.5 text-center has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${active ? "border-ink bg-shelf" : "border-rule"}`}
               style={{ borderRadius: "var(--radius-panel)" }}
             >
-              <input type="radio" name="packs" value={packs} checked={active} onChange={() => onChange(packs)} className="sr-only" />
+              <input type="radio" name="packs" value={packs} checked={active} disabled={unavailable} onChange={() => onChange(packs)} className="sr-only" />
               <span className="block text-small font-semibold">
                 {packs} {packs === 1 ? "pack" : "packs"}
               </span>

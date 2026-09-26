@@ -4,22 +4,25 @@ import { useState } from "react";
 
 export function ReviewForm({ productId }: { productId: string }) {
   const [name, setName] = useState("");
-  const [rating, setRating] = useState(5);
+  // No rating until the shopper picks one: a preset five stars gets submitted
+  // untouched and inflates the average.
+  const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; comment?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; rating?: string; comment?: string }>({});
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     // Stays enabled at all times (per Web Interface Guidelines) — validation
     // happens on click, pointed at the specific field that's empty.
-    const errors: { name?: string; comment?: string } = {};
+    const errors: { name?: string; rating?: string; comment?: string } = {};
     if (!name.trim()) errors.name = "Enter your name.";
+    if (rating === 0) errors.rating = "Choose a rating from 1 to 5 stars.";
     if (!comment.trim()) errors.comment = "Say something about the product.";
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      document.getElementById(errors.name ? "reviewName" : "reviewComment")?.focus();
+      document.getElementById(errors.name ? "reviewName" : errors.rating ? "reviewRating1" : "reviewComment")?.focus();
       return;
     }
     setFieldErrors({});
@@ -68,21 +71,29 @@ export function ReviewForm({ productId }: { productId: string }) {
 
           <fieldset>
             <legend className="label">Rating</legend>
-            <div className="flex gap-1">
+            {/* Native radios: one choice out of five, arrow keys move between them,
+                and screen readers announce "3 stars, 3 of 5". */}
+            <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setRating(n)}
-                  aria-label={`${n} star${n === 1 ? "" : "s"}`}
-                  aria-pressed={n <= rating}
-                  className="text-h3 leading-none"
-                  style={{ color: n <= rating ? "var(--color-caution)" : "var(--color-rule)" }}
-                >
-                  ★
-                </button>
+                <label key={n} className="cursor-pointer text-h3 leading-none has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2">
+                  <input
+                    type="radio"
+                    name="reviewRating"
+                    id={`reviewRating${n}`}
+                    value={n}
+                    checked={rating === n}
+                    onChange={() => setRating(n)}
+                    className="sr-only"
+                  />
+                  <span aria-hidden="true" style={{ color: n <= rating ? "var(--color-caution)" : "var(--color-rule)" }}>
+                    ★
+                  </span>
+                  <span className="sr-only">{`${n} star${n === 1 ? "" : "s"}`}</span>
+                </label>
               ))}
+              {rating > 0 && <span className="ml-2 text-small text-ink-soft">{rating} of 5</span>}
             </div>
+            {fieldErrors.rating && <p className="mt-1 text-micro text-alert">{fieldErrors.rating}</p>}
           </fieldset>
 
           <div>

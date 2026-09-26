@@ -9,6 +9,7 @@ import { DEFAULT_SHIPPING_POLICY } from "@/lib/checkout/quote";
 import { formatPriceTag } from "@/lib/money";
 import { BasketButton } from "@/components/basket/basket-button";
 import { BasketDrawer } from "@/components/basket/basket-drawer";
+import { MobileMenu } from "@/components/mobile-menu";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { getBusinessProfile } from "@/server/business";
@@ -47,7 +48,8 @@ function Nav() {
       <p className="bg-ink px-5 py-1.5 text-center text-micro font-semibold text-paper">
         Delivering across {SERVICE_AREA.label} · Free delivery over {formatPriceTag(DEFAULT_SHIPPING_POLICY.freeAbovePaise)}
       </p>
-      <nav className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-3">
+      <nav className="relative mx-auto flex max-w-6xl items-center gap-6 px-5 py-3">
+        <MobileMenu />
         <Link href="/" className="font-display text-lead font-extrabold tracking-tight">
           SooulOne
         </Link>
