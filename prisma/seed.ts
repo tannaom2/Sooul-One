@@ -114,18 +114,21 @@ async function main() {
   for (const brand of BRANDS) {
     const record = await prisma.brand.upsert({
       where: { slug: brand.slug },
+      // `note` is for whoever reads this file, never for shoppers: `description`
+      // is the brand page's visible intro and its search-result description.
+      // It stays empty until the business writes one (the page falls back to
+      // generic copy), and re-seeding clears a note an older seed wrote there.
       update: {
         name: brand.name,
         isRetailBrand: brand.isRetailBrand ?? false,
         isActive: brand.isActive ?? true,
-        description: brand.note,
+        description: null,
       },
       create: {
         slug: brand.slug,
         name: brand.name,
         tagline: brand.tagline,
         colorToken: PLACEHOLDER_COLOR,
-        description: brand.note,
         isRetailBrand: brand.isRetailBrand ?? false,
         isActive: brand.isActive ?? true,
       },
@@ -133,6 +136,7 @@ async function main() {
 
     const status = (brand.isActive ?? true) ? "" : "  [reserved, inactive]";
     console.log(`  ${brand.name}${status}`);
+    if (brand.note) console.log(`    note: ${brand.note}`);
 
     for (const [index, name] of brand.categories.entries()) {
       await prisma.category.upsert({

@@ -15,3 +15,7 @@ playwright-report/
 .agents/
 .claude/
 skills-lock.json
+
+# Demo environment (npm run demo:up / demo:down): generated, never committed
+/public/demo-assets/
+/.demo/
