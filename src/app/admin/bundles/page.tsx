@@ -63,6 +63,8 @@ export default async function BundlesPage() {
                     {" · "}
                     minimum {b.minItems} distinct products
                     {b.maxItems ? ` · discounts up to ${b.maxItems}` : ""}
+                    {b.stepUpValue != null &&
+                      ` · ${b.minItems + 1} products: ${b.discountType === "PERCENTAGE" ? `${Number(b.stepUpValue)}% off` : `${formatINR(decimalToPaise(b.stepUpValue))} off`}`}
                   </p>
                   <p className="mt-1 text-ink-soft">
                     Eligible: {b.eligibleProducts.map((e: any) => e.product.name).join(", ")}

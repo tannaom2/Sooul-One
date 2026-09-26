@@ -141,3 +141,35 @@ export function settleNudge(
   const saving = gain(nudge.suggestProductIds.slice(0, nudge.missing));
   return saving > 0 ? { ...nudge, savingPaise: saving } : null;
 }
+
+/**
+ * Products that would make a kit the shopper already has bigger: a step-up to
+ * the next tier ("buy 3, save 15%"), or one more product at the kit's rate
+ * when it has no maximum. Checked the way settleNudge checks: each candidate
+ * is added, the engine re-runs, and it's kept only if this kit's saving grows,
+ * with the saving it really adds. It has to join the kit, not swap a cheaper
+ * product out (which would add little and push that one to full price).
+ * Candidates already in the basket are
+ * skipped (they're changed on their own lines). Cheapest first.
+ */
+export function growKitOptions(
+  bundleId: string,
+  lines: readonly BundleLineInput[],
+  rules: readonly BundleRule[],
+  candidates: readonly { productId: string; listPaise: Paise }[],
+): { productId: string; savingPaise: Paise }[] {
+  const before = applyBundles(lines, rules);
+  const savedBy = (r: ReturnType<typeof applyBundles>) => r.applied.find((b) => b.id === bundleId)?.discountPaise ?? 0;
+  // Units inside this kit's sets: a suggestion must add one, not swap a cheaper product out.
+  const unitsIn = (r: ReturnType<typeof applyBundles>) =>
+    r.perLineUnits.reduce((n, u, i) => n + (r.perLineBundleId[i] === bundleId ? u : 0), 0);
+  const inBasket = new Set(lines.map((l) => l.productId));
+  const found: { productId: string; savingPaise: Paise; listPaise: Paise }[] = [];
+  for (const c of candidates) {
+    if (inBasket.has(c.productId) || c.listPaise <= 0) continue;
+    const after = applyBundles([...lines, { productId: c.productId, unitPaise: c.listPaise, quantity: 1 }], rules);
+    const gain = after.totalPaise - before.totalPaise;
+    if (gain > 0 && savedBy(after) > savedBy(before) && unitsIn(after) > unitsIn(before)) found.push({ productId: c.productId, savingPaise: gain, listPaise: c.listPaise });
+  }
+  return found.sort((a, b) => a.listPaise - b.listPaise).map(({ productId, savingPaise }) => ({ productId, savingPaise }));
+}

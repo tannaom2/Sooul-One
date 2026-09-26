@@ -47,6 +47,7 @@ Then `npm run dev` brings your normal app back.
 
 - **"Can't reach the database" or `ENOTFOUND` (common on a phone hotspot):** `demo:up` retries and rebuilds on its own, up to three times. If it still fails, run `ipconfig /flushdns` in a terminal and try again.
 - **"sooulone_demo already exists":** add `--fresh`, or run `npm run demo:down` first.
+- **The code gained a migration after demo:up** (the app errors about a missing column): `npm run demo:migrate` applies it to the demo database and keeps its data. It never touches the real database.
 - **Port 3000 is busy:** stop `npm run dev` (or whatever else is using it) first.
 - **Anything half-finished:** `npm run demo:down` is always safe, and safe to run twice.
 

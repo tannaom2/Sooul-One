@@ -277,6 +277,8 @@ export interface ComboOffer {
   minItems: number;
   /** Most products one kit takes; null for no limit ("any 2 or more"). */
   maxItems: number | null;
+  /** The step-up with one more product, e.g. "15% off"; null when there's none. */
+  stepUpLabel: string | null;
   /** "15% off" or "₹50 off", as the owner set it. */
   discountLabel: string;
   /** The set shown with its combo price: this product plus the others needed. */
@@ -311,6 +313,7 @@ export const getOffersForProduct = unstable_cache(
       const rule: BundleRule = {
         id: b.id, name: b.name, minItems: b.minItems, maxItems: b.maxItems,
         discountType: b.discountType, discountValue: Number(b.discountValue.toString()),
+        stepUpValue: b.stepUpValue == null ? null : Number(b.stepUpValue.toString()),
         eligibleProductIds: b.eligibleProducts.map((e) => e.productId),
       };
       const fixed = b.minItems >= b.eligibleProducts.length;
@@ -336,6 +339,9 @@ export const getOffersForProduct = unstable_cache(
       if (!price || price.savingPaise <= 0) continue;
       offers.push({
         bundleId: b.id, name: b.name, description: b.description, kind: fixed ? "fixed" : "mix", minItems: b.minItems, maxItems: b.maxItems ?? null,
+        stepUpLabel:
+          b.stepUpValue == null ? null
+          : b.discountType === "PERCENTAGE" ? `${Number(b.stepUpValue.toString())}% off` : `₹${Number(b.stepUpValue.toString())} off`,
         discountLabel: b.discountType === "PERCENTAGE" ? `${Number(b.discountValue.toString())}% off` : `₹${Number(b.discountValue.toString())} off`,
         items, ...price, alternatives: fixed ? [] : others.slice(needed, needed + 6).map(toItem),
       });

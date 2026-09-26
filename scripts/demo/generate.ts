@@ -213,7 +213,7 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
     { name: "Namkeen Trio", brand: "the-true-store", desc: "Stock the tea-time tin with three favourites.", min: 3, type: "PERCENTAGE" as const, value: 10, items: tts.filter((p) => p.category === "Healthy Namkeen") },
     { name: "Sweet Pair", brand: "the-true-store", desc: "No refined sugar in any of them.", min: 2, type: "FLAT" as const, value: 50, items: tts.filter((p) => p.category === "Healthy Sweets") },
     { name: "Woman Axis Daily Routine", brand: "woman-axis", desc: "Build your own two-step routine.", min: 2, type: "PERCENTAGE" as const, value: 15, items: products.filter((p) => p.brand === "woman-axis") },
-    { name: "Kids Vault Growing-Up Kit", brand: "kids-vault", desc: "Mix any two for the school term.", min: 2, type: "PERCENTAGE" as const, value: 12, items: products.filter((p) => p.brand === "kids-vault") },
+    { name: "Kids Vault Growing-Up Kit", brand: "kids-vault", desc: "Mix any two for the school term.", min: 2, max: 3, stepUp: 15, type: "PERCENTAGE" as const, value: 12, items: products.filter((p) => p.brand === "kids-vault") },
     // A fixed combo: every product required. A flat amount keeps the combo price round (₹898 → ₹799).
     { name: "Kids Immunity Duo", brand: "kids-vault", desc: "Daily multivitamin plus vitamin C and zinc.", min: 2, type: "FLAT" as const, value: 99, items: products.filter((p) => ["kids-daily-multivitamin", "vitamin-c-zinc-kids-gummies"].includes(p.slug)) },
   ].map((b) => ({ ...b, id: id("bun") }));
@@ -222,11 +222,15 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
       data: {
         id: b.id, brandId: brandBySlug.get(b.brand)!.id, slug: `${b.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-demo`, name: b.name,
         description: b.desc, minItems: b.min, discountType: b.type, discountValue: String(b.value), isActive: true, createdAt: at(start, 6),
+        maxItems: "max" in b ? b.max : null, stepUpValue: "stepUp" in b ? String(b.stepUp) : null,
         eligibleProducts: { create: b.items.map((p) => ({ id: id("bep"), productId: p.id })) },
       },
     });
   }
-  const bundleRules: BundleRule[] = bundleDefs.map((b) => ({ id: b.id, name: b.name, minItems: b.min, discountType: b.type, discountValue: b.value, eligibleProductIds: b.items.map((p) => p.id) }));
+  const bundleRules: BundleRule[] = bundleDefs.map((b) => ({
+    id: b.id, name: b.name, minItems: b.min, maxItems: "max" in b ? b.max : null, discountType: b.type, discountValue: b.value,
+    stepUpValue: "stepUp" in b ? b.stepUp : null, eligibleProductIds: b.items.map((p) => p.id),
+  }));
 
   const coupons = [
     { code: "WELCOME10", type: "PERCENTAGE" as const, value: 10, min: 499, maxUses: null, from: at(start, -5), until: at(now, 120), active: true, firstOrderOnly: true },

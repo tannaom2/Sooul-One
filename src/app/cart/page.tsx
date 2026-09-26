@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { basketKits, priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
+import { loadBasketKits, priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
 import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
 import { KitBlock } from "@/components/basket/kit-block";
@@ -48,7 +48,7 @@ export default async function CartPage() {
 
   const { quote, cartItems, estimatedDeliveryDate } = result;
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
-  const kits = basketKits(quote, cartItems);
+  const kits = await loadBasketKits(result);
   const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
 
   return (

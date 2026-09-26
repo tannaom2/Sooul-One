@@ -20,7 +20,7 @@ import { QuantityStepper } from "./quantity-stepper";
  * so the count always moves by exactly one.
  */
 export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refreshPage?: boolean }) {
-  const { setQuantities, pending: cartPending } = useCart();
+  const { setQuantities, add, pending: cartPending } = useCart();
   const [refreshing, startTransition] = useTransition();
   const router = useRouter();
   const pending = cartPending || refreshing;
@@ -47,6 +47,17 @@ export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refresh
         .filter((m) => kit.completeWith.some((c) => c.productId === m.productId))
         .map((m) => ({ itemId: m.itemId, quantity: m.quantity + 1 })),
     );
+
+  const addToKit = (productId: string) =>
+    startTransition(async () => {
+      await add(productId, 1, { open: false });
+      if (refreshPage) router.refresh();
+    });
+
+  // One prompt per kit: completing another kit, or growing one, whichever saves more.
+  const bestGrow = kit.growWith[0]?.savingPaise ?? 0;
+  const showComplete = kit.completeWith.length > 0 && kit.nextKitSavingPaise >= bestGrow;
+  const showGrow = !showComplete && kit.growWith.length > 0;
 
   const maxKits = kit.sets + Math.min(...lastSet.map((m) => MAX_LINE_QUANTITY - m.quantity));
   const kitWord = kit.sets === 1 ? "kit" : "kits";
@@ -96,7 +107,28 @@ export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refresh
         <span className="text-small font-semibold text-veg">You save {formatPriceTag(kit.savingPaise)}</span>
       </div>
 
-      {kit.completeWith.length > 0 && (
+      {showGrow && (
+        <div className="mt-3 border-t border-rule pt-3 text-small">
+          <p className="font-semibold">{kit.growLabel}</p>
+          <ul className="mt-1 grid gap-1.5">
+            {kit.growWith.map((g) => (
+              <li key={g.productId} className="flex items-center justify-between gap-3">
+                <span className="min-w-0">
+                  {g.name} <span className="tabular text-ink-faint">{formatPriceTag(g.pricePaise)}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-micro font-semibold text-veg">save {formatPriceTag(g.savingPaise)} more</span>
+                  <button type="button" onClick={() => addToKit(g.productId)} disabled={pending} className="btn btn-outline px-3 py-1 text-micro">
+                    Add
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {showComplete && (
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-rule pt-3 text-small">
           <span>
             Add {kit.completeWith.map((c) => c.name).join(" + ")} to make another kit and save{" "}

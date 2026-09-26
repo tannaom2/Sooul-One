@@ -467,6 +467,9 @@ model Bundle {
   maxItems         Int?
   discountType     DiscountType
   discountValue    Decimal                @db.Decimal(10, 2)
+  /// Optional step-up: the discount (same type) when a kit holds one more product
+  /// than minItems, e.g. 12% for 2 products and 15% for 3. Set, maxItems is minItems + 1.
+  stepUpValue      Decimal?               @db.Decimal(10, 2)
   eligibleProducts BundleEligibleProduct[]
   isActive         Boolean                @default(true)
   createdAt        DateTime               @default(now())

@@ -27,8 +27,8 @@ interface CartContextValue {
   error: string | null;
   openBasket: () => void;
   closeBasket: () => void;
-  /** Resolves true when the server accepted the add. */
-  add: (productId: string, quantity: number) => Promise<boolean>;
+  /** Resolves true when the server accepted the add. Opens the drawer unless `open` is false. */
+  add: (productId: string, quantity: number, options?: { open?: boolean }) => Promise<boolean>;
   /** One of each, for a combo. Resolves true when all went in. */
   addMany: (productIds: string[]) => Promise<boolean>;
   setQuantity: (itemId: string, quantity: number) => Promise<void>;
@@ -45,10 +45,16 @@ function applyOptimistic(state: State, change: Optimistic): State {
   if (change.type === "add") return { ...state, count: state.count + change.quantity };
   if (!state.basket) return state;
   const next = new Map(change.changes.map((c) => [c.itemId, c.quantity]));
+  // A kit counts once, so only units outside kits move the badge here; the
+  // server's answer settles kit counts a moment later.
+  const delta = state.basket.lines.reduce(
+    (n, l) => n + (next.has(l.itemId) && l.kitUnits === 0 ? next.get(l.itemId)! - l.quantity : 0),
+    0,
+  );
   const lines = state.basket.lines
     .map((l) => (next.has(l.itemId) ? { ...l, quantity: next.get(l.itemId)! } : l))
     .filter((l) => l.quantity > 0);
-  const count = lines.reduce((n, l) => n + l.quantity, 0);
+  const count = Math.max(0, state.count + delta);
   return { count, basket: { ...state.basket, lines, count } };
 }
 
@@ -96,13 +102,15 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
   const closeBasket = useCallback(() => setOpen(false), []);
 
   const add = useCallback(
-    (productId: string, quantity: number) =>
+    (productId: string, quantity: number, options?: { open?: boolean }) =>
       new Promise<boolean>((resolve) => {
         setError(null);
         // Open straight away: the tap should answer instantly, not after the
         // server round trip. The badge updates optimistically meanwhile.
-        setOpen(true);
-        track({ type: "CART_OPENED" });
+        if (options?.open !== false) {
+          setOpen(true);
+          track({ type: "CART_OPENED" });
+        }
         startTransition(async () => {
           addOptimistic({ type: "add", quantity });
           const result = await addToBasket(productId, quantity);
@@ -125,7 +133,8 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         setOpen(true);
         track({ type: "CART_OPENED" });
         startTransition(async () => {
-          addOptimistic({ type: "add", quantity: productIds.length });
+          // A kit's products go in together and count as one item.
+          addOptimistic({ type: "add", quantity: 1 });
           const result = await addManyToBasket(productIds);
           if (result.ok) accept(result.basket);
           else {

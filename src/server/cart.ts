@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
 import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteLineInput } from "@/lib/checkout/quote";
 import { groupKits } from "@/lib/checkout/kits";
-import { freeDeliveryProgress, rankOfferNudges, settleNudge, type OfferNudge } from "@/lib/checkout/basket-nudges";
+import { freeDeliveryProgress, growKitOptions, rankOfferNudges, settleNudge, type OfferNudge } from "@/lib/checkout/basket-nudges";
 import { MAX_LINE_QUANTITY, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
@@ -159,8 +159,8 @@ export async function updateQuantities(sessionId: string, changes: readonly { it
   for (const c of changes) await updateQuantity(sessionId, c.itemId, c.quantity);
 }
 
-/** The quote's combos as basket kits, with each product's basket line attached. */
-export function basketKits(quote: Quote, cartItems: readonly { id: string; productId: string }[]): BasketKit[] {
+/** The quote's combos as basket kits, with each product's basket line attached (no suggestions). */
+function basketKits(quote: Quote, cartItems: readonly { id: string; productId: string }[]): BasketKit[] {
   const itemIdByProduct = new Map(cartItems.map((i) => [i.productId, i.id]));
   const quantityByProduct = new Map(quote.lines.map((l) => [l.productId, l.quantityRequested]));
   return groupKits(quote).map((kit) => ({
@@ -170,7 +170,74 @@ export function basketKits(quote: Quote, cartItems: readonly { id: string; produ
       itemId: itemIdByProduct.get(m.productId) ?? "",
       quantity: quantityByProduct.get(m.productId) ?? 0,
     })),
+    growWith: [],
+    growLabel: null,
   }));
+}
+
+type CartQuote = NonNullable<Awaited<ReturnType<typeof quoteCart>>>;
+
+/** The basket as the bundle engine takes it: list price per unit, units that can ship. */
+function engineLinesOf(quote: Quote) {
+  return quote.lines.map((l) => ({
+    productId: l.productId,
+    unitPaise: l.quantityAvailable > 0 ? Math.round(l.listGrossPaise / l.quantityAvailable) : 0,
+    quantity: l.quantityAvailable,
+  }));
+}
+
+const ORDINAL: Record<number, string> = { 3: "third", 4: "fourth", 5: "fifth", 6: "sixth" };
+
+/**
+ * The basket's kits, each with up to three in-stock products that would grow
+ * it (checked against the engine, so the saving shown is what the basket
+ * gives), for the drawer and the basket page alike.
+ */
+export async function loadBasketKits(result: CartQuote): Promise<BasketKit[]> {
+  const { quote, cartItems, bundles, bundlePrices, bundleListPrices } = result;
+  const kits = basketKits(quote, cartItems);
+  if (kits.length === 0) return kits;
+
+  const lines = engineLinesOf(quote);
+  const options = new Map(
+    kits.map((kit) => {
+      const rule = bundles.find((b) => b.id === kit.bundleId);
+      const candidates = (rule?.eligibleProductIds ?? []).map((id) => ({ productId: id, listPaise: bundleListPrices.get(id) ?? 0 }));
+      return [kit.bundleId, growKitOptions(kit.bundleId, lines, bundles, candidates)] as const;
+    }),
+  );
+  const ids = [...new Set([...options.values()].flat().map((o) => o.productId))];
+  const products =
+    ids.length > 0
+      ? await db.product.findMany({
+          where: { id: { in: ids }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
+          include: { batches: { where: { quantityRemaining: { gt: 0 } } } },
+        })
+      : [];
+  const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
+  const buyable = new Map(products.filter((p) => productAvailability(p, arrives).state !== "out").map((p) => [p.id, p]));
+
+  return kits.map((kit) => {
+    const growWith = (options.get(kit.bundleId) ?? [])
+      .filter((o) => buyable.has(o.productId))
+      .slice(0, 3)
+      .map((o) => ({
+        productId: o.productId,
+        name: buyable.get(o.productId)!.name,
+        pricePaise: bundlePrices.get(o.productId) ?? 0,
+        savingPaise: o.savingPaise,
+      }));
+    if (growWith.length === 0) return kit;
+    const rule = bundles.find((b) => b.id === kit.bundleId)!;
+    const off = (v: number) => (rule.discountType === "PERCENTAGE" ? `${v}% off` : `${formatPriceTag(Math.round(v * 100))} off`);
+    const size = Math.max(rule.minItems, 1) + 1;
+    const whose = kit.sets > 1 ? "one of your kits becomes" : "your kit becomes";
+    const growLabel =
+      rule.stepUpValue != null
+        ? `Add a ${ORDINAL[size] ?? `${size}th`} product: ${whose} ${off(rule.stepUpValue)}`
+        : `Add another product to your kit, also at ${off(rule.discountValue)}`;
+    return { ...kit, growWith, growLabel };
+  });
 }
 
 export async function updateQuantity(sessionId: string, itemId: string, quantity: number) {
@@ -304,6 +371,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     maxItems: b.maxItems,
     discountType: b.discountType,
     discountValue: Number(b.discountValue.toString()),
+    stepUpValue: b.stepUpValue == null ? null : Number(b.stepUpValue.toString()),
     eligibleProductIds: b.eligibleProducts.map((e) => e.productId),
   }));
 
@@ -369,7 +437,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   if (!result) return null;
   const { quote, cartItems, bundles, bundlePrices, bundleListPrices } = result;
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
-  const kits = basketKits(quote, cartItems);
+  const kits = await loadBasketKits(result);
   const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
 
   const lines = quote.lines.map((line) => {
@@ -398,11 +466,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   const shippable = quote.lines.filter((l) => l.quantityAvailable > 0).map((l) => l.productId);
   // Every offer within reach, kept only where the engine would really apply it
   // (a product already in a kit can't make a second offer), best first.
-  const engineLines = quote.lines.map((l) => ({
-    productId: l.productId,
-    unitPaise: l.quantityAvailable > 0 ? Math.round(l.listGrossPaise / l.quantityAvailable) : 0,
-    quantity: l.quantityAvailable,
-  }));
+  const engineLines = engineLinesOf(quote);
   const settled = rankOfferNudges(shippable, bundles, quote.appliedBundles.map((b) => b.id), bundlePrices)
     .map((n) => settleNudge(n, engineLines, bundles, bundleListPrices))
     .filter((n): n is OfferNudge => n !== null);
@@ -446,7 +510,8 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   }
 
   return {
-    count: lines.reduce((n, l) => n + l.quantity, 0),
+    // A kit counts as one item; units outside kits count one each.
+    count: lines.reduce((n, l) => n + Math.max(0, l.quantity - l.kitUnits), 0) + kits.reduce((n, k) => n + k.sets, 0),
     lines,
     itemsPaise: quote.listSubtotalPaise,
     savingsPaise: quote.productDiscountPaise + quote.bundleDiscountPaise + quote.discountPaise,

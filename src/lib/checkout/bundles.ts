@@ -16,6 +16,10 @@
  *     plus one of B is one set (A + B), not a 15% discount on 21 jars; a
  *     single cheap add-on can't turn a combo into a bulk discount.
  *
+ * Step-up ("buy 2 save 12%, buy 3 save 15%"): a set holding more than
+ * `minItems` products takes `stepUpValue` instead of `discountValue`. The
+ * owner sets both, and the admin form shows what the extra product costs.
+ *
  * Savings are whole rupees, rounded down: a percentage can come out at
  * ₹113.76, and a combo reads as "₹835", not "₹834.24". Rounding down means
  * the seller never gives away more than the rule says.
@@ -41,6 +45,8 @@ export interface BundleRule {
   readonly maxItems?: number | null;
   readonly discountType: DiscountType;
   readonly discountValue: number;
+  /** Discount (same type) for a set with more than minItems products; none when null. */
+  readonly stepUpValue?: number | null;
   readonly eligibleProductIds: readonly string[];
 }
 
@@ -129,10 +135,11 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
     if (members.length < minItems) break;
 
     const setValues = members.map((i) => lines[i].unitPaise);
+    const stepUp = rule.stepUpValue != null && rule.stepUpValue > 0 && members.length > minItems;
     const { discountPaise: exactDiscount } = applyDiscount(
       setValues.reduce((sum, v) => sum + v, 0),
       rule.discountType,
-      rule.discountValue,
+      stepUp ? rule.stepUpValue! : rule.discountValue,
     );
     const setDiscount = Math.floor(exactDiscount / 100) * 100; // whole rupees, down
     if (setDiscount <= 0) break;

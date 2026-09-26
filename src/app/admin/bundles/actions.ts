@@ -40,8 +40,12 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
   // A fixed combo needs every chosen product; mix-and-match needs any minItems of them.
   const fixed = form.get("fixedCombo") === "on";
   const minItems = fixed ? eligibleProductIds.length : Number(form.get("minItems") || 2);
+  // A step-up ("buy 2 save 12%, buy 3 save 15%") needs room for one more product
+  // than the minimum, and no more; not for fixed combos, which take every product.
+  const stepUpRaw = form.get("stepUpValue");
+  const stepUpValue = !fixed && stepUpRaw ? Number(stepUpRaw) : null;
   const maxItemsRaw = form.get("maxItems");
-  const maxItems = fixed ? null : maxItemsRaw ? Number(maxItemsRaw) : null;
+  const maxItems = fixed ? null : stepUpValue != null ? minItems + 1 : maxItemsRaw ? Number(maxItemsRaw) : null;
 
   if (!name || !brandId) {
     return { ok: false, message: "A bundle needs a name and a brand." };
@@ -62,6 +66,7 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
     discountValue,
     minItems,
     maxItems,
+    stepUpValue,
     eligiblePricesPaise: eligible.map(
       (p) =>
         resolveUnitPrice(decimalToPaise(p.basePrice), {
@@ -82,6 +87,7 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
       maxItems,
       discountType,
       discountValue,
+      stepUpValue,
       isActive: true,
       eligibleProducts: { create: eligibleProductIds.map((productId) => ({ productId })) },
     },
@@ -91,6 +97,7 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
     name,
     discountType,
     discountValue,
+    stepUpValue,
     minItems,
     maxItems,
     eligibleProductIds,
@@ -132,6 +139,7 @@ export async function deleteBundle(bundleId: string): Promise<void> {
       brandId: bundle.brandId,
       discountType: bundle.discountType,
       discountValue: Number(bundle.discountValue),
+      stepUpValue: bundle.stepUpValue == null ? null : Number(bundle.stepUpValue),
       minItems: bundle.minItems,
       maxItems: bundle.maxItems,
       isActive: bundle.isActive,

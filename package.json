@@ -26,7 +26,8 @@
     "perf:checkout": "tsx scripts/checkout-load.mts",
     "demo:up": "tsx scripts/demo/demo-up.mts",
     "demo:start": "tsx scripts/demo/demo-start.mts",
-    "demo:down": "tsx scripts/demo/demo-down.mts"
+    "demo:down": "tsx scripts/demo/demo-down.mts",
+    "demo:migrate": "tsx scripts/demo/demo-migrate.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

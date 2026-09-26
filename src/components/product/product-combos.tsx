@@ -60,7 +60,9 @@ function Combo({ offer }: { offer: ComboOffer }) {
         <p className="text-micro text-ink-soft">
           {offer.kind === "fixed"
             ? `Buy these together: ${offer.discountLabel}.`
-            : offer.maxItems === offer.minItems
+            : offer.stepUpLabel
+              ? `Any ${offer.minItems} of the products below: ${offer.discountLabel}; any ${offer.minItems + 1}: ${offer.stepUpLabel}.`
+              : offer.maxItems === offer.minItems
               ? `Any ${offer.minItems} of the products below: ${offer.discountLabel}.`
               : `Any ${offer.minItems} or more of the products below: ${offer.discountLabel}.`}
           {note ? ` ${note}` : ""}

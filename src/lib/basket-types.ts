@@ -31,6 +31,10 @@ export interface BasketLine {
 /** A combo in the basket, with what the controls need to change it as one unit. */
 export interface BasketKit extends Omit<Kit, "members"> {
   readonly members: readonly (Kit["members"][number] & { itemId: string; quantity: number })[];
+  /** In-stock products that would grow this kit (a step-up tier, or one more at its rate), with what each adds. */
+  readonly growWith: readonly { productId: string; name: string; pricePaise: number; savingPaise: number }[];
+  /** The line above those suggestions, e.g. "Add a third product: your kit becomes 15% off". */
+  readonly growLabel: string | null;
 }
 
 export interface BasketOffer {
@@ -42,7 +46,7 @@ export interface BasketOffer {
 }
 
 export interface BasketSnapshot {
-  /** Total units, for the menu badge. */
+  /** Items for the menu badge: each kit counts once, other units one each. */
   readonly count: number;
   readonly lines: readonly BasketLine[];
   readonly itemsPaise: number;
