@@ -20,6 +20,7 @@ import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
 import { getStoreControls } from "@/server/store-settings";
 import { couponValidity, minimumOrderMessage } from "@/lib/checkout/coupons";
+import { productAvailability } from "@/lib/checkout/availability";
 
 /**
  * Cart persistence and quoting.
@@ -113,10 +114,19 @@ export async function addToCart(sessionId: string, productId: string, quantity: 
 
   const product = await db.product.findUnique({
     where: { id: productId },
-    include: { brand: { select: { isActive: true } }, category: { select: { isActive: true } } },
+    include: {
+      brand: { select: { isActive: true } },
+      category: { select: { isActive: true } },
+      batches: { where: { quantityRemaining: { gt: 0 } } },
+    },
   });
   if (!product || !isSellable(product)) throw new Error("That product isn't available.");
   if (product.retailOnly) throw new Error("That product is sold in our stores only.");
+  // The same stock rule the product page and basket use: nothing that can't
+  // ship goes in (a stale tab or an offer suggestion could otherwise add it).
+  if (productAvailability(product, estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE)).state === "out") {
+    throw new Error("That's just sold out.");
+  }
 
   // The price the shopper is looking at, snapshotted server-side (never taken
   // from the client). It only drives the "price changed" note: the quote
@@ -216,7 +226,14 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   const [items, bundleRows, found] = await Promise.all([
     db.cartItem.findMany({ where: { cart: { sessionId } }, include: CART_ITEM_INCLUDE }),
     controls.bundlesEnabled
-      ? db.bundle.findMany({ where: { isActive: true }, include: { eligibleProducts: true } })
+      ? db.bundle.findMany({
+          where: { isActive: true },
+          include: {
+            eligibleProducts: {
+              include: { product: { select: { id: true, basePrice: true, discountActive: true, discountPercent: true } } },
+            },
+          },
+        })
       : Promise.resolve([]),
     context.couponCode
       ? db.coupon.findUnique({ where: { code: context.couponCode.toUpperCase() } })
@@ -288,11 +305,27 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     couponMessage = minimumOrderMessage(coupon.minOrderPaise, quote.couponShortfallPaise, formatINR);
   }
 
+  // What each bundle product sells for today, so offers can be ranked by rupees saved.
+  const bundlePrices = new Map<string, number>();
+  for (const b of bundleRows) {
+    for (const e of b.eligibleProducts) {
+      bundlePrices.set(
+        e.productId,
+        resolveUnitPrice(decimalToPaise(e.product.basePrice), {
+          active: Boolean(e.product.discountActive),
+          percent: e.product.discountPercent == null ? null : Number(e.product.discountPercent.toString()),
+        }).pricePaise,
+      );
+    }
+  }
+  if (quote.couponBlockedByCombo) couponMessage = "Discount codes don't apply to items already priced as a combo.";
+
   return {
     quote,
     cartItems: cart.items,
     gstTreatment,
     bundles,
+    bundlePrices,
     estimatedDeliveryDate,
     couponRejected: Boolean(context.couponCode) && !quote.appliedCouponCode,
     /** Why the code didn't apply, in words for the shopper. */
@@ -307,7 +340,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
 export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapshot | null> {
   const result = await quoteCart(sessionId);
   if (!result) return null;
-  const { quote, cartItems, bundles } = result;
+  const { quote, cartItems, bundles, bundlePrices } = result;
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
 
   const lines = quote.lines.map((line) => {
@@ -333,21 +366,28 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   // What quote.ts compares against the free-delivery threshold.
   const discounted = quote.subtotalPaise - quote.bundleDiscountPaise - quote.discountPaise;
   const shippable = quote.lines.filter((l) => l.quantityAvailable > 0).map((l) => l.productId);
-  const nudge = nextOfferNudge(shippable, bundles, quote.appliedBundles.map((b) => b.id));
+  const nudge = nextOfferNudge(shippable, bundles, quote.appliedBundles.map((b) => b.id), bundlePrices);
 
   let nextOffer: BasketSnapshot["nextOffer"] = null;
   if (nudge) {
-    const suggested = await db.product.findMany({
+    // Only products that can ship now; filtered before choosing, so a sold-out
+    // product never takes a place a buyable one could have had.
+    const candidates = await db.product.findMany({
       where: { id: { in: [...nudge.suggestProductIds] }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
-      select: { id: true, slug: true, name: true, basePrice: true, discountActive: true, discountPercent: true },
-      take: 3,
+      include: { batches: { where: { quantityRemaining: { gt: 0 } } } },
     });
+    const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
+    const order = new Map(nudge.suggestProductIds.map((id, i) => [id, i]));
+    const suggested = candidates
+      .filter((p) => productAvailability(p, arrives).state !== "out")
+      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      .slice(0, 3);
     nextOffer = {
       bundleId: nudge.bundleId,
       name: nudge.name,
       missing: nudge.missing,
       discountLabel:
-        nudge.discountType === "PERCENTAGE" ? `${nudge.discountValue}% off` : `${formatINR(Math.round(nudge.discountValue * 100))} off`,
+        nudge.discountType === "PERCENTAGE" ? `${nudge.discountValue}% off` : `${formatPriceTag(Math.round(nudge.discountValue * 100))} off`,
       suggestions: suggested.map((p) => ({
         productId: p.id,
         slug: p.slug,

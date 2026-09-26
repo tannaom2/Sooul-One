@@ -15,13 +15,13 @@ export function OrderTracker({ progress }: { progress: OrderProgress }) {
             <div className="flex flex-col items-center sm:flex-row">
               <span
                 aria-hidden
-                className={`grid h-6 w-6 shrink-0 place-items-center text-micro font-bold ${s.done ? "bg-ink text-paper" : "border border-[--color-rule] text-ink-faint"}`}
+                className={`grid h-6 w-6 shrink-0 place-items-center text-micro font-bold ${s.done ? "bg-ink text-paper" : "border border-rule text-ink-faint"}`}
                 style={{ borderRadius: 999 }}
               >
                 {s.done ? "✓" : i + 1}
               </span>
               {i < progress.stages.length - 1 && (
-                <span aria-hidden className={`h-6 w-px sm:h-px sm:w-full ${progress.stages[i + 1].done ? "bg-ink" : "bg-[--color-rule]"}`} />
+                <span aria-hidden className={`h-6 w-px sm:h-px sm:w-full ${progress.stages[i + 1].done ? "bg-ink" : "bg-rule"}`} />
               )}
             </div>
             <div className="pb-3 sm:pb-0">
@@ -35,13 +35,13 @@ export function OrderTracker({ progress }: { progress: OrderProgress }) {
         ))}
       </ol>
       {progress.ended && (
-        <p className="border-t border-[--color-rule] px-3.5 py-3 text-small">
+        <p className="border-t border-rule px-3.5 py-3 text-small">
           <span className="font-semibold">{progress.ended.label}</span>
           {progress.ended.date && <span className="text-ink-faint"> · {formatDate(progress.ended.date)}</span>}
         </p>
       )}
       {progress.tracking && (
-        <p className="border-t border-[--color-rule] px-3.5 py-3 text-small">
+        <p className="border-t border-rule px-3.5 py-3 text-small">
           Tracking number <span className="tabular font-semibold select-all">{progress.tracking.number}</span>
           {progress.tracking.courier && <span className="text-ink-soft"> · {progress.tracking.courier}</span>}
         </p>

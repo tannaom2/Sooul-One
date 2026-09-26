@@ -105,7 +105,7 @@ export default async function OrderPage({
           </div>
         </dl>
 
-        <div className="border-t border-[--color-rule] p-3.5 text-small text-ink-soft">
+        <div className="border-t border-rule p-3.5 text-small text-ink-soft">
           <p className="font-semibold text-ink">Delivering to</p>
           <p className="mt-1">
             {address?.name}, {address?.line1}

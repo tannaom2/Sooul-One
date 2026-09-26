@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyBundles, type BundleRule } from "../src/lib/checkout/bundles";
+import { applyBundles, comboPrice, type BundleRule } from "../src/lib/checkout/bundles";
 import { buildQuote, type QuoteLineInput } from "../src/lib/checkout/quote";
 import { toPaise } from "../src/lib/money";
 
@@ -13,7 +13,7 @@ const rule = (over: Partial<BundleRule> = {}): BundleRule => ({
   ...over,
 });
 
-const line = (productId: string, rupees: string) => ({ productId, grossPaise: toPaise(rupees) });
+const line = (productId: string, rupees: string, quantity = 1) => ({ productId, unitPaise: toPaise(rupees), quantity });
 
 describe("applyBundles", () => {
   it("applies when enough distinct eligible products are present", () => {
@@ -31,8 +31,8 @@ describe("applyBundles", () => {
     expect(applyBundles([line("a", "200"), line("z", "300")], [rule()]).totalPaise).toBe(0);
   });
 
-  it("ignores lines that cannot ship (gross 0)", () => {
-    expect(applyBundles([line("a", "200"), line("b", "0")], [rule()]).totalPaise).toBe(0);
+  it("ignores lines that cannot ship (no units)", () => {
+    expect(applyBundles([line("a", "200"), line("b", "300", 0)], [rule()]).totalPaise).toBe(0);
   });
 
   it("splits the discount across lines so the parts sum exactly", () => {
@@ -107,20 +107,33 @@ describe("bundles inside the quote", () => {
     expect(q.appliedBundles).toHaveLength(1);
   });
 
-  it("applies the coupon to what the bundle left, and computes GST after both", () => {
+  it("applies a code only to items outside the combo, and computes GST after both", () => {
+    // a + b form the combo (10% off: 1000 -> 900); z is outside it. The 10%
+    // code discounts only z (500 -> 450): offers aren't clubbed.
+    const q = buildQuote({
+      ...base,
+      lines: [product("a", "500"), product("b", "500"), product("z", "500")],
+      bundles: [rule()],
+      coupon: { code: "X", type: "PERCENTAGE", value: 10 },
+    });
+    expect(q.bundleDiscountPaise).toBe(toPaise("100"));
+    expect(q.discountPaise).toBe(toPaise("50"));
+    expect(q.lines.map((l) => l.discountPaise)).toEqual([0, 0, toPaise("50")]);
+    expect(q.totalPaise).toBe(toPaise("1350"));
+    expect(q.taxPaise).toBe(2 * Math.round((toPaise("450") * 12) / 112) + Math.round((toPaise("450") * 12) / 112));
+    expect(q.lines.reduce((s, l) => s + l.bundleDiscountPaise + l.discountPaise, 0)).toBe(q.bundleDiscountPaise + q.discountPaise);
+  });
+
+  it("says when a code saved nothing because every item is in a combo", () => {
     const q = buildQuote({
       ...base,
       lines: [product("a", "500"), product("b", "500")],
       bundles: [rule()],
       coupon: { code: "X", type: "PERCENTAGE", value: 10 },
     });
-    expect(q.discountPaise).toBe(toPaise("90"));
-    expect(q.totalPaise).toBe(toPaise("810"));
-    // Each line ends at 405 after both discounts; tax is backed out per line.
-    expect(q.taxPaise).toBe(2 * Math.round((toPaise("405") * 12) / 112));
-    expect(q.lines.reduce((s, l) => s + l.bundleDiscountPaise + l.discountPaise, 0)).toBe(
-      q.bundleDiscountPaise + q.discountPaise,
-    );
+    expect(q.discountPaise).toBe(0);
+    expect(q.appliedCouponCode).toBeUndefined();
+    expect(q.couponBlockedByCombo).toBe(true);
   });
 
   it("uses the discounted total for the free-shipping threshold", () => {
@@ -218,5 +231,59 @@ describe("bundles inside the quote", () => {
       const combinedPreCoupon = q.lines[0].taxablePaise + q.lines[0].taxPaise;
       expect(combinedPreCoupon).toBe(toPaise("900"));
     });
+  });
+});
+
+describe("combos are priced per complete set (peer practice, protects margin)", () => {
+  it("one cheap add-on doesn't discount twenty jars: only one set forms", () => {
+    const r = applyBundles([line("a", "500", 20), line("b", "100", 1)], [rule()]);
+    expect(r.applied[0].sets).toBe(1);
+    expect(r.perLineUnits).toEqual([1, 1]);
+    expect(r.totalPaise).toBe(toPaise("60")); // 10% of one A (500) + one B (100)
+  });
+
+  it("two of each makes two sets", () => {
+    const r = applyBundles([line("a", "200", 2), line("b", "300", 2)], [rule()]);
+    expect(r.applied[0].sets).toBe(2);
+    expect(r.totalPaise).toBe(toPaise("100"));
+  });
+
+  it("a fixed combo (every product required) needs all of them", () => {
+    const fixed = rule({ minItems: 3 });
+    expect(applyBundles([line("a", "200"), line("b", "300")], [fixed]).totalPaise).toBe(0);
+    expect(applyBundles([line("a", "200"), line("b", "300"), line("c", "100")], [fixed]).totalPaise).toBe(toPaise("60"));
+  });
+
+  it("in the quote, extra units pay their normal price", () => {
+    const q = buildQuote({ ...base, lines: [product("a", "500", { quantity: 3 }), product("b", "500")], bundles: [rule()] });
+    expect(q.bundleDiscountPaise).toBe(toPaise("100")); // 10% of one a + one b, not of all four
+    expect(q.totalPaise).toBe(toPaise("1900"));
+  });
+
+  it("a sale on extra units doesn't hide the combo saving on the set unit", () => {
+    // a: MRP 1000, on sale at 950, three of them. The combo is 10% off MRP
+    // (900 for the set unit), which beats 950 on that one unit only.
+    const q = buildQuote({
+      ...base,
+      lines: [product("a", "950", { listPricePaise: toPaise("1000"), quantity: 3 }), product("b", "1000")],
+      bundles: [rule()],
+    });
+    expect(q.lines[0].bundleDiscountPaise).toBe(toPaise("50"));
+    expect(q.lines[1].bundleDiscountPaise).toBe(toPaise("100"));
+  });
+});
+
+describe("comboPrice, for the storefront", () => {
+  it("states list, sale, combo price and saving with the basket's own arithmetic", () => {
+    const c = comboPrice(rule(), [
+      { productId: "a", unitListPaise: toPaise("500"), unitSalePaise: toPaise("500") },
+      { productId: "b", unitListPaise: toPaise("300"), unitSalePaise: toPaise("270") },
+    ]);
+    // Off MRP: 800 -> 720 (a 450, b 270). b's own sale price already is 270.
+    expect(c).toEqual({ listPaise: toPaise("800"), salePaise: toPaise("770"), comboPaise: toPaise("720"), savingPaise: toPaise("50") });
+  });
+
+  it("returns nothing when the items don't make a set", () => {
+    expect(comboPrice(rule(), [{ productId: "a", unitListPaise: 1000, unitSalePaise: 1000 }])).toBeNull();
   });
 });

@@ -42,7 +42,7 @@ export const metadata: Metadata = {
 
 function Nav() {
   return (
-    <header className="sticky top-0 z-50 border-b border-[--color-rule] bg-paper/95 backdrop-blur print:hidden">
+    <header className="sticky top-0 z-50 border-b border-rule bg-paper/95 backdrop-blur print:hidden">
       {/* Said up front, so shoppers outside the area learn it before they fill a basket. */}
       <p className="bg-ink px-5 py-1.5 text-center text-micro font-semibold text-paper">
         Delivering across {SERVICE_AREA.label} · Free delivery over {formatPriceTag(DEFAULT_SHIPPING_POLICY.freeAbovePaise)}
@@ -85,7 +85,7 @@ async function Footer() {
   const officer = [business.grievanceOfficerName, business.grievanceOfficerDesignation].filter(Boolean).join(", ");
 
   return (
-    <footer className="mt-24 border-t border-[--color-rule] bg-shelf print:hidden">
+    <footer className="mt-24 border-t border-rule bg-shelf print:hidden">
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="font-display text-h3 font-extrabold">SooulOne</p>
@@ -163,7 +163,7 @@ async function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-[--color-rule]">
+      <div className="border-t border-rule">
         <div className="mx-auto grid max-w-6xl gap-2 px-5 py-6 text-micro text-ink-faint">
           {identity.length > 0 && <p>{identity.join(" · ")}</p>}
           {licence ? (

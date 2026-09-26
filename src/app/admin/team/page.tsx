@@ -41,7 +41,7 @@ export default async function TeamPage() {
           return (
             <div
               key={m.id}
-              className="grid gap-3 border-b border-[--color-rule] px-4 py-4 last:border-b-0 lg:grid-cols-[1fr_auto] lg:items-center"
+              className="grid gap-3 border-b border-rule px-4 py-4 last:border-b-0 lg:grid-cols-[1fr_auto] lg:items-center"
               style={m.isActive ? undefined : { opacity: 0.6 }}
             >
               <div className="min-w-0 text-small">

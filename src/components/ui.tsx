@@ -52,7 +52,7 @@ export function Rating({ avg, count, size = "small" }: { avg: number; count: num
         style={{ color: "var(--color-caution)" }}
       >
         {"★".repeat(full)}
-        <span className="text-[--color-rule]">{"★".repeat(5 - full)}</span>
+        <span className="text-rule">{"★".repeat(5 - full)}</span>
       </span>
       <span className="tabular font-semibold" aria-hidden>{avg.toFixed(1)}</span>
       <span className="text-ink-faint" aria-hidden>({count})</span>
@@ -98,7 +98,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
   return (
     <Link
       href={`/product/${product.slug}`}
-      className="group flex flex-col gap-3 border border-[--color-rule] p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-ink"
+      className="group flex flex-col gap-3 border border-rule p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-ink"
       style={{ borderRadius: "var(--radius-panel)" }}
     >
       {product.imageUrl ? (
@@ -109,7 +109,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
           height={300}
           // One column on phones, two on tablets, three on desktop (ProductGrid).
           sizes="(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw"
-          className="aspect-[4/3] w-full border border-[--color-rule] object-cover"
+          className="aspect-[4/3] w-full border border-rule object-cover"
         />
       ) : (
         <div
@@ -129,7 +129,17 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         <VegMark isVeg={product.isVeg} />
       </div>
 
-      {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} size="micro" />}
+      {(product.rating || product.inCombo) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} size="micro" />}
+          {/* Part of a live combo; the product page shows the combo price. */}
+          {product.inCombo && (
+            <span className="border px-2 py-0.5 text-micro font-semibold" style={{ borderColor: accent, color: accent, borderRadius: 999 }}>
+              Combo offer
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Declared label facts, as numbers: no peer in the field study shows grams of sugar. */}
       {(product.ageLabel || product.sugarLabel) && (
@@ -195,7 +205,7 @@ export function NoAccess() {
 
 export function Empty({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) {
   return (
-    <div className="border border-dashed border-[--color-rule] p-10 text-center">
+    <div className="border border-dashed border-rule p-10 text-center">
       <p className="font-display text-h3 font-bold">{title}</p>
       <p className="mx-auto mt-2 max-w-[48ch] text-small text-ink-soft">{detail}</p>
       {action && <div className="mt-5">{action}</div>}
@@ -213,7 +223,7 @@ export function PageHeader({
   accent?: string;
 }) {
   return (
-    <div className="border-b border-[--color-rule] bg-shelf">
+    <div className="border-b border-rule bg-shelf">
       <div className="mx-auto max-w-6xl px-5 py-12">
         <h1 className="max-w-[20ch] text-h1 font-extrabold" style={accent ? { color: accent } : undefined}>
           {title}

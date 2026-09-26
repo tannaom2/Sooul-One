@@ -209,10 +209,13 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
 
   const tts = products.filter((p) => p.brand === "the-true-store");
   const bundleDefs = [
-    { name: "Namkeen Trio", brand: "the-true-store", desc: "Any three namkeen, 10% off.", min: 3, type: "PERCENTAGE" as const, value: 10, items: tts.filter((p) => p.category === "Healthy Namkeen") },
-    { name: "Sweet Pair", brand: "the-true-store", desc: "Any two sweets, ₹50 off.", min: 2, type: "FLAT" as const, value: 50, items: tts.filter((p) => p.category === "Healthy Sweets") },
-    { name: "Woman Axis Daily Routine", brand: "woman-axis", desc: "Build a routine: any two Woman Axis gummies, 15% off.", min: 2, type: "PERCENTAGE" as const, value: 15, items: products.filter((p) => p.brand === "woman-axis") },
-    { name: "Kids Vault Growing-Up Kit", brand: "kids-vault", desc: "Any two Kids Vault gummies, 12% off.", min: 2, type: "PERCENTAGE" as const, value: 12, items: products.filter((p) => p.brand === "kids-vault") },
+    // Descriptions add to the offer line the product page writes itself ("Any 2 of…: 10% off").
+    { name: "Namkeen Trio", brand: "the-true-store", desc: "Stock the tea-time tin with three favourites.", min: 3, type: "PERCENTAGE" as const, value: 10, items: tts.filter((p) => p.category === "Healthy Namkeen") },
+    { name: "Sweet Pair", brand: "the-true-store", desc: "No refined sugar in any of them.", min: 2, type: "FLAT" as const, value: 50, items: tts.filter((p) => p.category === "Healthy Sweets") },
+    { name: "Woman Axis Daily Routine", brand: "woman-axis", desc: "Build your own two-step routine.", min: 2, type: "PERCENTAGE" as const, value: 15, items: products.filter((p) => p.brand === "woman-axis") },
+    { name: "Kids Vault Growing-Up Kit", brand: "kids-vault", desc: "Mix any two for the school term.", min: 2, type: "PERCENTAGE" as const, value: 12, items: products.filter((p) => p.brand === "kids-vault") },
+    // A fixed combo: every product required. A flat amount keeps the combo price round (₹898 → ₹799).
+    { name: "Kids Immunity Duo", brand: "kids-vault", desc: "Daily multivitamin plus vitamin C and zinc.", min: 2, type: "FLAT" as const, value: 99, items: products.filter((p) => ["kids-daily-multivitamin", "vitamin-c-zinc-kids-gummies"].includes(p.slug)) },
   ].map((b) => ({ ...b, id: id("bun") }));
   for (const b of bundleDefs) {
     await db.bundle.create({

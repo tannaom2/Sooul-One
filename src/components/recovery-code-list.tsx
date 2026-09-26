@@ -27,7 +27,7 @@ export function RecoveryCodeList({ codes }: { codes: readonly string[] }) {
           manager or print them, somewhere other than your phone.
         </p>
       </div>
-      <ol className="grid grid-cols-2 gap-x-6 gap-y-2 border border-[--color-rule] p-4 font-mono text-base tracking-wider">
+      <ol className="grid grid-cols-2 gap-x-6 gap-y-2 border border-rule p-4 font-mono text-base tracking-wider">
         {codes.map((code) => (
           <li key={code} className="tabular select-all">
             {code}

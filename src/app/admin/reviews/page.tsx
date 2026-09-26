@@ -113,7 +113,7 @@ export default async function ReviewsPage() {
         </p>
         <ul className="panel">
           {published.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-[--color-rule] px-3.5 py-3 text-small last:border-b-0">
+            <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-rule px-3.5 py-3 text-small last:border-b-0">
               <div className="min-w-0 max-w-2xl">
                 <p>
                   <span className="font-semibold">{r.product.name}</span>

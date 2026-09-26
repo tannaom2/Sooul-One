@@ -103,7 +103,7 @@ export default async function CartPage() {
                       </p>
                     )}
                     {priceNote && (
-                      <p className="mt-3 border-l-4 border-[--color-rule] bg-shelf px-3 py-2 text-small">{priceNote}</p>
+                      <p className="mt-3 border-l-4 border-rule bg-shelf px-3 py-2 text-small">{priceNote}</p>
                     )}
                   </div>
                 </li>

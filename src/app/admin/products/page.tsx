@@ -156,7 +156,7 @@ export default async function AdminProducts({
         )}
       </form>
 
-      <nav aria-label="Filter products" className="-mx-1 flex gap-1 overflow-x-auto border-b border-[--color-rule] pb-px">
+      <nav aria-label="Filter products" className="-mx-1 flex gap-1 overflow-x-auto border-b border-rule pb-px">
         {views.map((v, i) => {
           const active = v === view;
           return (

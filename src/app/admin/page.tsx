@@ -187,7 +187,7 @@ export default async function Dashboard() {
         ) : (
           <ul className="panel">
             {attention.map((a) => (
-              <li key={a.href} className="border-b border-[--color-rule] last:border-b-0">
+              <li key={a.href} className="border-b border-rule last:border-b-0">
                 <Link href={a.href} className="flex items-center justify-between gap-3 px-4 py-3 text-small hover:bg-shelf">
                   <span className={a.warn ? "font-semibold text-alert" : "font-semibold"}>{a.text}</span>
                   <span aria-hidden className="text-ink-faint">
@@ -271,7 +271,7 @@ export default async function Dashboard() {
                   </li>
                 ))}
               </ul>
-              <p className="border-t border-[--color-rule] p-3.5 text-micro text-ink-faint">
+              <p className="border-t border-rule p-3.5 text-micro text-ink-faint">
                 These batches stop being shippable well before their printed expiry. Move them
                 through the stores or discount them now.
               </p>

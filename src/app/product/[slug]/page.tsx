@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { after } from "next/server";
-import { displayPrice, getProductBySlug } from "@/server/catalog";
+import { displayPrice, getOffersForProduct, getProductBySlug } from "@/server/catalog";
+import { ProductCombos } from "@/components/product/product-combos";
 import { isSellable } from "@/lib/basket-rules";
 import Link from "next/link";
 import { VegMark, Price, BRAND_ACCENT, Rating } from "@/components/ui";
@@ -74,6 +75,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   const isSupplement = product.regulatoryType === "HEALTH_SUPPLEMENT";
   const price = displayPrice(product);
+  const offers = await getOffersForProduct(product.id);
 
   /**
    * The basket's own rule (FEFO + shelf-life at delivery), so this page can't
@@ -159,7 +161,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {facts.length > 0 && (
             <ul className="mt-4 flex flex-wrap gap-2" aria-label="At a glance">
               {facts.map((f) => (
-                <li key={f} className="border border-[--color-rule] px-2.5 py-1 text-micro font-semibold" style={{ borderRadius: "var(--radius-panel)" }}>
+                <li key={f} className="border border-rule px-2.5 py-1 text-micro font-semibold" style={{ borderRadius: "var(--radius-panel)" }}>
                   {f}
                 </li>
               ))}
@@ -211,7 +213,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   right under the button, where the hesitation happens. Each line
                   is a fact the system enforces, not a slogan. */}
               {buyable && (
-                <ul className="mt-4 grid gap-1.5 border-t border-[--color-rule] pt-3 text-micro text-ink-soft">
+                <ul className="mt-4 grid gap-1.5 border-t border-rule pt-3 text-micro text-ink-soft">
                   <li>Shipped by SooulOne itself, not a marketplace seller</li>
                   {soonestBestBefore && <li>Best before {formatBestBefore(soonestBestBefore)} on the pack we&rsquo;d send you</li>}
                   <li>Delivering across {SERVICE_AREA.label}: arrives by {formatDate(arrivesBy)} at the latest · cash on delivery available</li>
@@ -231,6 +233,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               )}
             </div>
           </div>
+
+          {/* Combo offers this product is in, priced by the basket's own engine. */}
+          {buyable && <ProductCombos offers={offers} />}
 
           {/* PACKAGED_FOOD and BEVERAGE: nutrient table */}
           {!isSupplement && nutrition && (
@@ -309,7 +314,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               </h2>
               <dl>
                 {declarations.map(([term, value]) => (
-                  <div key={term} className="grid gap-1 border-t border-[--color-rule] px-3.5 py-2.5 text-small first:border-t-0 sm:grid-cols-[11rem_1fr]">
+                  <div key={term} className="grid gap-1 border-t border-rule px-3.5 py-2.5 text-small first:border-t-0 sm:grid-cols-[11rem_1fr]">
                     <dt className="font-semibold">{term}</dt>
                     <dd className="whitespace-pre-line text-ink-soft">{value}</dd>
                   </div>
@@ -319,7 +324,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
 
           {isSupplement && (
-            <div className="mt-8 max-w-[68ch] border-t border-[--color-rule] pt-5">
+            <div className="mt-8 max-w-[68ch] border-t border-rule pt-5">
               <p className="text-small text-ink-soft">{SUPPLEMENT_DISCLAIMER}</p>
             </div>
           )}
@@ -338,7 +343,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
       {/* FAQ block — Section 7.1 requires this on supplement pages. */}
       {isSupplement && (
-        <section className="mt-16 max-w-[68ch] border-t border-[--color-rule] pt-8">
+        <section className="mt-16 max-w-[68ch] border-t border-rule pt-8">
           <h2 className="text-h2 font-extrabold">Common questions</h2>
           <dl className="mt-6 grid gap-5">
             {[
@@ -369,7 +374,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </section>
       )}
 
-      <section id="reviews" className="mt-16 max-w-[68ch] scroll-mt-24 border-t border-[--color-rule] pt-8">
+      <section id="reviews" className="mt-16 max-w-[68ch] scroll-mt-24 border-t border-rule pt-8">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-h2 font-extrabold">Reviews</h2>
           {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} />}
@@ -378,7 +383,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         {product.reviews?.length > 0 ? (
           <div className="mt-6 grid gap-5">
             {product.reviews.map((r: any) => (
-              <div key={r.id} className="border-b border-[--color-rule] pb-5">
+              <div key={r.id} className="border-b border-rule pb-5">
                 <div className="flex items-center gap-2">
                   <span aria-hidden style={{ color: "var(--color-caution)" }}>
                     {"★".repeat(r.rating)}

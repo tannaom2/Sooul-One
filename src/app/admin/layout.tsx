@@ -73,7 +73,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[15rem_1fr]">
-      <aside className="border-b border-[--color-rule] bg-shelf print:hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0">
+      <aside className="border-b border-rule bg-shelf print:hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0">
         <div className="px-5 pt-5 pb-3">
           <Link href="/admin" className="font-display text-h3 font-extrabold">
             SooulOne
@@ -112,7 +112,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ))}
         </nav>
 
-        <div className="border-t border-[--color-rule] px-5 py-4 text-micro text-ink-faint">
+        <div className="border-t border-rule px-5 py-4 text-micro text-ink-faint">
           <p className="truncate" title={session.email}>
             {session.email}
           </p>

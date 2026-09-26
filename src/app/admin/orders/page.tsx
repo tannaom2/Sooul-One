@@ -90,7 +90,7 @@ export default async function Orders({
         </form>
       </div>
 
-      <nav aria-label="Filter by status" className="-mx-1 flex gap-1 overflow-x-auto border-b border-[--color-rule] pb-px">
+      <nav aria-label="Filter by status" className="-mx-1 flex gap-1 overflow-x-auto border-b border-rule pb-px">
         {(Object.keys(ORDER_VIEWS) as OrderView[]).map((v) => {
           const active = v === view;
           return (
@@ -125,7 +125,7 @@ export default async function Orders({
               <Link
                 key={o.id}
                 href={`/admin/orders/${o.id}`}
-                className="grid gap-x-4 gap-y-0.5 border-b border-[--color-rule] px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[10rem_1fr_7rem_6rem] sm:items-center"
+                className="grid gap-x-4 gap-y-0.5 border-b border-rule px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[10rem_1fr_7rem_6rem] sm:items-center"
               >
                 <span className="tabular font-semibold">{o.orderNumber}</span>
                 <span className="min-w-0 truncate text-ink-soft">

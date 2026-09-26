@@ -28,7 +28,7 @@ export function ConcernChips({
       href={href}
       scroll={false}
       aria-current={isActive ? "page" : undefined}
-      className={`shrink-0 border px-3 py-1.5 text-small whitespace-nowrap ${isActive ? "font-semibold text-paper" : "border-[--color-rule] text-ink-soft hover:border-ink hover:text-ink"}`}
+      className={`shrink-0 border px-3 py-1.5 text-small whitespace-nowrap ${isActive ? "font-semibold text-paper" : "border-rule text-ink-soft hover:border-ink hover:text-ink"}`}
       style={{ borderRadius: 999, ...(isActive && { background: accent, borderColor: accent }) }}
     >
       {text} <span className={isActive ? "opacity-80" : "text-ink-faint"}>{count}</span>
@@ -36,7 +36,7 @@ export function ConcernChips({
   );
 
   return (
-    <nav aria-label={label} className="border-b border-[--color-rule]">
+    <nav aria-label={label} className="border-b border-rule">
       <div className="mx-auto max-w-6xl px-5 py-4">
         <p className="mb-2 text-micro font-semibold tracking-wide text-ink-faint uppercase">{label}</p>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">

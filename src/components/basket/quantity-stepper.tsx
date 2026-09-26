@@ -22,7 +22,7 @@ export function QuantityStepper({
   disabled?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center border border-[--color-rule]" style={{ borderRadius: "var(--radius-panel)" }} role="group" aria-label={`Quantity of ${label}`}>
+    <div className="inline-flex items-center border border-rule" style={{ borderRadius: "var(--radius-panel)" }} role="group" aria-label={`Quantity of ${label}`}>
       <button
         type="button"
         className="grid h-11 w-11 place-items-center text-lead disabled:text-ink-faint"

@@ -44,11 +44,28 @@ describe("nextOfferNudge", () => {
     expect(nextOfferNudge(["g1"], [rule({ minItems: 4 })], [])).toBeNull();
   });
 
-  it("prefers the nearest offer, then the bigger discount", () => {
+  it("prefers the nearest offer, then the bigger saving", () => {
+    const prices = new Map([["g1", 50000], ["x", 50000], ["y", 50000]]);
     const near = rule({ id: "near", minItems: 2, discountValue: 5, eligibleProductIds: ["g1", "x"] });
     const far = rule({ id: "far", minItems: 3, discountValue: 30 });
     const bigger = rule({ id: "bigger", minItems: 2, discountValue: 10, eligibleProductIds: ["g1", "y"] });
-    expect(nextOfferNudge(["g1"], [far, near, bigger], [])?.bundleId).toBe("bigger");
+    expect(nextOfferNudge(["g1"], [far, near, bigger], [], prices)?.bundleId).toBe("bigger");
+  });
+
+  it("compares a percentage and a flat amount by what each saves, not by the number", () => {
+    // A ₹500 + ₹500 set: 15% saves ₹150; ₹50 off saves ₹50, though 50 > 15.
+    const prices = new Map([["g1", 50000], ["x", 50000], ["y", 50000]]);
+    const percent = rule({ id: "pct", minItems: 2, discountType: "PERCENTAGE", discountValue: 15, eligibleProductIds: ["g1", "x"] });
+    const flat = rule({ id: "flat", minItems: 2, discountType: "FLAT", discountValue: 50, eligibleProductIds: ["g1", "y"] });
+    const nudge = nextOfferNudge(["g1"], [flat, percent], [], prices);
+    expect(nudge?.bundleId).toBe("pct");
+    expect(nudge?.savingPaise).toBe(15000);
+  });
+
+  it("suggests the cheapest products first", () => {
+    const prices = new Map([["g1", 50000], ["dear", 90000], ["cheap", 20000]]);
+    const nudge = nextOfferNudge(["g1"], [rule({ minItems: 2, eligibleProductIds: ["g1", "dear", "cheap"] })], [], prices);
+    expect(nudge?.suggestProductIds).toEqual(["cheap", "dear"]);
   });
 
   it("never nudges toward an offer that can't be completed", () => {

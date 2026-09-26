@@ -131,7 +131,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             {order.events.length === 0 ? (
               <p className="text-small text-ink-faint">No events recorded for this order.</p>
             ) : (
-              <ol className="border-l-2 border-[--color-rule] pl-5">
+              <ol className="border-l-2 border-rule pl-5">
                 {order.events.map((e: any) => {
                   const d = describe(e);
                   return (

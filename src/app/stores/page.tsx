@@ -27,7 +27,7 @@ export default async function Stores() {
 
       <section className="mx-auto max-w-6xl px-5 py-12">
         {stores.length > 0 ? (
-          <ul className="grid gap-px border border-[--color-rule] bg-[--color-rule] sm:grid-cols-2">
+          <ul className="grid gap-px border border-rule bg-rule sm:grid-cols-2">
             {stores.map((s: { id: string; name: string; addressLine1: string; addressLine2: string | null; city: string; state: string; postalCode: string; phone: string | null; openingHours: string | null; latitude: number | null; longitude: number | null }) => (
               <li key={s.id} className="bg-paper p-6">
                 <h2 className="text-h3 font-bold">{s.name}</h2>

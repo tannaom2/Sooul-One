@@ -147,7 +147,7 @@ export default async function ActivityPage({
             const lines = describeChanges(e.changes);
             const warn = WARNING_ACTIONS.has(e.action);
             return (
-              <div key={e.id} className="grid gap-1 border-b border-[--color-rule] px-4 py-3 last:border-b-0 sm:grid-cols-[11rem_1fr]">
+              <div key={e.id} className="grid gap-1 border-b border-rule px-4 py-3 last:border-b-0 sm:grid-cols-[11rem_1fr]">
                 <div className="text-micro text-ink-faint">
                   <p className="tabular">{when.format(e.createdAt)}</p>
                   {e.ipAddress && (

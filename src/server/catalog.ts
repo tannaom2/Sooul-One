@@ -9,6 +9,8 @@ import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delive
 import { ageLabel, sugarLabel, unitPriceLabel } from "@/lib/label-facts";
 import { formatINR } from "@/lib/money";
 import { SELLABLE_PRODUCT_WHERE } from "@/lib/basket-rules";
+import { comboPrice, type BundleRule } from "@/lib/checkout/bundles";
+import { getStoreControls } from "@/server/store-settings";
 
 /**
  * Catalog reads.
@@ -51,6 +53,8 @@ export interface ProductSummary {
   sugarLabel: string | null;
   /** "For ages 4–12"; null if no age was declared. */
   ageLabel: string | null;
+  /** Part of a live combo offer (and bundles are switched on in Store controls). */
+  inCombo: boolean;
 }
 
 export interface RatingSummary {
@@ -75,8 +79,11 @@ async function ratingsFor(productIds: string[]): Promise<Map<string, RatingSumma
 
 /** Summaries with their ratings attached, in one extra grouped query. */
 async function withRatings(rows: { id: string }[]): Promise<ProductSummary[]> {
-  const ratings = await ratingsFor(rows.map((r) => r.id));
-  return rows.map((row) => ({ ...toSummary(row), rating: ratings.get(row.id) ?? null }));
+  const [ratings, controls] = await Promise.all([ratingsFor(rows.map((r) => r.id)), getStoreControls()]);
+  return rows.map((row) => {
+    const summary = toSummary(row);
+    return { ...summary, inCombo: summary.inCombo && controls.bundlesEnabled, rating: ratings.get(row.id) ?? null };
+  });
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -116,6 +123,7 @@ function toSummary(p: any): ProductSummary {
     rating: null,
     sugarLabel: sugarLabel(p),
     ageLabel: ageLabel(p.suitableFromAge, p.suitableToAge),
+    inCombo: (p.bundleEligibility?.length ?? 0) > 0,
   };
 }
 
@@ -147,6 +155,7 @@ const LIST_INCLUDE = {
     where: { quantityRemaining: { gt: 0 } },
     select: { id: true, batchNumber: true, expiresOn: true, quantityRemaining: true },
   },
+  bundleEligibility: { where: { bundle: { isActive: true } }, select: { bundleId: true }, take: 1 },
 };
 
 /*
@@ -247,6 +256,91 @@ export const getProductBySlug = unstable_cache(
     return { ...product, rating };
   },
   ["product-by-slug"],
+  CATALOG,
+);
+
+export interface ComboOfferItem {
+  productId: string;
+  slug: string;
+  name: string;
+  imageUrl: string | null;
+  pricePaise: number;
+  listPaise: number;
+}
+
+export interface ComboOffer {
+  bundleId: string;
+  name: string;
+  description: string | null;
+  /** "fixed": every product in the set is required. "mix": any minItems of them. */
+  kind: "fixed" | "mix";
+  minItems: number;
+  /** "15% off" or "₹50 off", as the owner set it. */
+  discountLabel: string;
+  /** The set shown with its combo price: this product plus the others needed. */
+  items: ComboOfferItem[];
+  listPaise: number;
+  salePaise: number;
+  comboPaise: number;
+  savingPaise: number;
+  /** For "mix": other products that can stand in for the ones shown. */
+  alternatives: ComboOfferItem[];
+}
+
+/**
+ * Live combo offers that include this product, each with an example set and
+ * its combo price worked out by the basket's own engine (comboPrice), so the
+ * product page can't promise a price the basket won't honour. Only products
+ * that can ship today are offered, and nothing shows while bundles are
+ * switched off in Store controls.
+ */
+export const getOffersForProduct = unstable_cache(
+  async (productId: string): Promise<ComboOffer[]> => {
+    const controls = await getStoreControls();
+    if (!controls.bundlesEnabled) return [];
+    const bundles = await db.bundle.findMany({
+      where: { isActive: true, eligibleProducts: { some: { productId } } },
+      include: { eligibleProducts: { include: { product: { include: LIST_INCLUDE } } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const offers: ComboOffer[] = [];
+    for (const b of bundles) {
+      const rule: BundleRule = {
+        id: b.id, name: b.name, minItems: b.minItems, maxItems: b.maxItems,
+        discountType: b.discountType, discountValue: Number(b.discountValue.toString()),
+        eligibleProductIds: b.eligibleProducts.map((e) => e.productId),
+      };
+      const fixed = b.minItems >= b.eligibleProducts.length;
+      const buyable = b.eligibleProducts
+        .map((e) => e.product)
+        .filter((p) => p.isActive && !p.retailOnly && ["in", "low"].includes(cardAvailability(p).state));
+      const toItem = (p: (typeof buyable)[number]): ComboOfferItem => {
+        const price = displayPrice(p);
+        return {
+          productId: p.id, slug: p.slug, name: p.name,
+          imageUrl: p.images?.find((i) => i.isPrimary)?.url ?? p.images?.[0]?.url ?? null,
+          pricePaise: price.pricePaise, listPaise: decimalToPaise(p.basePrice),
+        };
+      };
+      const self = buyable.find((p) => p.id === productId);
+      if (!self) continue;
+      if (fixed && buyable.length < b.eligibleProducts.length) continue; // a required product can't ship
+      const others = buyable.filter((p) => p.id !== productId).sort((x, y) => Number(y.isFeatured) - Number(x.isFeatured) || x.name.localeCompare(y.name));
+      const needed = fixed ? others.length : Math.max(b.minItems, 1) - 1;
+      if (others.length < needed) continue;
+      const items = [self, ...others.slice(0, needed)].map(toItem);
+      const price = comboPrice(rule, items.map((i) => ({ productId: i.productId, unitListPaise: i.listPaise, unitSalePaise: i.pricePaise })));
+      if (!price || price.savingPaise <= 0) continue;
+      offers.push({
+        bundleId: b.id, name: b.name, description: b.description, kind: fixed ? "fixed" : "mix", minItems: b.minItems,
+        discountLabel: b.discountType === "PERCENTAGE" ? `${Number(b.discountValue.toString())}% off` : `₹${Number(b.discountValue.toString())} off`,
+        items, ...price, alternatives: fixed ? [] : others.slice(needed, needed + 6).map(toItem),
+      });
+    }
+    return offers;
+  },
+  ["offers-for-product"],
   CATALOG,
 );
 

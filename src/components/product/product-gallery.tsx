@@ -63,7 +63,7 @@ export function ProductGallery({
               height={900}
               priority={i === 0}
               sizes="(min-width: 1024px) 600px, 100vw"
-              className="aspect-square w-full border border-[--color-rule] bg-shelf object-contain"
+              className="aspect-square w-full border border-rule bg-shelf object-contain"
             />
           </div>
         ))}
@@ -78,7 +78,7 @@ export function ProductGallery({
               onClick={() => show(i)}
               aria-label={`Photo ${i + 1} of ${images.length}`}
               aria-current={i === active}
-              className={`h-14 w-14 overflow-hidden border ${i === active ? "border-ink" : "border-[--color-rule]"}`}
+              className={`h-14 w-14 overflow-hidden border ${i === active ? "border-ink" : "border-rule"}`}
               style={{ borderRadius: "var(--radius-panel)" }}
             >
               <Image src={img.url} alt="" width={56} height={56} sizes="56px" loading="eager" className="h-full w-full object-cover" />

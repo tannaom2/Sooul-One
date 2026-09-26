@@ -29,7 +29,7 @@ export default async function Home() {
     <>
       {/* HERO — the most characteristic thing in this brief is the label
           itself, so the hero is a label, not a lifestyle photograph. */}
-      <section className="border-b border-[--color-rule]">
+      <section className="border-b border-rule">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
           <div>
             <h1 className="max-w-[16ch] text-hero font-extrabold">
@@ -92,7 +92,7 @@ export default async function Home() {
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Link
             href="/true-store"
-            className="flex flex-col justify-between gap-6 border border-[--color-rule] p-6 hover:border-ink"
+            className="flex flex-col justify-between gap-6 border border-rule p-6 hover:border-ink"
             style={{ background: "color-mix(in srgb, var(--color-truestore) 10%, white)" }}
           >
             <div>
@@ -112,7 +112,7 @@ export default async function Home() {
               <Link
                 key={b.slug}
                 href={`/gummies/${b.slug}`}
-                className="border border-[--color-rule] p-5 hover:border-ink"
+                className="border border-rule p-5 hover:border-ink"
               >
                 <h3 className="text-h3 font-bold" style={{ color: b.accent }}>
                   {b.name}

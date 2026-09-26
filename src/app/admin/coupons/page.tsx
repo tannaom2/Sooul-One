@@ -51,7 +51,7 @@ export default async function CouponsPage() {
         <div className="overflow-x-auto">
           <table className="panel w-full min-w-[720px] border-collapse text-small">
             <thead>
-              <tr className="border-b border-[--color-rule] text-left text-micro uppercase tracking-wide text-ink-faint">
+              <tr className="border-b border-rule text-left text-micro uppercase tracking-wide text-ink-faint">
                 <th className="p-3">Code</th>
                 <th className="p-3">Discount</th>
                 <th className="p-3">Minimum order</th>
@@ -66,7 +66,7 @@ export default async function CouponsPage() {
                 const status = couponStatus(c, now);
                 const value = Number(c.discountValue);
                 return (
-                  <tr key={c.id} className="border-b border-[--color-rule] last:border-b-0">
+                  <tr key={c.id} className="border-b border-rule last:border-b-0">
                     <td className="p-3 font-semibold tabular">{c.code}</td>
                     <td className="p-3 tabular">{c.discountType === "PERCENTAGE" ? `${value}% off` : `${formatINR(decimalToPaise(c.discountValue))} off`}</td>
                     <td className="p-3 tabular">{c.minOrderValue ? formatINR(decimalToPaise(c.minOrderValue)) : "—"}</td>

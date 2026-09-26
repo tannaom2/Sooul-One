@@ -32,7 +32,7 @@ export function PackPicker({
             <label
               key={packs}
               // The radio is visually hidden, so the card shows its keyboard focus.
-              className={`cursor-pointer border px-2 py-2.5 text-center has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${active ? "border-ink bg-shelf" : "border-[--color-rule]"}`}
+              className={`cursor-pointer border px-2 py-2.5 text-center has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${active ? "border-ink bg-shelf" : "border-rule"}`}
               style={{ borderRadius: "var(--radius-panel)" }}
             >
               <input type="radio" name="packs" value={packs} checked={active} onChange={() => onChange(packs)} className="sr-only" />

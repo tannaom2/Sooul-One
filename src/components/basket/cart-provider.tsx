@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { addToBasket, loadBasket, removeUnavailableItems, setBasketQuantity } from "@/app/basket-actions";
+import { addManyToBasket, addToBasket, loadBasket, removeUnavailableItems, setBasketQuantity } from "@/app/basket-actions";
 import type { BasketSnapshot } from "@/lib/basket-types";
 import { track } from "@/lib/track";
 
@@ -29,6 +29,8 @@ interface CartContextValue {
   closeBasket: () => void;
   /** Resolves true when the server accepted the add. */
   add: (productId: string, quantity: number) => Promise<boolean>;
+  /** One of each, for a combo. Resolves true when all went in. */
+  addMany: (productIds: string[]) => Promise<boolean>;
   setQuantity: (itemId: string, quantity: number) => Promise<void>;
   /** Drop what can't ship, trim what partly can. */
   removeUnavailable: () => Promise<void>;
@@ -113,6 +115,26 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
     [accept, addOptimistic],
   );
 
+  const addMany = useCallback(
+    (productIds: string[]) =>
+      new Promise<boolean>((resolve) => {
+        setError(null);
+        setOpen(true);
+        track({ type: "CART_OPENED" });
+        startTransition(async () => {
+          addOptimistic({ type: "add", quantity: productIds.length });
+          const result = await addManyToBasket(productIds);
+          if (result.ok) accept(result.basket);
+          else {
+            setError(result.message);
+            if (result.basket) accept(result.basket);
+          }
+          resolve(result.ok);
+        });
+      }),
+    [accept, addOptimistic],
+  );
+
   const setQuantity = useCallback(
     (itemId: string, quantity: number) =>
       new Promise<void>((resolve) => {
@@ -167,6 +189,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         openBasket,
         closeBasket,
         add,
+        addMany,
         setQuantity,
         removeUnavailable,
         refresh,

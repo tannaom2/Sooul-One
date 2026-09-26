@@ -72,7 +72,7 @@ export function ImageUpload({ productId, images }: { productId?: string; images?
                 width={72}
                 height={72}
                 style={{ width: 72, height: 72, objectFit: "cover" }}
-                className="border border-[--color-rule]"
+                className="border border-rule"
               />
               {img.isPrimary && (
                 <span className="absolute bottom-0 left-0 bg-ink px-1 text-micro text-paper">

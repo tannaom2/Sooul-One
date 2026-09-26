@@ -8,6 +8,7 @@ import type { ActionResult } from "../actions";
 import { bundleOfferProblem } from "@/lib/validation/bundle";
 import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
+import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 
 /**
  * Bundle CRUD.
@@ -35,10 +36,12 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
   const brandId = String(form.get("brandId") ?? "");
   const discountType = String(form.get("discountType") ?? "") as DiscountType;
   const discountValue = Number(form.get("discountValue") ?? 0);
-  const minItems = Number(form.get("minItems") || 2);
-  const maxItemsRaw = form.get("maxItems");
-  const maxItems = maxItemsRaw ? Number(maxItemsRaw) : null;
   const eligibleProductIds = form.getAll("eligibleProductIds").map(String);
+  // A fixed combo needs every chosen product; mix-and-match needs any minItems of them.
+  const fixed = form.get("fixedCombo") === "on";
+  const minItems = fixed ? eligibleProductIds.length : Number(form.get("minItems") || 2);
+  const maxItemsRaw = form.get("maxItems");
+  const maxItems = fixed ? null : maxItemsRaw ? Number(maxItemsRaw) : null;
 
   if (!name || !brandId) {
     return { ok: false, message: "A bundle needs a name and a brand." };
@@ -47,8 +50,13 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
   // against the cheapest bundle it could apply to.
   const eligible = await db.product.findMany({
     where: { id: { in: eligibleProductIds } },
-    select: { basePrice: true, discountActive: true, discountPercent: true },
+    select: { basePrice: true, discountActive: true, discountPercent: true, brandId: true, name: true },
   });
+  // The form narrows products to the brand; this is the guarantee, whatever is posted.
+  const otherBrand = eligible.filter((p) => p.brandId !== brandId);
+  if (otherBrand.length) {
+    return { ok: false, message: `A bundle's products must all be from its brand. Remove: ${otherBrand.map((p) => p.name).join(", ")}.` };
+  }
   const problem = bundleOfferProblem({
     discountType,
     discountValue,
@@ -89,6 +97,8 @@ export async function saveBundle(_prev: ActionResult, form: FormData): Promise<A
   });
   revalidatePath("/admin/bundles");
   revalidatePath("/cart");
+  // Product pages and cards show combo offers.
+  expireTag(CATALOG_TAG);
 
   return { ok: true, message: `${name} created and live.` };
 }
@@ -103,6 +113,8 @@ export async function toggleBundle(bundleId: string, isActive: boolean): Promise
   });
   revalidatePath("/admin/bundles");
   revalidatePath("/cart");
+  // Product pages and cards show combo offers.
+  expireTag(CATALOG_TAG);
 }
 
 export async function deleteBundle(bundleId: string): Promise<void> {
@@ -128,4 +140,6 @@ export async function deleteBundle(bundleId: string): Promise<void> {
   });
   revalidatePath("/admin/bundles");
   revalidatePath("/cart");
+  // Product pages and cards show combo offers.
+  expireTag(CATALOG_TAG);
 }

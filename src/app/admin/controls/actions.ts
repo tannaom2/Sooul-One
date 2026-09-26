@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit, requirePermission } from "@/lib/auth";
 import { diffFields } from "@/lib/audit-diff";
-import { SETTINGS_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, SETTINGS_TAG, expireTag } from "@/lib/cache-tags";
 
 export interface ControlsResult {
   ok: boolean;
@@ -36,6 +36,8 @@ export async function saveStoreControls(_prev: ControlsResult, form: FormData): 
 
   await audit(session, "UPDATE_STORE_CONTROLS", "StoreSettings", "default", changes);
   expireTag(SETTINGS_TAG);
+  // Combo offers on product pages and cards follow the bundles switch.
+  if ("bundlesEnabled" in changes) expireTag(CATALOG_TAG);
   revalidatePath("/admin/controls");
   revalidatePath("/admin");
   return { ok: true, message: data.ordersPaused ? "Saved. Orders are paused on the site now." : "Saved. The site uses these settings now." };

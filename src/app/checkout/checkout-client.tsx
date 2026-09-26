@@ -301,7 +301,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
 
           {/* Phones: the total, collapsible, before the form. */}
           <details className="mt-5 lg:hidden">
-            <summary className="flex cursor-pointer items-center justify-between border border-[--color-rule] px-3.5 py-3 text-small font-semibold" style={{ borderRadius: "var(--radius-panel)" }}>
+            <summary className="flex cursor-pointer items-center justify-between border border-rule px-3.5 py-3 text-small font-semibold" style={{ borderRadius: "var(--radius-panel)" }}>
               <span>Order summary</span>
               <span className="tabular">
                 {total ?? "…"} <span aria-hidden className="ml-1 text-ink-faint">▾</span>
@@ -335,7 +335,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
                   {done && <p className="px-4 pb-3 text-small text-ink-soft">{stepSummary(s, normalise(form))}</p>}
 
                   {active && s === "contact" && (
-                    <div className="grid gap-4 border-t border-[--color-rule] p-4 sm:grid-cols-2">
+                    <div className="grid gap-4 border-t border-rule p-4 sm:grid-cols-2">
                       {field("phone", "Mobile number", { type: "tel", inputMode: "tel", autoComplete: "tel", placeholder: "98765 43210", autoFocus: true })}
                       {field("email", "Email, for your receipt", { type: "email", autoComplete: "email", spellCheck: false })}
                       <button type="button" onClick={continueFrom} className="btn btn-solid sm:col-span-2 sm:justify-self-start">
@@ -345,7 +345,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
                   )}
 
                   {active && s === "address" && (
-                    <div className="grid gap-4 border-t border-[--color-rule] p-4 sm:grid-cols-2">
+                    <div className="grid gap-4 border-t border-rule p-4 sm:grid-cols-2">
                       <div>
                         {field("postalCode", "Pincode", { inputMode: "numeric", autoComplete: "postal-code", maxLength: 6 })}
                         <p className={`mt-1 text-micro ${outsideArea ? "text-alert" : "text-ink-faint"}`} aria-live="polite" hidden={Boolean(errors.postalCode)}>
@@ -370,14 +370,14 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
                   )}
 
                   {active && s === "payment" && (
-                    <div className="grid gap-4 border-t border-[--color-rule] p-4">
+                    <div className="grid gap-4 border-t border-rule p-4">
                       <fieldset>
                         <legend className="sr-only">How would you like to pay?</legend>
                         <div className="grid gap-2">
                           {payOptions.map((o) => (
                             <label
                               key={o.value}
-                              className={`flex cursor-pointer items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${pay === o.value ? "border-ink bg-shelf" : "border-[--color-rule]"}`}
+                              className={`flex cursor-pointer items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${pay === o.value ? "border-ink bg-shelf" : "border-rule"}`}
                               style={{ borderRadius: "var(--radius-panel)" }}
                             >
                               <input type="radio" name="pay" className="mt-1" checked={pay === o.value} onChange={() => choosePay(o.value)} />

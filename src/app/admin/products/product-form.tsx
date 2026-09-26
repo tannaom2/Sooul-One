@@ -446,7 +446,7 @@ export function ProductForm({
             {err("supplementFacts") && <Err>{err("supplementFacts")}</Err>}
           </div>
 
-          <label className="mt-6 flex items-start gap-3 border-t border-[--color-rule] pt-4 text-small">
+          <label className="mt-6 flex items-start gap-3 border-t border-rule pt-4 text-small">
             <input type="checkbox" name="complianceReviewConfirmed" className="mt-1" defaultChecked={Boolean(product?.complianceReviewedAt)} />
             <span>
               I have checked this description says what the product <em>supports</em>, and does not
@@ -522,7 +522,7 @@ export function ProductForm({
         </span>
       </label>
 
-      <div className="flex items-center gap-4 border-t border-[--color-rule] pt-5">
+      <div className="flex items-center gap-4 border-t border-rule pt-5">
         <button className="btn btn-solid" disabled={pending}>
           {pending ? "Saving…" : product?.id ? "Save changes" : "Create product"}
         </button>

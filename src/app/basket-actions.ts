@@ -62,7 +62,7 @@ export async function addToBasket(productId: string, quantity: number): Promise<
     await addToCart(sessionId, parsed.data.productId, parsed.data.quantity);
   } catch (error) {
     // addToCart throws shopper-safe messages for unavailable products.
-    const known = error instanceof Error && /isn't available|stores only/.test(error.message);
+    const known = error instanceof Error && /isn't available|stores only|sold out/.test(error.message);
     if (!known) reportError("basket/add", error, { productId });
     return { ok: false, message: known ? (error as Error).message : TRY_AGAIN };
   }
@@ -78,6 +78,40 @@ export async function addToBasket(productId: string, quantity: number): Promise<
     return { ok: true, basket: await snapshotFor(sessionId) };
   } catch (error) {
     reportError("basket/add-snapshot", error);
+    return { ok: false, message: "Added, but your basket didn't refresh. Open it again to see it." };
+  }
+}
+
+const manySchema = z.array(z.string().min(1).max(40)).min(1).max(6);
+
+/**
+ * "Add all to basket" for a combo: one of each product. Each is checked like a
+ * single add; if one has just sold out, the rest still go in and the shopper
+ * is told which didn't.
+ */
+export async function addManyToBasket(productIds: string[]): Promise<BasketResult> {
+  const parsed = manySchema.safeParse(productIds);
+  if (!parsed.success) return { ok: false, message: "That combo couldn't be added. Reload the page and try again." };
+
+  const sessionId = await getOrCreateSessionId();
+  const missed: string[] = [];
+  for (const productId of new Set(parsed.data)) {
+    try {
+      await addToCart(sessionId, productId, 1);
+      after(() => recordEvent(sessionId, "ADD_TO_CART", { productId, metadata: { quantity: 1, via: "combo" } }));
+    } catch (error) {
+      const known = error instanceof Error && /isn't available|stores only|sold out/.test(error.message);
+      if (!known) reportError("basket/add-many", error, { productId });
+      missed.push(productId);
+    }
+  }
+  try {
+    const basket = await snapshotFor(sessionId);
+    if (missed.length === 0) return { ok: true, basket };
+    const names = missed.length === parsed.data.length ? "none of them" : `${missed.length} of them`;
+    return { ok: false, message: `Added what was available: ${names} could be added just now.`, basket };
+  } catch (error) {
+    reportError("basket/add-many-snapshot", error);
     return { ok: false, message: "Added, but your basket didn't refresh. Open it again to see it." };
   }
 }

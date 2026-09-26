@@ -41,7 +41,7 @@ export function StickyBuyBar({
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-40 border-t border-[--color-rule] bg-paper/95 px-4 pt-3 backdrop-blur transition-transform duration-200 motion-reduce:transition-none lg:hidden ${visible ? "translate-y-0" : "translate-y-full"}`}
+      className={`fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper/95 px-4 pt-3 backdrop-blur transition-transform duration-200 motion-reduce:transition-none lg:hidden ${visible ? "translate-y-0" : "translate-y-full"}`}
       style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
       aria-hidden={!visible}
       inert={!visible}

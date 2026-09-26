@@ -63,7 +63,7 @@ export default async function LaunchChecklist() {
               .map((item) => {
                 const mark = MARK[item.status];
                 return (
-                  <li key={item.id} className="flex gap-3 border-t border-[--color-rule] px-3.5 py-3 text-small first:border-t-0">
+                  <li key={item.id} className="flex gap-3 border-t border-rule px-3.5 py-3 text-small first:border-t-0">
                     <span
                       aria-hidden
                       className="grid h-6 w-6 shrink-0 place-items-center text-micro font-bold text-paper"

@@ -171,6 +171,8 @@ export interface Quote {
   readonly appliedCouponCode?: string;
   /** How far short of the coupon's minimum order this order is (0 when met or no minimum). */
   readonly couponShortfallPaise: number;
+  /** A valid code that saved nothing because every item was already priced by a combo. */
+  readonly couponBlockedByCombo: boolean;
   readonly blockedLineCount: number;
 }
 
@@ -328,29 +330,53 @@ export function buildQuote(input: QuoteInput): Quote {
   // gives it. `realizedBundleDiscount` is exactly that difference — zero
   // whenever the product discount already wins, so the shopper is never
   // charged as if both applied at once.
+  //
+  // Per complete set (src/lib/checkout/bundles.ts): only the units that form a
+  // set are compared, so extra units of a line keep their normal price and a
+  // sale on the line can't hide the combo saving on the set units.
   const bundles = applyBundles(
-    resolved.map((r) => ({ productId: r.line.productId, grossPaise: r.listGrossPaise })),
+    resolved.map((r) => ({
+      productId: r.line.productId,
+      unitPaise: r.line.listPricePaise ?? r.line.unitPricePaise,
+      quantity: r.availability.quantityAvailable,
+    })),
     input.bundles ?? [],
   );
 
+  const setSaleByLine = resolved.map((r, i) => r.line.unitPricePaise * bundles.perLineUnits[i]);
   const preCouponByLine = resolved.map((r, i) => {
-    const rawBundleShare = bundles.perLinePaise[i];
-    if (rawBundleShare <= 0) return r.grossPaise;
-    return Math.min(r.grossPaise, r.listGrossPaise - rawBundleShare);
+    const units = bundles.perLineUnits[i];
+    if (units <= 0) return r.grossPaise;
+    const setList = (r.line.listPricePaise ?? r.line.unitPricePaise) * units;
+    const setFinal = Math.min(setSaleByLine[i], setList - bundles.perLinePaise[i]);
+    return r.grossPaise - (setSaleByLine[i] - setFinal);
   });
 
   const bundleDiscountPaise = resolved.reduce((sum, r, i) => sum + (r.grossPaise - preCouponByLine[i]), 0);
 
-  // --- 4. Coupon, on what the better-of-the-two discounts left ---------------
+  // --- 4. Coupon: not on items a combo already discounted ------------------
+  //
+  // "Offers can't be clubbed", as Indian D2C terms put it (Mamaearth excludes
+  // kits and combos from its codes): a code discounts everything except the
+  // units a combo actually priced. The minimum order still counts the whole
+  // basket.
   const couponBase = subtotalPaise - bundleDiscountPaise;
+  // Where the combo won, only the units outside the set (at their sale price)
+  // take the code; where the sale price won, the whole line does.
+  const couponEligibleByLine = resolved.map((r, i) =>
+    r.grossPaise > preCouponByLine[i] ? r.grossPaise - setSaleByLine[i] : preCouponByLine[i],
+  );
+  const couponEligiblePaise = couponEligibleByLine.reduce((sum, v) => sum + v, 0);
   const couponShortfallPaise =
     input.coupon?.minOrderPaise && couponBase < input.coupon.minOrderPaise ? input.coupon.minOrderPaise - couponBase : 0;
   const { discountPaise } =
     input.coupon && couponShortfallPaise === 0
-      ? applyDiscount(couponBase, input.coupon.type, input.coupon.value)
+      ? applyDiscount(couponEligiblePaise, input.coupon.type, input.coupon.value)
       : { discountPaise: 0 };
+  // A valid code that had nothing to discount because every item is in a combo.
+  const couponBlockedByCombo = Boolean(input.coupon) && couponShortfallPaise === 0 && couponEligiblePaise === 0 && bundleDiscountPaise > 0;
 
-  const perLineDiscount = distributeDiscount(preCouponByLine, discountPaise);
+  const perLineDiscount = distributeDiscount(couponEligibleByLine, discountPaise);
 
   // --- 5. GST, per line, on the discounted gross ---------------------------
   let taxPaise = 0;
@@ -441,6 +467,7 @@ export function buildQuote(input: QuoteInput): Quote {
     totalPaise: discountedSubtotal + shippingPaise,
     appliedCouponCode: discountPaise > 0 ? input.coupon?.code : undefined,
     couponShortfallPaise,
+    couponBlockedByCombo,
     blockedLineCount,
   };
 }

@@ -70,7 +70,7 @@ export function BasketDrawer() {
         className={`absolute top-0 right-0 flex h-full w-full max-w-md flex-col bg-paper shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none ${isOpen ? "translate-x-0" : "translate-x-full"}`}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex items-center justify-between border-b border-[--color-rule] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-rule px-5 py-4">
           <h2 id="basket-title" className="text-h3 font-bold">
             Your basket{count > 0 && <span className="ml-2 text-small font-normal text-ink-faint">{count} {count === 1 ? "item" : "items"}</span>}
           </h2>
@@ -122,7 +122,7 @@ export function BasketDrawer() {
               )}
 
               {basket?.nextOffer && (
-                <div className="mb-5 border border-[--color-rule] bg-shelf p-3" style={{ borderRadius: "var(--radius-panel)" }}>
+                <div className="mb-5 border border-rule bg-shelf p-3" style={{ borderRadius: "var(--radius-panel)" }}>
                   <p className="text-small font-semibold">
                     Add {basket.nextOffer.missing} more to get {basket.nextOffer.discountLabel}
                   </p>
@@ -147,9 +147,9 @@ export function BasketDrawer() {
 
               <ul className="grid gap-4">
                 {lines.map((line) => (
-                  <li key={line.itemId} className="flex gap-3 border-b border-[--color-rule] pb-4 last:border-b-0">
+                  <li key={line.itemId} className="flex gap-3 border-b border-rule pb-4 last:border-b-0">
                     {line.imageUrl ? (
-                      <Image src={line.imageUrl} alt="" width={64} height={64} sizes="64px" className="h-16 w-16 shrink-0 border border-[--color-rule] object-cover" />
+                      <Image src={line.imageUrl} alt="" width={64} height={64} sizes="64px" className="h-16 w-16 shrink-0 border border-rule object-cover" />
                     ) : (
                       <div className="h-16 w-16 shrink-0 bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} aria-hidden />
                     )}
@@ -168,7 +168,7 @@ export function BasketDrawer() {
                         </span>
                       </div>
                       {line.message && <p className="mt-2 border-l-4 border-alert bg-shelf px-2 py-1 text-micro">{line.message}</p>}
-                      {line.priceNote && <p className="mt-2 border-l-4 border-[--color-rule] bg-shelf px-2 py-1 text-micro">{line.priceNote}</p>}
+                      {line.priceNote && <p className="mt-2 border-l-4 border-rule bg-shelf px-2 py-1 text-micro">{line.priceNote}</p>}
                     </div>
                   </li>
                 ))}
@@ -178,7 +178,7 @@ export function BasketDrawer() {
         </div>
 
         {basket && lines.length > 0 && (
-          <div className="border-t border-[--color-rule] px-5 py-4">
+          <div className="border-t border-rule px-5 py-4">
             <dl className="grid gap-1 text-small">
               {basket.savingsPaise > 0 && (
                 <div className="flex justify-between text-veg">

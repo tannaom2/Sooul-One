@@ -127,7 +127,7 @@ export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: Busi
             </thead>
             <tbody>
               {invoice.lines.map((l, i) => (
-                <tr key={i} className="border-b border-[--color-rule] align-top">
+                <tr key={i} className="border-b border-rule align-top">
                   <td className="p-2 tabular">{i + 1}</td>
                   <td className="p-2">{l.description}</td>
                   <td className="p-2 tabular">{l.hsn ?? "—"}</td>
