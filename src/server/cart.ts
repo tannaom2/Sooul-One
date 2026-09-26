@@ -191,7 +191,8 @@ const ORDINAL: Record<number, string> = { 3: "third", 4: "fourth", 5: "fifth", 6
 /**
  * The basket's kits, each with up to three in-stock products that would grow
  * it (checked against the engine, so the saving shown is what the basket
- * gives), for the drawer and the basket page alike.
+ * gives), for the drawer and the basket page alike. A kit that has already
+ * taken an extra product gets no more suggestions.
  */
 export async function loadBasketKits(result: CartQuote): Promise<BasketKit[]> {
   const { quote, cartItems, bundles, bundlePrices, bundleListPrices } = result;
@@ -202,6 +203,9 @@ export async function loadBasketKits(result: CartQuote): Promise<BasketKit[]> {
   const options = new Map(
     kits.map((kit) => {
       const rule = bundles.find((b) => b.id === kit.bundleId);
+      // One suggestion per kit: once a kit has taken an extra product, stop offering more.
+      const units = kit.members.reduce((n, m) => n + m.units, 0);
+      if (!rule || units > kit.sets * Math.max(rule.minItems, 1)) return [kit.bundleId, [] as { productId: string; savingPaise: number }[]] as const;
       const candidates = (rule?.eligibleProductIds ?? []).map((id) => ({ productId: id, listPaise: bundleListPrices.get(id) ?? 0 }));
       return [kit.bundleId, growKitOptions(kit.bundleId, lines, bundles, candidates)] as const;
     }),
