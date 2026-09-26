@@ -73,3 +73,29 @@ describe("groupKits", () => {
     expect(q.totalPaise).toBe(q.subtotalPaise - kit.savingPaise);
   });
 });
+
+describe("changing a mixed kit by one", () => {
+  // No upper limit: the first kit takes all three products, the second the two left.
+  const basket = (multi: number, calcium: number, vitc: number) =>
+    groupKits(quote([product("multi", "499", multi), product("calcium", "449", calcium), product("lutein", "399", vitc)].filter((l) => l.quantity > 0)));
+
+  it("names the products of the last kit formed", () => {
+    const [kit] = basket(2, 2, 1);
+    expect(kit.sets).toBe(2);
+    expect(kit.uniform).toBe(false);
+    expect([...kit.lastSet].sort()).toEqual(["calcium", "multi"]);
+  });
+
+  it("removing one of each of those takes away exactly one kit", () => {
+    expect(basket(1, 1, 1)[0].sets).toBe(1);
+  });
+
+  it("adding one of each makes exactly one more", () => {
+    expect(basket(3, 3, 1)[0].sets).toBe(3);
+  });
+
+  it("taking one product out regroups the kits around the rest", () => {
+    const [kit] = basket(2, 2, 0);
+    expect(kit).toMatchObject({ sets: 2, uniform: true });
+  });
+});

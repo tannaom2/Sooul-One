@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toPaise } from "../src/lib/money";
-import { freeDeliveryProgress, nextOfferNudge, settleNudge, type OfferNudge } from "../src/lib/checkout/basket-nudges";
+import { freeDeliveryProgress, nextOfferNudge, rankOfferNudges, settleNudge, type OfferNudge } from "../src/lib/checkout/basket-nudges";
 import type { BundleRule } from "../src/lib/checkout/bundles";
 
 describe("freeDeliveryProgress", () => {
@@ -105,5 +105,15 @@ describe("settleNudge", () => {
     const settled = settleNudge(nudgeFor(growing, ["vitc", "calcium"]), [at("multi", 1)], [growing, duo], list);
     expect(settled?.suggestProductIds).toEqual(["vitc", "calcium"]);
     expect(settled?.savingPaise).toBe(toPaise("107")); // 12% of ₹898 is ₹107.76, rounded down
+  });
+});
+
+describe("rankOfferNudges", () => {
+  it("lists every offer within reach, nearest and biggest first, for a fallback", () => {
+    const small: BundleRule = { id: "s", name: "Small", minItems: 2, discountType: "FLAT", discountValue: 20, eligibleProductIds: ["a", "b"] };
+    const big: BundleRule = { id: "g", name: "Big", minItems: 2, discountType: "FLAT", discountValue: 50, eligibleProductIds: ["a", "c"] };
+    const far: BundleRule = { id: "f", name: "Far", minItems: 3, discountType: "FLAT", discountValue: 90, eligibleProductIds: ["a", "d", "e"] };
+    const prices = new Map([["a", 10_000], ["b", 10_000], ["c", 10_000], ["d", 10_000], ["e", 10_000]]);
+    expect(rankOfferNudges(["a"], [small, far, big], [], prices).map((n) => n.name)).toEqual(["Big", "Small", "Far"]);
   });
 });

@@ -65,6 +65,12 @@ export interface AppliedBundle {
    * products. Lets the basket offer "one more kit" as a single step.
    */
   readonly perSet: readonly string[] | null;
+  /**
+   * The products in the last set formed. Removing one unit of each takes away
+   * exactly one set, and adding one of each makes one more, so the basket can
+   * offer "− / + kit" even when mix-and-match sets differ.
+   */
+  readonly lastSet: readonly string[];
 }
 
 export interface BundleResult {
@@ -88,6 +94,7 @@ interface Candidate {
   readonly discountPaise: Paise;
   readonly sets: number;
   readonly perSet: readonly string[] | null;
+  readonly lastSet: readonly string[];
 }
 
 /** Complete sets this rule makes from the unclaimed lines, and what each line saves. */
@@ -110,6 +117,7 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
   let sets = 0;
   const makeups = new Set<string>();
   let firstSet: string[] = [];
+  let lastSet: string[] = [];
 
   for (;;) {
     // Highest-value products first (ties: basket order), up to the cap.
@@ -131,6 +139,7 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
 
     const products = members.map((i) => lines[i].productId);
     if (sets === 0) firstSet = products;
+    lastSet = products;
     makeups.add([...products].sort().join(","));
 
     const shares = distributeDiscount(setValues, setDiscount);
@@ -152,6 +161,7 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
     discountPaise,
     sets,
     perSet: makeups.size === 1 ? firstSet : null,
+    lastSet,
   };
 }
 
@@ -196,6 +206,7 @@ export function applyBundles(lines: readonly BundleLineInput[], rules: readonly 
       productIds: best.lineIndexes.map((i) => lines[i].productId),
       sets: best.sets,
       perSet: best.perSet,
+      lastSet: best.lastSet,
     });
   }
 

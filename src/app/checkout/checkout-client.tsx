@@ -260,7 +260,13 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
 
   const summary = (
     <div className="panel">
-      <div className="panel-head">Order summary</div>
+      {/* Items and kits are changed in the basket, which checkout reads live. */}
+      <div className="panel-head flex items-baseline justify-between gap-3">
+        <span>Order summary</span>
+        <Link href="/cart" className="text-small font-normal underline">
+          Edit basket
+        </Link>
+      </div>
       {quote ? (
         <dl>
           <div className="panel-row"><dt>Items</dt><dd>{formatINR(quote.listSubtotalPaise)}</dd></div>

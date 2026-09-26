@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
 import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteLineInput } from "@/lib/checkout/quote";
 import { groupKits } from "@/lib/checkout/kits";
-import { freeDeliveryProgress, nextOfferNudge, settleNudge } from "@/lib/checkout/basket-nudges";
+import { freeDeliveryProgress, rankOfferNudges, settleNudge, type OfferNudge } from "@/lib/checkout/basket-nudges";
 import { MAX_LINE_QUANTITY, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
@@ -396,35 +396,37 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   // What quote.ts compares against the free-delivery threshold.
   const discounted = quote.subtotalPaise - quote.bundleDiscountPaise - quote.discountPaise;
   const shippable = quote.lines.filter((l) => l.quantityAvailable > 0).map((l) => l.productId);
-  const counted = nextOfferNudge(shippable, bundles, quote.appliedBundles.map((b) => b.id), bundlePrices);
-  // Only what the engine would really do: a product already in a kit can't make a second offer.
-  const nudge =
-    counted &&
-    settleNudge(
-      counted,
-      quote.lines.map((l) => ({
-        productId: l.productId,
-        unitPaise: l.quantityAvailable > 0 ? Math.round(l.listGrossPaise / l.quantityAvailable) : 0,
-        quantity: l.quantityAvailable,
-      })),
-      bundles,
-      bundleListPrices,
-    );
+  // Every offer within reach, kept only where the engine would really apply it
+  // (a product already in a kit can't make a second offer), best first.
+  const engineLines = quote.lines.map((l) => ({
+    productId: l.productId,
+    unitPaise: l.quantityAvailable > 0 ? Math.round(l.listGrossPaise / l.quantityAvailable) : 0,
+    quantity: l.quantityAvailable,
+  }));
+  const settled = rankOfferNudges(shippable, bundles, quote.appliedBundles.map((b) => b.id), bundlePrices)
+    .map((n) => settleNudge(n, engineLines, bundles, bundleListPrices))
+    .filter((n): n is OfferNudge => n !== null);
+
+  // Only products that can ship now, checked in one query for all of them and
+  // filtered before choosing, so a sold-out product never takes a place a
+  // buyable one could have had. The first offer with enough left wins.
+  const candidates =
+    settled.length > 0
+      ? await db.product.findMany({
+          where: { id: { in: [...new Set(settled.flatMap((n) => n.suggestProductIds))] }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
+          include: { batches: { where: { quantityRemaining: { gt: 0 } } } },
+        })
+      : [];
+  const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
+  const buyable = new Map(candidates.filter((p) => productAvailability(p, arrives).state !== "out").map((p) => [p.id, p]));
+  const buyableFor = (n: OfferNudge) => n.suggestProductIds.filter((id) => buyable.has(id));
+  const nudge = settled.find((n) => buyableFor(n).length >= n.missing);
 
   let nextOffer: BasketSnapshot["nextOffer"] = null;
   if (nudge) {
-    // Only products that can ship now; filtered before choosing, so a sold-out
-    // product never takes a place a buyable one could have had.
-    const candidates = await db.product.findMany({
-      where: { id: { in: [...nudge.suggestProductIds] }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
-      include: { batches: { where: { quantityRemaining: { gt: 0 } } } },
-    });
-    const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
-    const order = new Map(nudge.suggestProductIds.map((id, i) => [id, i]));
-    const suggested = candidates
-      .filter((p) => productAvailability(p, arrives).state !== "out")
-      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-      .slice(0, 3);
+    const suggested = buyableFor(nudge)
+      .slice(0, 3)
+      .map((id) => buyable.get(id)!);
     nextOffer = {
       bundleId: nudge.bundleId,
       name: nudge.name,

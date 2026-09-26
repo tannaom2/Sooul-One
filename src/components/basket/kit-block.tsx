@@ -10,11 +10,14 @@ import { QuantityStepper } from "./quantity-stepper";
 /**
  * A combo in the basket, shown as kits: "Growing-Up Kit × 2, ₹1,670, you save
  * ₹226", with the products listed under it. The stepper adds or removes whole
- * kits (one of each product), so the shopper never has to line quantities up
- * by hand. Units outside the kits stay on their own lines, at the usual price.
+ * kits, so the shopper never has to line quantities up by hand, and each
+ * product can be taken out of the kits on its own (the kits regroup around
+ * what's left). Units outside the kits stay on their own lines, at the usual
+ * price.
  *
- * Mix-and-match kits whose sets hold different products get no stepper (there
- * is no single "one more kit"); their products are changed on their own lines.
+ * When mix-and-match kits hold different products, "− kit" removes the last
+ * kit formed (one of each of its products) and "+ kit" adds another like it,
+ * so the count always moves by exactly one.
  */
 export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refreshPage?: boolean }) {
   const { setQuantities, pending: cartPending } = useCart();
@@ -30,11 +33,14 @@ export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refresh
     });
   }
 
+  const removeKits = () => apply(kit.members.map((m) => ({ itemId: m.itemId, quantity: m.quantity - m.units })));
+  const lastSet = kit.members.filter((m) => kit.lastSet.includes(m.productId));
   const setKits = (next: number) => {
     const delta = next - kit.sets;
-    if (delta !== 0) apply(kit.members.map((m) => ({ itemId: m.itemId, quantity: m.quantity + delta })));
+    if (next <= 0) removeKits();
+    else if (delta !== 0) apply(lastSet.map((m) => ({ itemId: m.itemId, quantity: m.quantity + delta })));
   };
-  const removeKits = () => apply(kit.members.map((m) => ({ itemId: m.itemId, quantity: m.quantity - m.units })));
+  const removeProduct = (m: BasketKit["members"][number]) => apply([{ itemId: m.itemId, quantity: m.quantity - m.units }]);
   const completeKit = () =>
     apply(
       kit.members
@@ -42,7 +48,7 @@ export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refresh
         .map((m) => ({ itemId: m.itemId, quantity: m.quantity + 1 })),
     );
 
-  const maxKits = kit.sets + Math.min(...kit.members.map((m) => MAX_LINE_QUANTITY - m.quantity));
+  const maxKits = kit.sets + Math.min(...lastSet.map((m) => MAX_LINE_QUANTITY - m.quantity));
   const kitWord = kit.sets === 1 ? "kit" : "kits";
 
   return (
@@ -58,27 +64,31 @@ export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refresh
         </p>
       </div>
 
-      <ul className="mt-2 grid gap-0.5 text-small text-ink-soft">
+      <ul className="mt-2 grid text-small text-ink-soft">
         {kit.members.map((m) => (
-          <li key={m.productId} className="flex justify-between gap-3">
+          <li key={m.productId} className="flex items-center justify-between gap-3">
             <span className="min-w-0">{m.name}</span>
-            <span className="tabular shrink-0 text-ink-faint">{kit.uniform ? `${kit.sets > 1 ? "1 per kit" : "1"}` : `× ${m.units}`}</span>
+            <span className="flex shrink-0 items-center gap-1">
+              <span className="tabular text-ink-faint">{kit.uniform ? (kit.sets > 1 ? "1 per kit" : "1") : `× ${m.units}`}</span>
+              <button
+                type="button"
+                onClick={() => removeProduct(m)}
+                disabled={pending}
+                aria-label={`Take ${m.name} out of the ${kitWord}`}
+                title="Take out of the kit"
+                className="grid h-8 w-8 place-items-center text-ink-faint hover:text-alert"
+              >
+                ×
+              </button>
+            </span>
           </li>
         ))}
       </ul>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <span className="flex items-center gap-3">
-          {kit.uniform ? (
-            <>
-              <QuantityStepper value={kit.sets} min={0} max={maxKits} label={kit.name} onChange={setKits} disabled={pending} />
-              <span className="text-small text-ink-soft">{kitWord}</span>
-            </>
-          ) : (
-            <span className="text-small text-ink-soft">
-              {kit.sets} {kitWord}
-            </span>
-          )}
+          <QuantityStepper value={kit.sets} min={0} max={maxKits} label={kit.name} onChange={setKits} disabled={pending} />
+          <span className="text-small text-ink-soft">{kitWord}</span>
           <button type="button" onClick={removeKits} disabled={pending} className="text-micro underline hover:text-alert">
             Remove {kitWord}
           </button>

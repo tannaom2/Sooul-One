@@ -275,6 +275,8 @@ export interface ComboOffer {
   /** "fixed": every product in the set is required. "mix": any minItems of them. */
   kind: "fixed" | "mix";
   minItems: number;
+  /** Most products one kit takes; null for no limit ("any 2 or more"). */
+  maxItems: number | null;
   /** "15% off" or "₹50 off", as the owner set it. */
   discountLabel: string;
   /** The set shown with its combo price: this product plus the others needed. */
@@ -333,7 +335,7 @@ export const getOffersForProduct = unstable_cache(
       const price = comboPrice(rule, items.map((i) => ({ productId: i.productId, unitListPaise: i.listPaise, unitSalePaise: i.pricePaise })));
       if (!price || price.savingPaise <= 0) continue;
       offers.push({
-        bundleId: b.id, name: b.name, description: b.description, kind: fixed ? "fixed" : "mix", minItems: b.minItems,
+        bundleId: b.id, name: b.name, description: b.description, kind: fixed ? "fixed" : "mix", minItems: b.minItems, maxItems: b.maxItems ?? null,
         discountLabel: b.discountType === "PERCENTAGE" ? `${Number(b.discountValue.toString())}% off` : `₹${Number(b.discountValue.toString())} off`,
         items, ...price, alternatives: fixed ? [] : others.slice(needed, needed + 6).map(toItem),
       });

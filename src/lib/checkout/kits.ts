@@ -21,8 +21,10 @@ export interface Kit {
   readonly bundleId: string;
   readonly name: string;
   readonly sets: number;
-  /** Every kit holds the same products, one of each, so kits can be added or removed as a unit. */
+  /** Every kit holds the same products, one of each. */
   readonly uniform: boolean;
+  /** Products of the last kit formed: one of each is what "− kit" removes and "+ kit" adds. */
+  readonly lastSet: readonly string[];
   readonly members: readonly KitMember[];
   /** What the kits' units cost at their usual prices. */
   readonly salePaise: Paise;
@@ -60,6 +62,7 @@ export function groupKits(quote: Pick<Quote, "lines" | "appliedBundles">): Kit[]
       name: bundle.name,
       sets: bundle.sets,
       uniform,
+      lastSet: bundle.lastSet,
       members: lines.map((l) => ({ productId: l.productId, name: l.name, units: l.bundleUnits })),
       salePaise,
       kitPaise: salePaise - savingPaise,

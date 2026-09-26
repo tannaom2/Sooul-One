@@ -54,9 +54,24 @@ export function nextOfferNudge(
   unitPriceById: ReadonlyMap<string, Paise> = new Map(),
   maxMissing = 2,
 ): OfferNudge | null {
+  return rankOfferNudges(shippableProductIds, rules, appliedBundleIds, unitPriceById, maxMissing)[0] ?? null;
+}
+
+/**
+ * Every bundle within reach, best first (the order nextOfferNudge picks
+ * from), so the caller can fall back to the next one when settleNudge or
+ * stock rules the first out.
+ */
+export function rankOfferNudges(
+  shippableProductIds: readonly string[],
+  rules: readonly BundleRule[],
+  appliedBundleIds: readonly string[],
+  unitPriceById: ReadonlyMap<string, Paise> = new Map(),
+  maxMissing = 2,
+): OfferNudge[] {
   const inBasket = new Set(shippableProductIds);
   const applied = new Set(appliedBundleIds);
-  let best: OfferNudge | null = null;
+  const found: OfferNudge[] = [];
 
   for (const rule of rules) {
     if (applied.has(rule.id)) continue;
@@ -81,15 +96,10 @@ export function nextOfferNudge(
       suggestProductIds: suggest,
       savingPaise: setValue > 0 ? applyDiscount(setValue, rule.discountType, rule.discountValue).discountPaise : 0,
     };
-    if (
-      !best ||
-      candidate.missing < best.missing ||
-      (candidate.missing === best.missing && candidate.savingPaise > best.savingPaise)
-    ) {
-      best = candidate;
-    }
+    found.push(candidate);
   }
-  return best;
+  // Stable, so equal candidates keep rule order.
+  return found.sort((a, b) => a.missing - b.missing || b.savingPaise - a.savingPaise);
 }
 
 /**
