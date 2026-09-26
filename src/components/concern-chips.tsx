@@ -4,7 +4,8 @@ import type { FilterOption } from "@/lib/concern-filter";
 /**
  * Filter chips for a brand page. Plain links, so a filtered page is a URL a
  * shopper can share (WhatsApp is how products get passed around here) and it
- * works before any JavaScript loads.
+ * works before any JavaScript loads. They wrap rather than scroll, so no
+ * option hides off the edge. (Gummies brands use ConcernTiles instead.)
  */
 export function ConcernChips({
   label,
@@ -42,7 +43,7 @@ export function ConcernChips({
     <nav aria-label={label} className="border-b border-rule">
       <div className="mx-auto max-w-6xl px-5 py-4">
         <p className="mb-2 text-micro font-semibold tracking-wide text-ink-faint uppercase">{label}</p>
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <div className="flex flex-wrap gap-2">
           {chip(basePath, "All", total, active === null)}
           {options.map((o) => chip(`${basePath}?concern=${o.slug}`, o.name, o.count, o.slug === active))}
         </div>

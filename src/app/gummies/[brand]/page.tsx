@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getBrandBySlug, getProductsByBrand } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
-import { ConcernChips } from "@/components/concern-chips";
+import { ConcernTiles } from "@/components/concern-tiles";
 import { GummyBrandTabs } from "@/components/gummy-brand-tabs";
 import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 
@@ -45,6 +45,11 @@ export default async function BrandPage({
   const options = filterOptions(brand?.categories ?? [], products);
   const active = activeFilter(concern, options);
   const shown = applyFilter(products, active);
+  const tiles = options.map((o) => ({
+    slug: o.slug,
+    name: o.name,
+    products: products.filter((p) => p.categorySlug === o.slug).map((p) => ({ slug: p.slug, name: p.name })),
+  }));
 
   return (
     <>
@@ -56,14 +61,7 @@ export default async function BrandPage({
 
       <GummyBrandTabs active={slug} />
 
-      <ConcernChips
-        label="Shop by concern"
-        basePath={`/gummies/${slug}`}
-        options={options}
-        active={active}
-        total={products.length}
-        accent={ACCENT[slug]}
-      />
+      <ConcernTiles basePath={`/gummies/${slug}`} tiles={tiles} active={active} accent={ACCENT[slug]} />
 
       <section className="mx-auto max-w-6xl px-5 py-12">
         {products.length > 0 ? (
