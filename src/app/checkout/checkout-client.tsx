@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { formatINR } from "@/lib/money";
+import { formatPriceTag } from "@/lib/money";
 import { formatDate } from "@/lib/format";
 import { track } from "@/lib/track";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
@@ -232,7 +232,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
     );
   }
 
-  const total = quote ? formatINR(quote.totalPaise) : null;
+  const total = quote ? formatPriceTag(quote.totalPaise) : null;
   // Out of area as soon as a full pincode is typed: by range, or by India Post's state.
   const outsideArea = place?.serviceable === false || (/^\d{6}$/.test(form.postalCode) && !inServicePincode(form.postalCode));
   const stepIndex = STEPS.indexOf(step);
@@ -269,19 +269,19 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
       </div>
       {quote ? (
         <dl>
-          <div className="panel-row"><dt>Items</dt><dd>{formatINR(quote.listSubtotalPaise)}</dd></div>
+          <div className="panel-row"><dt>Items</dt><dd>{formatPriceTag(quote.listSubtotalPaise)}</dd></div>
           {quote.productDiscountPaise > 0 && (
-            <div className="panel-row"><dt>Product discounts</dt><dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd></div>
+            <div className="panel-row"><dt>Product discounts</dt><dd className="text-veg">−{formatPriceTag(quote.productDiscountPaise)}</dd></div>
           )}
           {quote.bundleDiscountPaise > 0 && (
-            <div className="panel-row"><dt>Combo savings ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd></div>
+            <div className="panel-row"><dt>Combo savings ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatPriceTag(quote.bundleDiscountPaise)}</dd></div>
           )}
           {quote.discountPaise > 0 && (
-            <div className="panel-row"><dt>Discount code</dt><dd className="text-veg">−{formatINR(quote.discountPaise)}</dd></div>
+            <div className="panel-row"><dt>Discount code</dt><dd className="text-veg">−{formatPriceTag(quote.discountPaise)}</dd></div>
           )}
-          <div className="panel-row"><dt>Delivery</dt><dd>{quote.shippingPaise === 0 ? "Free" : formatINR(quote.shippingPaise)}</dd></div>
-          <div className="panel-row text-ink-faint"><dt>of which GST</dt><dd>{formatINR(quote.taxPaise)}</dd></div>
-          <div className="panel-row font-display text-lead font-bold"><dt>Total</dt><dd>{formatINR(quote.totalPaise)}</dd></div>
+          <div className="panel-row"><dt>Delivery</dt><dd>{quote.shippingPaise === 0 ? "Free" : formatPriceTag(quote.shippingPaise)}</dd></div>
+          <div className="panel-row text-ink-faint"><dt>of which GST</dt><dd>{formatPriceTag(quote.taxPaise)}</dd></div>
+          <div className="panel-row font-display text-lead font-bold"><dt>Total</dt><dd>{formatPriceTag(quote.totalPaise)}</dd></div>
         </dl>
       ) : (
         <div className="grid gap-2 p-3.5" aria-live="polite" role="status">

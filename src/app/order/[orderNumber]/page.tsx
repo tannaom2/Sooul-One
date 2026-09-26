@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { formatINR } from "@/lib/money";
+import { formatPriceTag } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { orderTokenMatches } from "@/lib/order-access";
 import { BasketSync } from "@/components/basket/basket-sync";
@@ -84,24 +84,38 @@ export default async function OrderPage({
                 {item.productNameSnapshot}
                 <span className="ml-2 text-ink-faint">× {item.quantity}</span>
               </dt>
-              <dd>{formatINR(decimalToPaise(item.lineTotal))}</dd>
+              <dd>{formatPriceTag(decimalToPaise(item.lineTotal))}</dd>
             </div>
           ))}
+          {/* Offers, so the lines above add up to the total: items are listed at the
+              price paid before combo and code savings, as checkout showed them. */}
+          {decimalToPaise(order.bundleDiscountAmount) > 0 && (
+            <div className="panel-row">
+              <dt>Combo savings{order.bundleLabel ? ` (${order.bundleLabel})` : ""}</dt>
+              <dd className="text-veg">−{formatPriceTag(decimalToPaise(order.bundleDiscountAmount))}</dd>
+            </div>
+          )}
+          {decimalToPaise(order.discountAmount) > 0 && (
+            <div className="panel-row">
+              <dt>Discount code{order.couponCode ? ` (${order.couponCode})` : ""}</dt>
+              <dd className="text-veg">−{formatPriceTag(decimalToPaise(order.discountAmount))}</dd>
+            </div>
+          )}
           <div className="panel-row">
             <dt>Delivery</dt>
             <dd>
               {decimalToPaise(order.shippingAmount) === 0
                 ? "Free"
-                : formatINR(decimalToPaise(order.shippingAmount))}
+                : formatPriceTag(decimalToPaise(order.shippingAmount))}
             </dd>
           </div>
           <div className="panel-row text-ink-faint">
             <dt>of which GST</dt>
-            <dd>{formatINR(decimalToPaise(order.taxAmount))}</dd>
+            <dd>{formatPriceTag(decimalToPaise(order.taxAmount))}</dd>
           </div>
           <div className="panel-row font-display text-lead font-bold">
             <dt>Total</dt>
-            <dd>{formatINR(decimalToPaise(order.totalAmount))}</dd>
+            <dd>{formatPriceTag(decimalToPaise(order.totalAmount))}</dd>
           </div>
         </dl>
 

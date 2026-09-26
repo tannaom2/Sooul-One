@@ -33,6 +33,11 @@ describe("allergenLabel", () => {
     expect(allergenLabel(["peanuts", "milk"])).toBe("Contains peanuts, milk");
     expect(allergenLabel(undefined)).toBeNull();
   });
+
+  it("states a may-contain warning as its own sentence, not as an ingredient", () => {
+    expect(allergenLabel(["Almonds", "Sesame", "May contain traces of peanuts"])).toBe("Contains Almonds, Sesame. May contain traces of peanuts");
+    expect(allergenLabel(["May contain traces of peanuts."])).toBe("May contain traces of peanuts");
+  });
 });
 
 describe("unitPriceLabel", () => {

@@ -325,3 +325,15 @@ describe("kit makeup", () => {
     expect(r.applied[0].perSet).toBeNull();
   });
 });
+
+describe("kit prices stay in whole rupees", () => {
+  it("even when one product's own sale price wins for its unit", () => {
+    // ₹650 list on sale at ₹520 (sale wins), ₹599 list at full price (combo wins).
+    const c = comboPrice(rule({ discountValue: 15 }), [
+      { productId: "a", unitListPaise: toPaise("650"), unitSalePaise: toPaise("520") },
+      { productId: "b", unitListPaise: toPaise("599"), unitSalePaise: toPaise("599") },
+    ]);
+    expect(c!.comboPaise % 100).toBe(0);
+    expect(c!.savingPaise % 100).toBe(0);
+  });
+});

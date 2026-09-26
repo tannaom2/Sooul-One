@@ -17,7 +17,7 @@ import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delive
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { ReviewForm } from "@/components/review-form";
-import { ageLabel, allergenLabel, sugarLabel } from "@/lib/label-facts";
+import { ageLabel, allergenLabel, allergenSentence, sugarLabel } from "@/lib/label-facts";
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
 import { getBusinessProfile } from "@/server/business";
 import { formatINR } from "@/lib/money";
@@ -149,8 +149,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <aside className="lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <div className="flex items-start justify-between gap-4">
-            <h1 className="max-w-[18ch] text-h1 font-extrabold">{product.name}</h1>
-            <VegMark isVeg={product.isVeg} showText />
+            {/* min-w-0 + hyphens: a long single word ("Ashwagandha") at headline size
+                would otherwise push the column past a phone screen. */}
+            <h1 className="max-w-[18ch] min-w-0 text-h1 font-extrabold [overflow-wrap:anywhere] hyphens-auto">{product.name}</h1>
+            <span className="shrink-0">
+              <VegMark isVeg={product.isVeg} showText />
+            </span>
           </div>
           {product.rating && (
             <a href="#reviews" className="mt-2 inline-block hover:underline">
@@ -306,7 +310,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {product.allergens?.length > 0 && (
             <div className="mt-6 border-l-4 border-alert bg-shelf px-4 py-3">
               <p className="text-small font-semibold">Allergen information</p>
-              <p className="mt-1 text-small">Contains {product.allergens.join(", ")}.</p>
+              <p className="mt-1 text-small">{allergenSentence(product.allergens)}.</p>
             </div>
           )}
 

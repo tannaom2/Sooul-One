@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatPriceTag } from "@/lib/money";
 import { formatPercent } from "@/lib/pricing";
+import { allergenSentence } from "@/lib/label-facts";
 import type { ProductSummary } from "@/server/catalog";
 
 /**
@@ -155,7 +156,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
           says label-conscious shoppers are the majority here, so hiding this
           costs conversions as well as being worse practice. */}
       {product.allergens.length > 0 && (
-        <p className="text-micro text-ink-faint">Contains {product.allergens.join(", ")}</p>
+        <p className="text-micro text-ink-faint">{allergenSentence(product.allergens)}</p>
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">

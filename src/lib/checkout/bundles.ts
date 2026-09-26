@@ -149,7 +149,9 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
     lastSet = products;
     makeups.add([...products].sort().join(","));
 
-    const shares = distributeDiscount(setValues, setDiscount);
+    // Split in whole rupees too, so each product's kit price stays whole even when
+    // its own sale price wins for one unit and the combo price for the other.
+    const shares = distributeDiscount(setValues, setDiscount / 100).map((rupees) => rupees * 100);
     members.forEach((i, n) => {
       remaining.set(i, remaining.get(i)! - 1);
       unitsByLine.set(i, (unitsByLine.get(i) ?? 0) + 1);

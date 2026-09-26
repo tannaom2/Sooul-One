@@ -33,7 +33,19 @@ export function ageLabel(from?: number | null, to?: number | null): string | nul
 /** "No allergens declared" only when the owner declared an empty list. */
 export function allergenLabel(allergens: readonly string[] | null | undefined): string | null {
   if (!allergens) return null;
-  return allergens.length === 0 ? "No allergens declared" : `Contains ${allergens.join(", ")}`;
+  return allergens.length === 0 ? "No allergens declared" : allergenSentence(allergens);
+}
+
+/**
+ * The allergen line as a label prints it: what the product contains, then any
+ * precautionary "may contain" warning as its own sentence. Both live in the one
+ * allergens list, and "Contains May contain traces of peanuts" misstates it.
+ */
+export function allergenSentence(allergens: readonly string[]): string {
+  const warning = (a: string) => /^may contain/i.test(a.trim());
+  const contains = allergens.filter((a) => !warning(a));
+  const mayContain = allergens.filter(warning).map((a) => a.trim().replace(/\.$/, ""));
+  return [contains.length > 0 ? `Contains ${contains.join(", ")}` : null, ...mayContain].filter(Boolean).join(". ");
 }
 
 /**
