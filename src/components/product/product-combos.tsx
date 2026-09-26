@@ -8,12 +8,17 @@ import type { ComboOffer } from "@/server/catalog";
 import { useCart } from "../basket/cart-provider";
 
 /**
- * "Save with a combo" on a product page: each live bundle this product is in,
+ * "Or buy as a kit" on a product page: each live bundle this product is in,
  * with the set shown, its combo price and saving (worked out by the basket's
  * own engine on the server), and one button to add the set. For mix-and-match
  * bundles the other products that also qualify are listed.
  *
- * The terms are stated where the price is: once per complete combo, not with
+ * A kit is its own offer, one of each product, apart from the pack picker or
+ * quantity above (as Amazon's "Frequently bought together" and Indian D2C
+ * combos work): the panel says so, so "3 packs" above and "This product ₹499"
+ * here don't read as a contradiction.
+ *
+ * The terms are stated where the price is: once per complete kit, not with
  * discount codes. Nothing is added unless the shopper presses the button.
  */
 export function ProductCombos({ offers }: { offers: ComboOffer[] }) {
@@ -21,12 +26,21 @@ export function ProductCombos({ offers }: { offers: ComboOffer[] }) {
   return (
     <section aria-labelledby="combos-h" className="panel mt-5">
       <h2 id="combos-h" className="panel-head">
-        Save with a combo
+        Or buy as a kit
       </h2>
       <div className="grid gap-5 p-3.5">
+        <p className="text-small text-ink-soft">
+          A kit is one of each product shown, at the kit price. It&rsquo;s added on its own; your choice above doesn&rsquo;t
+          change.
+        </p>
         {offers.map((offer) => (
           <Combo key={offer.bundleId} offer={offer} />
         ))}
+        <p className="text-micro text-ink-faint">
+          The kit price applies to each complete kit; extra units are at the usual price. Discount codes don&rsquo;t apply
+          to kit items.
+          {offers.length > 1 && " One offer per item: where a product is in more than one kit, the basket applies the one that saves you more."}
+        </p>
       </div>
     </section>
   );
@@ -36,6 +50,8 @@ function Combo({ offer }: { offer: ComboOffer }) {
   const { addMany, pending } = useCart();
   const [added, setAdded] = useState(false);
   const percent = offer.salePaise > 0 ? Math.round((offer.savingPaise / offer.salePaise) * 100) : 0;
+  // Owners often restate the rule ("Any two gummies, 12% off"); show only what adds to it.
+  const note = offer.description && !offer.description.toLowerCase().includes(offer.discountLabel.toLowerCase()) ? offer.description : null;
 
   return (
     <div className="grid gap-3">
@@ -45,7 +61,7 @@ function Combo({ offer }: { offer: ComboOffer }) {
           {offer.kind === "fixed"
             ? `Buy these together: ${offer.discountLabel}.`
             : `Any ${offer.minItems} of the products below: ${offer.discountLabel}.`}
-          {offer.description ? ` ${offer.description}` : ""}
+          {note ? ` ${note}` : ""}
         </p>
       </div>
 
@@ -74,7 +90,7 @@ function Combo({ offer }: { offer: ComboOffer }) {
 
       <div className="flex flex-wrap items-end justify-between gap-3 border-t border-rule pt-3">
         <p>
-          <span className="block text-micro text-ink-faint">Combo price</span>
+          <span className="block text-micro text-ink-faint">Kit price</span>
           <span className="tabular font-display text-lead font-bold">{formatPriceTag(offer.comboPaise)}</span>{" "}
           <s className="tabular text-small text-ink-faint">{formatPriceTag(offer.salePaise)}</s>{" "}
           <span className="text-small font-semibold text-veg">
@@ -94,7 +110,7 @@ function Combo({ offer }: { offer: ComboOffer }) {
           }}
           className="btn btn-solid px-4"
         >
-          {added ? "Added ✓" : offer.items.length === 2 ? "Add both to basket" : `Add all ${offer.items.length} to basket`}
+          {added ? "Added ✓" : `Add kit to basket · ${formatPriceTag(offer.comboPaise)}`}
         </button>
       </div>
 
@@ -113,10 +129,6 @@ function Combo({ offer }: { offer: ComboOffer }) {
         </p>
       )}
 
-      <p className="text-micro text-ink-faint">
-        The combo price applies once per complete combo; extra units are at the usual price. It can&rsquo;t be combined with
-        discount codes.
-      </p>
     </div>
   );
 }

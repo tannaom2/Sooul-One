@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { addManyToBasket, addToBasket, loadBasket, removeUnavailableItems, setBasketQuantity } from "@/app/basket-actions";
+import { addManyToBasket, addToBasket, loadBasket, removeUnavailableItems, setBasketQuantities, setBasketQuantity } from "@/app/basket-actions";
 import type { BasketSnapshot } from "@/lib/basket-types";
 import { track } from "@/lib/track";
 
@@ -17,7 +17,7 @@ interface State {
   basket: BasketSnapshot | null;
 }
 
-type Optimistic = { type: "add"; quantity: number } | { type: "set"; itemId: string; quantity: number };
+type Optimistic = { type: "add"; quantity: number } | { type: "set"; changes: readonly { itemId: string; quantity: number }[] };
 
 interface CartContextValue {
   count: number;
@@ -32,6 +32,8 @@ interface CartContextValue {
   /** One of each, for a combo. Resolves true when all went in. */
   addMany: (productIds: string[]) => Promise<boolean>;
   setQuantity: (itemId: string, quantity: number) => Promise<void>;
+  /** Several lines at once: a kit's products move together. */
+  setQuantities: (changes: { itemId: string; quantity: number }[]) => Promise<void>;
   /** Drop what can't ship, trim what partly can. */
   removeUnavailable: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -42,8 +44,9 @@ const CartContext = createContext<CartContextValue | null>(null);
 function applyOptimistic(state: State, change: Optimistic): State {
   if (change.type === "add") return { ...state, count: state.count + change.quantity };
   if (!state.basket) return state;
+  const next = new Map(change.changes.map((c) => [c.itemId, c.quantity]));
   const lines = state.basket.lines
-    .map((l) => (l.itemId === change.itemId ? { ...l, quantity: change.quantity } : l))
+    .map((l) => (next.has(l.itemId) ? { ...l, quantity: next.get(l.itemId)! } : l))
     .filter((l) => l.quantity > 0);
   const count = lines.reduce((n, l) => n + l.quantity, 0);
   return { count, basket: { ...state.basket, lines, count } };
@@ -140,8 +143,23 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
       new Promise<void>((resolve) => {
         setError(null);
         startTransition(async () => {
-          addOptimistic({ type: "set", itemId, quantity });
+          addOptimistic({ type: "set", changes: [{ itemId, quantity }] });
           const result = await setBasketQuantity(itemId, quantity);
+          if (result.ok) accept(result.basket);
+          else setError(result.message);
+          resolve();
+        });
+      }),
+    [accept, addOptimistic],
+  );
+
+  const setQuantities = useCallback(
+    (changes: { itemId: string; quantity: number }[]) =>
+      new Promise<void>((resolve) => {
+        setError(null);
+        startTransition(async () => {
+          addOptimistic({ type: "set", changes });
+          const result = await setBasketQuantities(changes);
           if (result.ok) accept(result.basket);
           else setError(result.message);
           resolve();
@@ -191,6 +209,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         add,
         addMany,
         setQuantity,
+        setQuantities,
         removeUnavailable,
         refresh,
       }}

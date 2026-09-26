@@ -268,7 +268,7 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
             <div className="panel-row"><dt>Product discounts</dt><dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd></div>
           )}
           {quote.bundleDiscountPaise > 0 && (
-            <div className="panel-row"><dt>Bundle offer ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd></div>
+            <div className="panel-row"><dt>Combo savings ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd></div>
           )}
           {quote.discountPaise > 0 && (
             <div className="panel-row"><dt>Discount code</dt><dd className="text-veg">−{formatINR(quote.discountPaise)}</dd></div>

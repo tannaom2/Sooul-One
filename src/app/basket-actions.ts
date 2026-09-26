@@ -8,6 +8,7 @@ import {
   getOrCreateSessionId,
   readSessionId,
   removeUnavailable,
+  updateQuantities,
   updateQuantity,
   writeBasketCount,
 } from "@/server/cart";
@@ -30,6 +31,8 @@ const setSchema = z.object({
   itemId: z.string().min(1).max(40),
   quantity: z.number().int().min(0).max(MAX_LINE_QUANTITY),
 });
+
+const setManySchema = z.array(setSchema).min(1).max(6);
 
 const TRY_AGAIN = "That didn't save. Check your connection and try again.";
 
@@ -140,6 +143,22 @@ export async function setBasketQuantity(itemId: string, quantity: number): Promi
     return { ok: true, basket: await snapshotFor(sessionId) };
   } catch (error) {
     reportError("basket/set", error);
+    return { ok: false, message: TRY_AGAIN };
+  }
+}
+
+/** A kit's products together (add or remove a kit), as one change. */
+export async function setBasketQuantities(changes: { itemId: string; quantity: number }[]): Promise<BasketResult> {
+  const parsed = setManySchema.safeParse(changes);
+  if (!parsed.success) return { ok: false, message: "Choose a quantity between 0 and 20." };
+
+  const sessionId = await readSessionId();
+  if (!sessionId) return { ok: true, basket: EMPTY_BASKET };
+  try {
+    await updateQuantities(sessionId, parsed.data);
+    return { ok: true, basket: await snapshotFor(sessionId) };
+  } catch (error) {
+    reportError("basket/set-many", error);
     return { ok: false, message: TRY_AGAIN };
   }
 }

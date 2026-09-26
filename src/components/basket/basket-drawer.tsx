@@ -3,9 +3,11 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef } from "react";
-import { formatINR, formatPriceTag } from "@/lib/money";
+import { formatPriceTag } from "@/lib/money";
+import { MAX_LINE_QUANTITY } from "@/lib/basket-types";
 import { useCart } from "./cart-provider";
 import { QuantityStepper } from "./quantity-stepper";
+import { KitBlock } from "./kit-block";
 
 /**
  * Slide-over basket. Opens on add-to-basket and from the menu, so adding a
@@ -109,7 +111,7 @@ export function BasketDrawer() {
                     {basket.freeDelivery.qualified ? (
                       <span className="text-veg">You&rsquo;ve unlocked free delivery</span>
                     ) : (
-                      <>Add {formatINR(basket.freeDelivery.gapPaise)} more for free delivery</>
+                      <>Add {formatPriceTag(basket.freeDelivery.gapPaise)} more for free delivery</>
                     )}
                   </p>
                   <div className="mt-2 h-2 overflow-hidden bg-shelf" style={{ borderRadius: 999 }} aria-hidden>
@@ -145,8 +147,22 @@ export function BasketDrawer() {
                 </div>
               )}
 
+              {basket && basket.kits.length > 0 && (
+                <div className="mb-4 grid gap-3">
+                  {basket.kits.map((kit) => (
+                    <KitBlock key={kit.bundleId} kit={kit} />
+                  ))}
+                </div>
+              )}
+
               <ul className="grid gap-4">
-                {lines.map((line) => (
+                {/* Units inside a kit are shown in the kit; a line shows only the rest,
+                    and a kit product's extra units come first, next to the kits. */}
+                {[...lines]
+                  .sort((a, b) => Number(b.kitUnits > 0) - Number(a.kitUnits > 0))
+                  .map((line) => ({ line, extra: line.quantity - line.kitUnits, extraAvailable: line.quantityAvailable - line.kitUnits }))
+                  .filter(({ extra }) => extra > 0)
+                  .map(({ line, extra, extraAvailable }) => (
                   <li key={line.itemId} className="flex gap-3 border-b border-rule pb-4 last:border-b-0">
                     {line.imageUrl ? (
                       <Image src={line.imageUrl} alt="" width={64} height={64} sizes="64px" className="h-16 w-16 shrink-0 border border-rule object-cover" />
@@ -157,14 +173,17 @@ export function BasketDrawer() {
                       <Link href={`/product/${line.slug}`} onClick={closeBasket} className="block text-small font-semibold hover:underline">
                         {line.name}
                       </Link>
-                      <p className="text-micro text-ink-faint">{line.brandName}</p>
+                      <p className="text-micro text-ink-faint">
+                        {line.brandName}
+                        {line.kitUnits > 0 && " · extra, at the usual price"}
+                      </p>
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <QuantityStepper value={line.quantity} min={0} label={line.name} onChange={(q) => setQuantity(line.itemId, q)} />
+                        <QuantityStepper value={extra} min={0} max={MAX_LINE_QUANTITY - line.kitUnits} label={line.name} onChange={(q) => setQuantity(line.itemId, line.kitUnits + q)} />
                         <span className="tabular text-small">
                           {line.listUnitPaise > line.unitPaise && (
-                            <s className="mr-1 text-ink-faint">{formatPriceTag(line.listUnitPaise * line.quantityAvailable)}</s>
+                            <s className="mr-1 text-ink-faint">{formatPriceTag(line.listUnitPaise * Math.max(0, extraAvailable))}</s>
                           )}
-                          {formatPriceTag(line.lineTotalPaise)}
+                          {formatPriceTag(line.unitPaise * Math.max(0, extraAvailable))}
                         </span>
                       </div>
                       {line.message && <p className="mt-2 border-l-4 border-alert bg-shelf px-2 py-1 text-micro">{line.message}</p>}
@@ -183,22 +202,22 @@ export function BasketDrawer() {
               {basket.savingsPaise > 0 && (
                 <div className="flex justify-between text-veg">
                   <dt>You save</dt>
-                  <dd className="tabular">{formatINR(basket.savingsPaise)}</dd>
+                  <dd className="tabular">{formatPriceTag(basket.savingsPaise)}</dd>
                 </div>
               )}
               <div className="flex justify-between">
                 <dt>Delivery</dt>
-                <dd className="tabular">{basket.shippingPaise === 0 ? "Free" : formatINR(basket.shippingPaise)}</dd>
+                <dd className="tabular">{basket.shippingPaise === 0 ? "Free" : formatPriceTag(basket.shippingPaise)}</dd>
               </div>
               <div className="flex justify-between font-display text-lead font-bold">
                 <dt>Total</dt>
-                <dd className="tabular">{formatINR(basket.totalPaise)}</dd>
+                <dd className="tabular">{formatPriceTag(basket.totalPaise)}</dd>
               </div>
               <p className="text-micro text-ink-faint">Includes GST. Nothing more is added at checkout.</p>
             </dl>
             {basket.canProceed ? (
               <Link href="/checkout" onClick={closeBasket} className="btn btn-solid mt-3 w-full">
-                Checkout · {formatINR(basket.totalPaise)}
+                Checkout · {formatPriceTag(basket.totalPaise)}
               </Link>
             ) : (
               <>

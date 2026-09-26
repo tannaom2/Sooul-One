@@ -96,6 +96,10 @@ export interface QuoteLine {
   /** This line's share of a bundle offer. */
   readonly bundleDiscountPaise: Paise;
   readonly bundleName?: string;
+  /** The bundle whose sets include this line. */
+  readonly bundleId?: string;
+  /** Units of this line inside complete sets of that bundle (0 when none); the rest pay the usual price. */
+  readonly bundleUnits: number;
   /** This line's share of the coupon. */
   readonly discountPaise: Paise;
   readonly taxablePaise: Paise;
@@ -415,6 +419,10 @@ export function buildQuote(input: QuoteInput): Quote {
       // line — showing "Bundle offer" for a line it did nothing for would be
       // misleading, even though the bundle nominally claimed the line.
       bundleName: realizedBundleDiscount > 0 ? (bundles.perLineBundle[index] ?? undefined) : undefined,
+      // Membership, unlike the name, counts even where this line's own sale price
+      // won: it's still one of the products that make up the kit.
+      bundleId: bundles.perLineBundleId[index] ?? undefined,
+      bundleUnits: bundles.perLineUnits[index],
       discountPaise: lineDiscount,
       taxablePaise: split.netPaise,
       taxPaise: split.taxPaise,

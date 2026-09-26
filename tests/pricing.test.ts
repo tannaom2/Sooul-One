@@ -44,6 +44,6 @@ describe("price tag format", () => {
   it("renders whole rupees as 470/- and keeps paise when present", () => {
     expect(formatPriceTag(toPaise("470"))).toBe("₹470/-");
     expect(formatPriceTag(toPaise("1499"))).toBe("₹1,499/-");
-    expect(formatPriceTag(toPaise("470.50"))).toBe("₹470.50/-");
+    expect(formatPriceTag(toPaise("470.50"))).toBe("₹470.50");
   });
 });

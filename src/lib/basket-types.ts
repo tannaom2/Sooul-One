@@ -1,4 +1,5 @@
 import type { FreeDeliveryProgress } from "./checkout/basket-nudges";
+import type { Kit } from "./checkout/kits";
 
 /**
  * What the basket drawer renders. Built on the server from the same quote
@@ -23,6 +24,13 @@ export interface BasketLine {
   readonly message: string | null;
   /** Set when the unit price moved since the shopper added the item. */
   readonly priceNote: string | null;
+  /** Units shown inside a kit instead of on this line; the line shows the rest. */
+  readonly kitUnits: number;
+}
+
+/** A combo in the basket, with what the controls need to change it as one unit. */
+export interface BasketKit extends Omit<Kit, "members"> {
+  readonly members: readonly (Kit["members"][number] & { itemId: string; quantity: number })[];
 }
 
 export interface BasketOffer {
@@ -43,6 +51,7 @@ export interface BasketSnapshot {
   readonly totalPaise: number;
   readonly freeDelivery: FreeDeliveryProgress;
   readonly appliedOffers: readonly { id: string; name: string; discountPaise: number }[];
+  readonly kits: readonly BasketKit[];
   readonly nextOffer: BasketOffer | null;
   readonly canProceed: boolean;
 }
@@ -58,6 +67,7 @@ export const EMPTY_BASKET: BasketSnapshot = {
   totalPaise: 0,
   freeDelivery: { qualified: false, gapPaise: 0, fraction: 0 },
   appliedOffers: [],
+  kits: [],
   nextOffer: null,
   canProceed: false,
 };

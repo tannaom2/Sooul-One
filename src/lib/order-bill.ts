@@ -88,7 +88,7 @@ export function buildOrderBill(order: StoredOrder): OrderBill {
     productDiscountPaise,
     bundle:
       bundleAmount > 0
-        ? { label: order.bundleLabel || "Bundle offer", amountPaise: bundleAmount }
+        ? { label: order.bundleLabel || "Combo savings", amountPaise: bundleAmount }
         : null,
     coupon:
       couponAmount > 0 ? { code: order.couponCode || "Discount code", amountPaise: couponAmount } : null,

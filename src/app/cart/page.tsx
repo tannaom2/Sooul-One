@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
+import { basketKits, priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
 import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
+import { KitBlock } from "@/components/basket/kit-block";
 import { RemoveUnavailableButton } from "@/components/remove-unavailable-button";
-import { formatINR, formatPriceTag } from "@/lib/money";
+import { formatPriceTag } from "@/lib/money";
 import { formatDate } from "@/lib/format";
 import { reportError } from "@/lib/observability";
 
@@ -47,6 +48,8 @@ export default async function CartPage() {
 
   const { quote, cartItems, estimatedDeliveryDate } = result;
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
+  const kits = basketKits(quote, cartItems);
+  const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
 
   return (
     <>
@@ -54,8 +57,22 @@ export default async function CartPage() {
 
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 lg:grid-cols-[1fr_340px]">
         <div>
+          {kits.length > 0 && (
+            <div className="mb-2 grid gap-3">
+              {kits.map((kit) => (
+                <KitBlock key={kit.bundleId} kit={kit} refreshPage />
+              ))}
+            </div>
+          )}
           <ul>
-            {quote.lines.map((line) => {
+            {/* A kit product's extra units first, next to the kits. */}
+            {[...quote.lines].sort((a, b) => Number(kitUnits.has(b.productId)) - Number(kitUnits.has(a.productId))).map((line) => {
+              // Units inside a kit are shown in the kit above; this line shows the rest.
+              const inKits = kitUnits.get(line.productId) ?? 0;
+              if (line.quantityRequested - inKits <= 0) return null;
+              const extraAvailable = Math.max(0, line.quantityAvailable - inKits);
+              const unitPaise = line.quantityAvailable > 0 ? line.grossPaise / line.quantityAvailable : 0;
+              const listUnitPaise = line.quantityAvailable > 0 ? line.listGrossPaise / line.quantityAvailable : 0;
               const item = itemById.get(line.productId);
               const blocked = line.status !== "OK";
               const priceNote = item ? priceNoteFor(item) : null;
@@ -73,26 +90,19 @@ export default async function CartPage() {
                         </Link>
                         <p className="mt-0.5 text-micro text-ink-faint">
                           {item?.product?.brand?.name}
+                          {inKits > 0 && " · extra, at the usual price"}
                         </p>
                       </div>
                       <VegMark isVeg={item?.product?.isVeg ?? null} />
                     </div>
 
                     <div className="mt-3 flex flex-wrap items-center gap-4">
-                      <CartQuantity itemId={item?.id ?? ""} quantity={line.quantityRequested} name={line.name} />
+                      <CartQuantity itemId={item?.id ?? ""} quantity={line.quantityRequested} inKits={inKits} name={line.name} />
                       <span className="tabular text-small">
                         {line.productDiscountPaise > 0 && (
-                          <s className="mr-2 text-ink-faint">{formatPriceTag(line.listGrossPaise)}</s>
+                          <s className="mr-2 text-ink-faint">{formatPriceTag(Math.round(listUnitPaise * extraAvailable))}</s>
                         )}
-                        {formatPriceTag(line.grossPaise)}
-                        {line.bundleDiscountPaise > 0 && (
-                          <span className="ml-2 text-veg">
-                            −{formatINR(line.bundleDiscountPaise)} {line.bundleName}
-                          </span>
-                        )}
-                        {line.discountPaise > 0 && (
-                          <span className="ml-2 text-veg">−{formatINR(line.discountPaise)}</span>
-                        )}
+                        {formatPriceTag(Math.round(unitPaise * extraAvailable))}
                       </span>
                     </div>
 
@@ -118,37 +128,37 @@ export default async function CartPage() {
             <dl>
               <div className="panel-row">
                 <dt>Items</dt>
-                <dd>{formatINR(quote.listSubtotalPaise)}</dd>
+                <dd>{formatPriceTag(quote.listSubtotalPaise)}</dd>
               </div>
               {quote.productDiscountPaise > 0 && (
                 <div className="panel-row">
                   <dt>Product discounts</dt>
-                  <dd className="text-veg">−{formatINR(quote.productDiscountPaise)}</dd>
+                  <dd className="text-veg">−{formatPriceTag(quote.productDiscountPaise)}</dd>
                 </div>
               )}
               {quote.bundleDiscountPaise > 0 && (
                 <div className="panel-row">
-                  <dt>Bundle offer ({quote.appliedBundles.map((b) => b.name).join(", ")})</dt>
-                  <dd className="text-veg">−{formatINR(quote.bundleDiscountPaise)}</dd>
+                  <dt>Combo savings</dt>
+                  <dd className="text-veg">−{formatPriceTag(quote.bundleDiscountPaise)}</dd>
                 </div>
               )}
               {quote.discountPaise > 0 && (
                 <div className="panel-row">
                   <dt>Discount {quote.appliedCouponCode && `(${quote.appliedCouponCode})`}</dt>
-                  <dd className="text-veg">−{formatINR(quote.discountPaise)}</dd>
+                  <dd className="text-veg">−{formatPriceTag(quote.discountPaise)}</dd>
                 </div>
               )}
               <div className="panel-row">
                 <dt>Delivery</dt>
-                <dd>{quote.shippingPaise === 0 ? "Free" : formatINR(quote.shippingPaise)}</dd>
+                <dd>{quote.shippingPaise === 0 ? "Free" : formatPriceTag(quote.shippingPaise)}</dd>
               </div>
               <div className="panel-row text-ink-faint">
                 <dt>of which GST</dt>
-                <dd>{formatINR(quote.taxPaise)}</dd>
+                <dd>{formatPriceTag(quote.taxPaise)}</dd>
               </div>
               <div className="panel-row font-display text-lead font-bold">
                 <dt>Total</dt>
-                <dd>{formatINR(quote.totalPaise)}</dd>
+                <dd>{formatPriceTag(quote.totalPaise)}</dd>
               </div>
             </dl>
 

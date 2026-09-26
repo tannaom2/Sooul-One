@@ -16,6 +16,10 @@
  *     plus one of B is one set (A + B), not a 15% discount on 21 jars; a
  *     single cheap add-on can't turn a combo into a bulk discount.
  *
+ * Savings are whole rupees, rounded down: a percentage can come out at
+ * ₹113.76, and a combo reads as "₹835", not "₹834.24". Rounding down means
+ * the seller never gives away more than the rule says.
+ *
  * Pure: rules and lines (list price per unit, units) go in; per-line units
  * claimed and discounts come out. Priced off MRP; quote.ts then gives each
  * unit the better of its own sale price or the combo price, never both.
@@ -55,6 +59,12 @@ export interface AppliedBundle {
   readonly productIds: readonly string[];
   /** Complete sets the discount was applied to. */
   readonly sets: number;
+  /**
+   * The products in each set when every set has the same ones (always, for a
+   * fixed combo); null when a mix-and-match offer made sets of different
+   * products. Lets the basket offer "one more kit" as a single step.
+   */
+  readonly perSet: readonly string[] | null;
 }
 
 export interface BundleResult {
@@ -64,6 +74,8 @@ export interface BundleResult {
   readonly perLineUnits: readonly number[];
   /** Name of the bundle that claimed each line, or null. */
   readonly perLineBundle: readonly (string | null)[];
+  /** Id of the bundle that claimed each line, or null. */
+  readonly perLineBundleId: readonly (string | null)[];
   readonly applied: readonly AppliedBundle[];
   readonly totalPaise: Paise;
 }
@@ -75,6 +87,7 @@ interface Candidate {
   readonly discountByLine: Map<number, Paise>;
   readonly discountPaise: Paise;
   readonly sets: number;
+  readonly perSet: readonly string[] | null;
 }
 
 /** Complete sets this rule makes from the unclaimed lines, and what each line saves. */
@@ -95,6 +108,8 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
   const discountByLine = new Map<number, Paise>();
   let discountPaise = 0;
   let sets = 0;
+  const makeups = new Set<string>();
+  let firstSet: string[] = [];
 
   for (;;) {
     // Highest-value products first (ties: basket order), up to the cap.
@@ -106,12 +121,17 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
     if (members.length < minItems) break;
 
     const setValues = members.map((i) => lines[i].unitPaise);
-    const { discountPaise: setDiscount } = applyDiscount(
+    const { discountPaise: exactDiscount } = applyDiscount(
       setValues.reduce((sum, v) => sum + v, 0),
       rule.discountType,
       rule.discountValue,
     );
+    const setDiscount = Math.floor(exactDiscount / 100) * 100; // whole rupees, down
     if (setDiscount <= 0) break;
+
+    const products = members.map((i) => lines[i].productId);
+    if (sets === 0) firstSet = products;
+    makeups.add([...products].sort().join(","));
 
     const shares = distributeDiscount(setValues, setDiscount);
     members.forEach((i, n) => {
@@ -124,13 +144,22 @@ function evaluate(rule: BundleRule, lines: readonly BundleLineInput[], claimed: 
   }
 
   if (sets === 0) return null;
-  return { rule, lineIndexes: [...unitsByLine.keys()].sort((a, b) => a - b), unitsByLine, discountByLine, discountPaise, sets };
+  return {
+    rule,
+    lineIndexes: [...unitsByLine.keys()].sort((a, b) => a - b),
+    unitsByLine,
+    discountByLine,
+    discountPaise,
+    sets,
+    perSet: makeups.size === 1 ? firstSet : null,
+  };
 }
 
 export function applyBundles(lines: readonly BundleLineInput[], rules: readonly BundleRule[]): BundleResult {
   const perLinePaise: Paise[] = lines.map(() => 0);
   const perLineUnits: number[] = lines.map(() => 0);
   const perLineBundle: (string | null)[] = lines.map(() => null);
+  const perLineBundleId: (string | null)[] = lines.map(() => null);
   const applied: AppliedBundle[] = [];
   const claimed = new Set<number>();
   const used = new Set<string>();
@@ -156,6 +185,7 @@ export function applyBundles(lines: readonly BundleLineInput[], rules: readonly 
       perLinePaise[i] = best.discountByLine.get(i) ?? 0;
       perLineUnits[i] = best.unitsByLine.get(i) ?? 0;
       perLineBundle[i] = best.rule.name;
+      perLineBundleId[i] = best.rule.id;
       claimed.add(i);
     }
     used.add(best.rule.id);
@@ -165,10 +195,11 @@ export function applyBundles(lines: readonly BundleLineInput[], rules: readonly 
       discountPaise: best.discountPaise,
       productIds: best.lineIndexes.map((i) => lines[i].productId),
       sets: best.sets,
+      perSet: best.perSet,
     });
   }
 
-  return { perLinePaise, perLineUnits, perLineBundle, applied, totalPaise: perLinePaise.reduce((sum, p) => sum + p, 0) };
+  return { perLinePaise, perLineUnits, perLineBundle, perLineBundleId, applied, totalPaise: perLinePaise.reduce((sum, p) => sum + p, 0) };
 }
 
 /**

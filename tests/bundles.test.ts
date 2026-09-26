@@ -287,3 +287,41 @@ describe("comboPrice, for the storefront", () => {
     expect(comboPrice(rule(), [{ productId: "a", unitListPaise: 1000, unitSalePaise: 1000 }])).toBeNull();
   });
 });
+
+describe("whole-rupee kit savings", () => {
+  it("rounds a percentage saving down to the rupee", () => {
+    // 12% of ₹948 is ₹113.76: the kit saves ₹113, never more than the rule.
+    const r = applyBundles([line("a", "499"), line("b", "449")], [rule({ discountValue: 12 })]);
+    expect(r.totalPaise).toBe(toPaise("113"));
+    expect(r.perLinePaise.reduce((a, b) => a + b, 0)).toBe(r.totalPaise);
+  });
+
+  it("rounds per kit, so two kits save exactly twice one", () => {
+    const r = applyBundles([line("a", "499", 2), line("b", "449", 2)], [rule({ discountValue: 12 })]);
+    expect(r.totalPaise).toBe(toPaise("226"));
+  });
+
+  it("prices a kit in whole rupees on the product page too", () => {
+    const c = comboPrice(rule({ discountValue: 12 }), [
+      { productId: "a", unitListPaise: toPaise("499"), unitSalePaise: toPaise("499") },
+      { productId: "b", unitListPaise: toPaise("449"), unitSalePaise: toPaise("449") },
+    ]);
+    expect(c).toMatchObject({ comboPaise: toPaise("835"), savingPaise: toPaise("113") });
+  });
+});
+
+describe("kit makeup", () => {
+  it("reports the products in each kit when every kit is the same", () => {
+    const r = applyBundles([line("a", "200", 2), line("b", "300", 2)], [rule()]);
+    expect(r.applied[0].sets).toBe(2);
+    expect([...(r.applied[0].perSet ?? [])].sort()).toEqual(["a", "b"]);
+    expect(r.perLineBundleId).toEqual(["hamper", "hamper"]);
+  });
+
+  it("reports no single makeup when mix-and-match kits differ", () => {
+    // Kit 1 takes the two dearest (c + b), kit 2 what's left (c + a).
+    const r = applyBundles([line("a", "100"), line("b", "200"), line("c", "300", 2)], [rule({ maxItems: 2 })]);
+    expect(r.applied[0].sets).toBe(2);
+    expect(r.applied[0].perSet).toBeNull();
+  });
+});

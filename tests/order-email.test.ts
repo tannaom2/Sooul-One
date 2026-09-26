@@ -88,7 +88,7 @@ describe("renderOrderConfirmation", () => {
   it("itemises product, bundle and coupon discounts and the total", () => {
     for (const s of [
       "Product discounts",
-      "Bundle offer: Diwali Hamper",
+      "Combo savings: Diwali Hamper",
       "WELCOME10",
       "₹761.40",
       "Includes GST of ₹81.21",

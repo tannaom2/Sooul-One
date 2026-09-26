@@ -47,12 +47,13 @@ export function formatINR(paise: Paise): string {
 }
 
 /**
- * Storefront price tag: whole rupees read "₹470/-", with paise only when there
- * are any ("₹470.50/-"). Display only; invoices and totals use `formatINR`.
+ * Storefront price tag: whole rupees read "₹470/-"; an amount with paise reads
+ * "₹470.50", since "/-" means "and no paise". Display only; invoices use
+ * `formatINR`.
  */
 export function formatPriceTag(paise: Paise): string {
   const full = formatINR(paise);
-  return `${full.endsWith(".00") ? full.slice(0, -3) : full}/-`;
+  return full.endsWith(".00") ? `${full.slice(0, -3)}/-` : full;
 }
 
 /**

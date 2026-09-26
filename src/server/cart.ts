@@ -9,9 +9,10 @@ import {
 } from "@/lib/session-cookie";
 import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
-import { DEFAULT_SHIPPING_POLICY, buildQuote, type QuoteLineInput } from "@/lib/checkout/quote";
+import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteLineInput } from "@/lib/checkout/quote";
+import { groupKits } from "@/lib/checkout/kits";
 import { freeDeliveryProgress, nextOfferNudge } from "@/lib/checkout/basket-nudges";
-import { MAX_LINE_QUANTITY, type BasketSnapshot } from "@/lib/basket-types";
+import { MAX_LINE_QUANTITY, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
@@ -148,6 +149,28 @@ export async function addToCart(sessionId: string, productId: string, quantity: 
   }
 
   return cart.id;
+}
+
+/**
+ * Several quantities in one go, for a kit: its products move together, so a
+ * kit can't end up half added. Each goes through updateQuantity's rules.
+ */
+export async function updateQuantities(sessionId: string, changes: readonly { itemId: string; quantity: number }[]) {
+  for (const c of changes) await updateQuantity(sessionId, c.itemId, c.quantity);
+}
+
+/** The quote's combos as basket kits, with each product's basket line attached. */
+export function basketKits(quote: Quote, cartItems: readonly { id: string; productId: string }[]): BasketKit[] {
+  const itemIdByProduct = new Map(cartItems.map((i) => [i.productId, i.id]));
+  const quantityByProduct = new Map(quote.lines.map((l) => [l.productId, l.quantityRequested]));
+  return groupKits(quote).map((kit) => ({
+    ...kit,
+    members: kit.members.map((m) => ({
+      ...m,
+      itemId: itemIdByProduct.get(m.productId) ?? "",
+      quantity: quantityByProduct.get(m.productId) ?? 0,
+    })),
+  }));
 }
 
 export async function updateQuantity(sessionId: string, itemId: string, quantity: number) {
@@ -342,6 +365,8 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   if (!result) return null;
   const { quote, cartItems, bundles, bundlePrices } = result;
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
+  const kits = basketKits(quote, cartItems);
+  const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
 
   const lines = quote.lines.map((line) => {
     const item = itemById.get(line.productId);
@@ -360,6 +385,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
       status: line.status,
       message: line.customerMessage ?? null,
       priceNote: item ? priceNoteFor(item) : null,
+      kitUnits: kitUnits.get(line.productId) ?? 0,
     };
   });
 
@@ -409,6 +435,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
     totalPaise: quote.totalPaise,
     freeDelivery: freeDeliveryProgress(discounted, DEFAULT_SHIPPING_POLICY.freeAbovePaise),
     appliedOffers: quote.appliedBundles.map((b) => ({ id: b.id, name: b.name, discountPaise: b.discountPaise })),
+    kits,
     nextOffer: nextOffer && nextOffer.suggestions.length >= nextOffer.missing ? nextOffer : null,
     canProceed: quote.canProceed,
   };
