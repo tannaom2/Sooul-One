@@ -8,7 +8,7 @@
  */
 
 import { applyDiscount, type DiscountType, type Paise } from "../money";
-import type { BundleRule } from "./bundles";
+import { applyBundles, type BundleLineInput, type BundleRule } from "./bundles";
 
 export interface FreeDeliveryProgress {
   readonly qualified: boolean;
@@ -90,4 +90,44 @@ export function nextOfferNudge(
     }
   }
   return best;
+}
+
+/**
+ * Check a nudge against the real engine before showing it. Counting products
+ * isn't enough: a product already in one kit can't also make another (each
+ * line joins one bundle), and a suggested product may count towards a bigger
+ * offer the shopper already has. So this adds the suggestion to the basket,
+ * runs applyBundles, and keeps the nudge only if the saving really grows
+ * through that same offer, with the saving it really adds. Suggestions that
+ * wouldn't unlock it are dropped. Null when nothing would.
+ *
+ * `lines` are the basket as applyBundles takes them (list price, units that
+ * can ship); `listPriceById` gives list prices for the suggested products.
+ */
+export function settleNudge(
+  nudge: OfferNudge,
+  lines: readonly BundleLineInput[],
+  rules: readonly BundleRule[],
+  listPriceById: ReadonlyMap<string, Paise>,
+): OfferNudge | null {
+  const before = applyBundles(lines, rules);
+  const savedBy = (r: ReturnType<typeof applyBundles>, id: string) => r.applied.find((b) => b.id === id)?.discountPaise ?? 0;
+
+  // Adding these: does the total saving grow, and does the nudged offer grow with it?
+  const gain = (ids: readonly string[]) => {
+    const after = applyBundles(
+      [...lines, ...ids.map((id) => ({ productId: id, unitPaise: listPriceById.get(id) ?? 0, quantity: 1 }))],
+      rules,
+    );
+    const total = after.totalPaise - before.totalPaise;
+    return total > 0 && savedBy(after, nudge.bundleId) > savedBy(before, nudge.bundleId) ? total : 0;
+  };
+
+  if (nudge.missing === 1) {
+    const works = nudge.suggestProductIds.filter((id) => gain([id]) > 0);
+    if (works.length === 0) return null;
+    return { ...nudge, suggestProductIds: works, savingPaise: gain([works[0]]) };
+  }
+  const saving = gain(nudge.suggestProductIds.slice(0, nudge.missing));
+  return saving > 0 ? { ...nudge, savingPaise: saving } : null;
 }

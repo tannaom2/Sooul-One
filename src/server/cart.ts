@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
 import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteLineInput } from "@/lib/checkout/quote";
 import { groupKits } from "@/lib/checkout/kits";
-import { freeDeliveryProgress, nextOfferNudge } from "@/lib/checkout/basket-nudges";
+import { freeDeliveryProgress, nextOfferNudge, settleNudge } from "@/lib/checkout/basket-nudges";
 import { MAX_LINE_QUANTITY, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
@@ -328,10 +328,13 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     couponMessage = minimumOrderMessage(coupon.minOrderPaise, quote.couponShortfallPaise, formatINR);
   }
 
-  // What each bundle product sells for today, so offers can be ranked by rupees saved.
+  // What each bundle product sells for today, so offers can be ranked by rupees saved,
+  // and its list price, which the bundle engine prices from.
   const bundlePrices = new Map<string, number>();
+  const bundleListPrices = new Map<string, number>();
   for (const b of bundleRows) {
     for (const e of b.eligibleProducts) {
+      bundleListPrices.set(e.productId, decimalToPaise(e.product.basePrice));
       bundlePrices.set(
         e.productId,
         resolveUnitPrice(decimalToPaise(e.product.basePrice), {
@@ -349,6 +352,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     gstTreatment,
     bundles,
     bundlePrices,
+    bundleListPrices,
     estimatedDeliveryDate,
     couponRejected: Boolean(context.couponCode) && !quote.appliedCouponCode,
     /** Why the code didn't apply, in words for the shopper. */
@@ -363,7 +367,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
 export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapshot | null> {
   const result = await quoteCart(sessionId);
   if (!result) return null;
-  const { quote, cartItems, bundles, bundlePrices } = result;
+  const { quote, cartItems, bundles, bundlePrices, bundleListPrices } = result;
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
   const kits = basketKits(quote, cartItems);
   const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
@@ -392,7 +396,20 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   // What quote.ts compares against the free-delivery threshold.
   const discounted = quote.subtotalPaise - quote.bundleDiscountPaise - quote.discountPaise;
   const shippable = quote.lines.filter((l) => l.quantityAvailable > 0).map((l) => l.productId);
-  const nudge = nextOfferNudge(shippable, bundles, quote.appliedBundles.map((b) => b.id), bundlePrices);
+  const counted = nextOfferNudge(shippable, bundles, quote.appliedBundles.map((b) => b.id), bundlePrices);
+  // Only what the engine would really do: a product already in a kit can't make a second offer.
+  const nudge =
+    counted &&
+    settleNudge(
+      counted,
+      quote.lines.map((l) => ({
+        productId: l.productId,
+        unitPaise: l.quantityAvailable > 0 ? Math.round(l.listGrossPaise / l.quantityAvailable) : 0,
+        quantity: l.quantityAvailable,
+      })),
+      bundles,
+      bundleListPrices,
+    );
 
   let nextOffer: BasketSnapshot["nextOffer"] = null;
   if (nudge) {

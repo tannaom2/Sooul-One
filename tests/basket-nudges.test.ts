@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { freeDeliveryProgress, nextOfferNudge } from "../src/lib/checkout/basket-nudges";
+import { toPaise } from "../src/lib/money";
+import { freeDeliveryProgress, nextOfferNudge, settleNudge, type OfferNudge } from "../src/lib/checkout/basket-nudges";
 import type { BundleRule } from "../src/lib/checkout/bundles";
 
 describe("freeDeliveryProgress", () => {
@@ -70,5 +71,39 @@ describe("nextOfferNudge", () => {
 
   it("never nudges toward an offer that can't be completed", () => {
     expect(nextOfferNudge(["g1"], [rule({ minItems: 3, eligibleProductIds: ["g1", "g2"] })], [])).toBeNull();
+  });
+});
+
+describe("settleNudge", () => {
+  const growing: BundleRule = {
+    id: "growing", name: "Growing-Up Kit", minItems: 2, maxItems: 2, discountType: "PERCENTAGE", discountValue: 12,
+    eligibleProductIds: ["multi", "calcium", "vitc"],
+  };
+  const duo: BundleRule = {
+    id: "duo", name: "Immunity Duo", minItems: 2, discountType: "PERCENTAGE", discountValue: 10,
+    eligibleProductIds: ["multi", "vitc"],
+  };
+  const list = new Map([["multi", toPaise("499")], ["calcium", toPaise("449")], ["vitc", toPaise("399")]]);
+  const at = (productId: string, quantity: number) => ({ productId, unitPaise: list.get(productId)!, quantity });
+  const nudgeFor = (rule: BundleRule, suggest: string[]): OfferNudge => ({
+    bundleId: rule.id, name: rule.name, missing: 1, discountType: rule.discountType, discountValue: rule.discountValue,
+    suggestProductIds: suggest, savingPaise: 0,
+  });
+
+  it("drops an offer whose product is already in another kit", () => {
+    // Two Growing-Up kits: the multivitamins are taken, so vitamin C can't make an Immunity Duo.
+    const basket = [at("multi", 2), at("calcium", 2)];
+    expect(settleNudge(nudgeFor(duo, ["vitc"]), basket, [growing, duo], list)).toBeNull();
+  });
+
+  it("drops an offer a bigger one would beat", () => {
+    // Multivitamin + vitamin C is also a Growing-Up pair at 12%, which wins over the Duo's 10%.
+    expect(settleNudge(nudgeFor(duo, ["vitc"]), [at("multi", 1)], [growing, duo], list)).toBeNull();
+  });
+
+  it("keeps an offer that really applies, with its real saving", () => {
+    const settled = settleNudge(nudgeFor(growing, ["vitc", "calcium"]), [at("multi", 1)], [growing, duo], list);
+    expect(settled?.suggestProductIds).toEqual(["vitc", "calcium"]);
+    expect(settled?.savingPaise).toBe(toPaise("107")); // 12% of ₹898 is ₹107.76, rounded down
   });
 });
