@@ -38,7 +38,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title,
     description,
-    openGraph: { title, description, images: product.images?.[0]?.url ? [product.images[0].url] : undefined },
+    // A product without a photo shares with the store's card rather than no image.
+    openGraph: { type: "website", siteName: "SooulOne", title, description, images: [product.images?.[0]?.url ?? "/og-default.png"] },
   };
 }
 
@@ -177,7 +178,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {/* Kids Vault: who it's for and how to give it, above the button,
               because a parent decides on this before anything else. */}
           {age && (isKids || isSupplement) && (
-            <div className="mt-5 border-l-4 px-4 py-3" style={{ borderColor: accent, background: "color-mix(in srgb, " + accent + " 8%, white)" }}>
+            <div className="mt-5 border-l-4 px-4 py-3" style={{ borderColor: accent, background: "color-mix(in srgb, " + accent + " 8%, var(--color-paper))" }}>
               <p className="font-display text-lead font-bold" style={{ color: accent }}>{age}</p>
               {isSupplement && product.dosageGuidance && <p className="mt-1 text-small">{product.dosageGuidance}</p>}
               {isKids && (

@@ -25,7 +25,20 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "res.cloudinary.com" }],
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // Files in public/ default to max-age=0 (checked on every visit). Next's own
+    // hashed JS and CSS are already immutable for a year; pages and API routes
+    // keep the headers Next gives them (no-store when dynamic).
+    const cache = (value: string) => [{ key: "Cache-Control", value }];
+    const DAY = "public, max-age=86400, stale-while-revalidate=604800";
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Versioned in the file name (-v1): a new version is a new URL.
+      { source: "/fonts/:file*", headers: cache("public, max-age=31536000, immutable") },
+      // Fixed names, so a day, then served while a fresh copy is fetched.
+      { source: "/:icon(favicon.ico|favicon-16x16.png|favicon-32x32.png|apple-touch-icon.png|og-default.png)", headers: cache(DAY) },
+      { source: "/:icon(android-chrome-.*\\.png)", headers: cache(DAY) },
+      { source: "/demo-assets/:file*", headers: cache(DAY) },
+    ];
   },
 };
 

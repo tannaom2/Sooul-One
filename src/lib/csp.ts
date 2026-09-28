@@ -21,8 +21,8 @@ export function contentSecurityPolicy(nonce: string, { dev }: { dev: boolean }):
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com${dev ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data: https://res.cloudinary.com",
     "frame-src https://api.razorpay.com https://checkout.razorpay.com",
     "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com",
