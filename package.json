@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:qa": "playwright test --config playwright.qa.config.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -27,6 +28,7 @@
     "demo:up": "tsx scripts/demo/demo-up.mts",
     "demo:start": "tsx scripts/demo/demo-start.mts",
     "demo:down": "tsx scripts/demo/demo-down.mts",
+    "demo:growth": "tsx scripts/demo/demo-growth.mts",
     "demo:migrate": "tsx scripts/demo/demo-migrate.mts"
   },
   "prisma": {

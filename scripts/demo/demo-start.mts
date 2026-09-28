@@ -40,6 +40,12 @@ async function main() {
     RAZORPAY_WEBHOOK_SECRET: "",
     CLOUDINARY_URL: "",
     SENTRY_DSN: "",
+    // No texts leave the machine either: sign-in and cash on delivery codes
+    // are shown on screen, labelled as a demo (codeDelivery in src/lib/otp.ts
+    // allows this only for a localhost site, never on a hosted server).
+    MSG91_AUTH_KEY: "",
+    MSG91_OTP_TEMPLATE_ID: "",
+    SMS_SHOW_CODES: "1",
     // Matches the demo business profile, so the footer shows a licence.
     NEXT_PUBLIC_FSSAI_LICENCE_NUMBER: "10726001000417",
     NEXT_TELEMETRY_DISABLED: "1",

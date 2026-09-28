@@ -33,6 +33,33 @@ Every `demo:up` makes a new presenter account, so repeat this after each rebuild
 
 Team members other than you can't sign in: their passwords are random and were never shown to anyone.
 
+## Shopper accounts and cash on delivery
+
+No text messages are sent from the demo. Wherever a shopper would get an SMS code, the page shows it in a box labelled **Demo** instead.
+
+- **Sign in:** use the person icon in the header, or **Your account** in the phone menu. Enter any 10-digit mobile number and type the code shown. The first code for a number creates the account. Guest orders placed with that number in the last 12 months appear straight away. To show that, pick a phone number from an order in the console.
+- **Cash on delivery:** a guest who chooses it gets the code step before the order is placed. Confirming the code also signs them in, so their next checkout fills itself in. A signed-in shopper isn't asked again for their own number. Online payment never asks for a code.
+- **In the console:** the order's Customer panel shows **Verified by code** or **Not verified**, and whether the shopper has an account.
+
+On the live site, codes go by SMS once the MSG91 keys are set (see the Launch checklist). Until then, sign-in is hidden and cash on delivery works without a code.
+
+## Make your own box and referrals
+
+A demo database built before these existed needs `npm run demo:growth` once; `demo:up -- --fresh` includes them.
+
+- **Make your box** in the header offers two boxes. A box is one type, never mixed:
+  - **Gummies Box** (Box of Gummies, any 3 for ₹999): filter with the Gummies page's own tabs (Woman Axis, Kids Vault, Man Rituals).
+  - **True Store Box** (The True Store, any 4 for ₹499): filter with the True Store category chips.
+  - Products are the standard product cards with an **Add to box** button. The tray shows what the picks are worth and what the box saves. A finished box goes in the basket as one item, and **Edit box** reopens it with its picks.
+- **Last-Chance Box** (gummies, any 3 for ₹899) is off. It takes only stock near its shipping cut-off or slow to sell.
+- **Admin → Boxes:** create a box by choosing its type from the dropdown and a price range. Untick products to keep them out, check the margin, and put it live. Clearance rules sit under **Advanced**.
+- The old mixed Family Box is switched off. Baskets that still hold it are told it isn't available any more.
+- **Referrals:**
+  - Mansi's link is http://localhost:3000/r/MANSI7K2. A friend opening it sees ₹100 off a first order of ₹799 or more. After they sign in with their number, the discount comes off at checkout.
+  - Mansi's **Invite friends** section is on her account page. It shows her link, WhatsApp share, rewards out of 5, credit, and each friend's stage.
+  - To show a reward: in Admin, mark a friend's first order delivered. The referral then waits out the return window. **Admin → Referrals → Pay reward now** credits Mansi ₹100, and her next order of ₹799 or more takes ₹100 off.
+  - The review queue in **Admin → Referrals** holds one flagged sample.
+
 ## Afterwards
 
 `npm run demo:down`:

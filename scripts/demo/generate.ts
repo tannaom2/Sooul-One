@@ -25,6 +25,7 @@ import {
   COD_NOTE, ORDER_NOTES, PENDING_REVIEWS, REVIEWS, STAFF, STORES, type ReviewKind,
 } from "./people";
 import { DAY, prng, type Rng } from "./lib";
+import { seedGrowth } from "./growth";
 
 const HISTORY_DAYS = 90;
 const CONVERSION = 0.024; // sessions that end in an order
@@ -654,6 +655,8 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
     },
   });
   await db.storeSettings.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
+  // Make Your Own Box and referrals (scripts/demo/growth.ts).
+  await seedGrowth(db);
 
   return {
     products: products.length, batches: batches.length, orders: orders.length, orderItems: itemRows.length,
