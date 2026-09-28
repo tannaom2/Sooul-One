@@ -64,6 +64,7 @@ function billRows(bill: OrderBill): string {
       : "",
     bill.bundle ? row(`Combo savings: ${esc(bill.bundle.label)}`, `&minus;${formatINR(bill.bundle.amountPaise)}`, { color: GREEN }) : "",
     bill.coupon ? row(`Discount code ${esc(bill.coupon.code)}`, `&minus;${formatINR(bill.coupon.amountPaise)}`, { color: GREEN }) : "",
+    bill.credit ? row(esc(bill.credit.label), `&minus;${formatINR(bill.credit.amountPaise)}`, { color: GREEN }) : "",
     row("Delivery", bill.shippingPaise === 0 ? "Free" : formatINR(bill.shippingPaise)),
   ].join("");
 
@@ -182,6 +183,7 @@ export function renderOrderConfirmation(bill: OrderBill, orderUrl?: string | nul
       : []),
     ...(bill.bundle ? [`  Combo savings (${bill.bundle.label}): -${formatINR(bill.bundle.amountPaise)}`] : []),
     ...(bill.coupon ? [`  Discount code ${bill.coupon.code}: -${formatINR(bill.coupon.amountPaise)}`] : []),
+    ...(bill.credit ? [`  ${bill.credit.label}: -${formatINR(bill.credit.amountPaise)}`] : []),
     `  Delivery: ${bill.shippingPaise === 0 ? "Free" : formatINR(bill.shippingPaise)}`,
     `  ${bill.cod ? "TOTAL TO PAY" : "TOTAL PAID"}: ${formatINR(bill.totalPaise)} (includes GST of ${formatINR(bill.taxPaise)})`,
     ...(bill.totalSavingsPaise > 0 ? [``, `You saved ${formatINR(bill.totalSavingsPaise)} on this order.`] : []),

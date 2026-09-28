@@ -17,7 +17,7 @@ export function BasketButton() {
       {count > 0 && (
         <span
           key={count}
-          className="tabular grid min-w-5 place-items-center bg-ink px-1 text-micro font-bold text-paper motion-safe:animate-[badge-pop_200ms_ease-out]"
+          className="tabular grid min-w-5 place-items-center bg-primary px-1 text-micro font-bold text-on-primary motion-safe:animate-[badge-pop_200ms_ease-out]"
           style={{ borderRadius: 999 }}
           aria-hidden
         >

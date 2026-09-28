@@ -32,6 +32,8 @@ export interface OrderBill {
   readonly productDiscountPaise: Paise;
   readonly bundle: { readonly label: string; readonly amountPaise: Paise } | null;
   readonly coupon: { readonly code: string; readonly amountPaise: Paise } | null;
+  /** Referral credit or a friend's welcome discount. */
+  readonly credit: { readonly label: string; readonly amountPaise: Paise } | null;
   readonly shippingPaise: Paise;
   /** GST already included in the total. */
   readonly taxPaise: Paise;
@@ -74,6 +76,7 @@ export function buildOrderBill(order: StoredOrder): OrderBill {
   const productDiscountPaise = decimalToPaise(order.productDiscountAmount);
   const bundleAmount = decimalToPaise(order.bundleDiscountAmount);
   const couponAmount = decimalToPaise(order.discountAmount);
+  const creditAmount = decimalToPaise(order.creditAmount ?? 0);
   const subtotalPaise = decimalToPaise(order.subtotal);
 
   const a = asAddress(order.shippingAddress);
@@ -92,10 +95,14 @@ export function buildOrderBill(order: StoredOrder): OrderBill {
         : null,
     coupon:
       couponAmount > 0 ? { code: order.couponCode || "Discount code", amountPaise: couponAmount } : null,
+    credit:
+      creditAmount > 0
+        ? { label: order.creditKind === "WELCOME" ? "Welcome offer" : "Referral credit", amountPaise: creditAmount }
+        : null,
     shippingPaise: decimalToPaise(order.shippingAmount),
     taxPaise: decimalToPaise(order.taxAmount),
     totalPaise: decimalToPaise(order.totalAmount),
-    totalSavingsPaise: productDiscountPaise + bundleAmount + couponAmount,
+    totalSavingsPaise: productDiscountPaise + bundleAmount + couponAmount + creditAmount,
     address: {
       name: a.name ?? "",
       lines: [a.line1, a.line2, cityLine].filter((x): x is string => Boolean(x)),

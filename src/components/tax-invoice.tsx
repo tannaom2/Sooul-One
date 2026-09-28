@@ -51,8 +51,8 @@ export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: Busi
         </p>
       )}
 
-      <div className="border border-ink">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-ink p-4">
+      <div className="border border-strong">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-strong p-4">
           <div>
             <p className="text-h3 font-extrabold">{sellerName}</p>
             {seller.tradeName && <p>{seller.tradeName}</p>}
@@ -75,7 +75,7 @@ export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: Busi
           </div>
         </div>
 
-        <div className="grid gap-4 border-b border-ink p-4 sm:grid-cols-3">
+        <div className="grid gap-4 border-b border-strong p-4 sm:grid-cols-3">
           {(
             [
               ["Bill to", bill],
@@ -107,7 +107,7 @@ export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: Busi
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-micro sm:text-small">
             <thead>
-              <tr className="border-b border-ink text-left">
+              <tr className="border-b border-strong text-left">
                 <th className="p-2">#</th>
                 <th className="p-2">Description</th>
                 <th className="p-2">HSN</th>
@@ -147,7 +147,7 @@ export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: Busi
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-ink font-semibold">
+              <tr className="border-t border-strong font-semibold">
                 <td className="p-2" colSpan={4}>
                   Total
                 </td>
@@ -167,11 +167,11 @@ export function TaxInvoice({ order, seller }: { order: StoredOrder; seller: Busi
           </table>
         </div>
 
-        <div className="grid gap-1 border-t border-ink p-4">
+        <div className="grid gap-1 border-t border-strong p-4">
           <p>
             <span className="font-semibold">Amount in words:</span> {invoice.totalInWords}
           </p>
-          {decimalToPaise(order.discountAmount) + decimalToPaise(order.bundleDiscountAmount) > 0 && (
+          {decimalToPaise(order.discountAmount) + decimalToPaise(order.bundleDiscountAmount) + decimalToPaise(order.creditAmount ?? 0) > 0 && (
             <p className="text-ink-soft">Values are after the discounts applied to this order.</p>
           )}
           {invoice.approximate && (

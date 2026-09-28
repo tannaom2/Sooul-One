@@ -38,6 +38,7 @@ import {
   type Paise,
 } from "../money";
 import { applyBundles, type AppliedBundle, type BundleRule } from "./bundles";
+import { priceBox } from "./boxes";
 import { allocateFefo, type Allocation } from "../compliance/fefo";
 import {
   EXPIRY_ONLY_POLICY,
@@ -68,6 +69,38 @@ export interface QuoteLineInput {
   readonly retailOnly?: boolean;
   /** False once staff take the product off sale; it may still sit in older baskets. */
   readonly active?: boolean;
+  /** The shopper's box this line belongs to (a CartBox id); boxes are priced apart from kits. */
+  readonly boxId?: string;
+}
+
+/** A box the shopper built (src/lib/checkout/boxes.ts). */
+export interface QuoteBox {
+  /** The CartBox id its lines carry. */
+  readonly id: string;
+  readonly boxId: string;
+  readonly name: string;
+  readonly pricePaise: Paise;
+  /** Right size, right products, every section's minimum met (checked by boxIssues). */
+  readonly complete: boolean;
+}
+
+export interface AppliedBox {
+  readonly id: string;
+  readonly boxId: string;
+  readonly name: string;
+  readonly pricePaise: Paise;
+  readonly discountPaise: Paise;
+}
+
+/**
+ * Referral money for this order (src/lib/referrals.ts): the referrer spending
+ * credit, or a referred friend's first-order discount. Never with a discount
+ * code that applies; needs the order, after offers, to reach `minOrderPaise`.
+ */
+export interface QuoteCredit {
+  readonly kind: "WALLET" | "WELCOME";
+  readonly amountPaise: Paise;
+  readonly minOrderPaise: Paise;
 }
 
 export type LineStatus = "OK" | "PARTIAL" | "BLOCKED";
@@ -102,6 +135,10 @@ export interface QuoteLine {
   readonly bundleUnits: number;
   /** This line's share of the coupon. */
   readonly discountPaise: Paise;
+  /** This line's share of referral credit. */
+  readonly creditPaise: Paise;
+  /** The shopper's box this line is in. */
+  readonly boxId?: string;
   readonly taxablePaise: Paise;
   readonly taxPaise: Paise;
   readonly taxRatePercent: number;
@@ -149,6 +186,8 @@ export interface QuoteInput {
     readonly minOrderPaise?: number | null;
   };
   readonly bundles?: readonly BundleRule[];
+  readonly boxes?: readonly QuoteBox[];
+  readonly credit?: QuoteCredit;
   readonly shipping?: ShippingPolicy;
 }
 
@@ -162,8 +201,17 @@ export interface Quote {
   readonly productDiscountPaise: Paise;
   /** Sum of shippable lines at the price the shopper pays (after product discounts). */
   readonly subtotalPaise: Paise;
+  /** Kit and box savings together. */
   readonly bundleDiscountPaise: Paise;
   readonly appliedBundles: readonly AppliedBundle[];
+  readonly appliedBoxes: readonly AppliedBox[];
+  /** Referral credit or welcome discount taken off. */
+  readonly creditPaise: Paise;
+  readonly creditKind?: QuoteCredit["kind"];
+  /** How far short of the credit's minimum order this order is (0 when met or no credit). */
+  readonly creditShortfallPaise: number;
+  /** Credit was available, but a discount code applies, and the two don't combine. */
+  readonly creditBlockedByCoupon: boolean;
   /** Coupon discount. */
   readonly discountPaise: Paise;
   readonly shippingPaise: Paise;
@@ -338,21 +386,50 @@ export function buildQuote(input: QuoteInput): Quote {
   // Per complete set (src/lib/checkout/bundles.ts): only the units that form a
   // set are compared, so extra units of a line keep their normal price and a
   // sale on the line can't hide the combo saving on the set units.
-  const bundles = applyBundles(
+  // Box lines sit out of kits: a box is priced on its own items below.
+  const kitResult = applyBundles(
     resolved.map((r) => ({
       productId: r.line.productId,
       unitPaise: r.line.listPricePaise ?? r.line.unitPricePaise,
-      quantity: r.availability.quantityAvailable,
+      quantity: r.line.boxId ? 0 : r.availability.quantityAvailable,
     })),
     input.bundles ?? [],
   );
+  const offerUnits = [...kitResult.perLineUnits];
+  const offerPaise = [...kitResult.perLinePaise];
+  const offerName: (string | null)[] = [...kitResult.perLineBundle];
 
-  const setSaleByLine = resolved.map((r, i) => r.line.unitPricePaise * bundles.perLineUnits[i]);
+  // --- 3b. Boxes the shopper built ------------------------------------------
+  // A complete box whose every item can ship costs its fixed price
+  // (src/lib/checkout/boxes.ts); the discount is shared across its lines by
+  // value and then compared with each line's sale price, exactly like a kit.
+  const appliedBoxes: AppliedBox[] = [];
+  for (const box of input.boxes ?? []) {
+    const indexes = resolved.flatMap((r, i) => (r.line.boxId === box.id ? [i] : []));
+    const shippable = indexes.length > 0 && indexes.every((i) => resolved[i].status === "OK");
+    if (!box.complete || !shippable) continue;
+    const { discountPaise, shares } = priceBox(
+      box.pricePaise,
+      indexes.map((i) => ({
+        unitListPaise: resolved[i].line.listPricePaise ?? resolved[i].line.unitPricePaise,
+        units: resolved[i].availability.quantityAvailable,
+      })),
+    );
+    if (discountPaise === 0) continue;
+    indexes.forEach((i, n) => {
+      offerUnits[i] = resolved[i].availability.quantityAvailable;
+      offerPaise[i] = shares[n];
+      offerName[i] = box.name;
+    });
+    appliedBoxes.push({ id: box.id, boxId: box.boxId, name: box.name, pricePaise: box.pricePaise, discountPaise });
+  }
+
+  const setSaleByLine = resolved.map((r, i) => r.line.unitPricePaise * offerUnits[i]);
   const preCouponByLine = resolved.map((r, i) => {
-    const units = bundles.perLineUnits[i];
+    const units = offerUnits[i];
     if (units <= 0) return r.grossPaise;
     const setList = (r.line.listPricePaise ?? r.line.unitPricePaise) * units;
-    const setFinal = Math.min(setSaleByLine[i], setList - bundles.perLinePaise[i]);
+    const setFinal = Math.min(setSaleByLine[i], setList - offerPaise[i]);
     return r.grossPaise - (setSaleByLine[i] - setFinal);
   });
 
@@ -382,6 +459,20 @@ export function buildQuote(input: QuoteInput): Quote {
 
   const perLineDiscount = distributeDiscount(couponEligibleByLine, discountPaise);
 
+  // --- 4b. Referral credit ---------------------------------------------------
+  // Only without a code that applies, only once the order after offers
+  // reaches the minimum, and never more than what's left to pay for goods.
+  const credit = input.credit;
+  const creditBlockedByCoupon = Boolean(credit) && discountPaise > 0;
+  const creditShortfallPaise =
+    credit && !creditBlockedByCoupon && couponBase < credit.minOrderPaise ? credit.minOrderPaise - couponBase : 0;
+  const afterCouponByLine = preCouponByLine.map((v, i) => v - perLineDiscount[i]);
+  const creditPaise =
+    credit && !creditBlockedByCoupon && creditShortfallPaise === 0
+      ? Math.max(0, Math.min(credit.amountPaise, afterCouponByLine.reduce((sum, v) => sum + v, 0)))
+      : 0;
+  const perLineCredit = distributeDiscount(afterCouponByLine, creditPaise);
+
   // --- 5. GST, per line, on the discounted gross ---------------------------
   let taxPaise = 0;
   let cgstPaise = 0;
@@ -391,7 +482,7 @@ export function buildQuote(input: QuoteInput): Quote {
   const lines: QuoteLine[] = resolved.map((r, index) => {
     const lineDiscount = perLineDiscount[index];
     const realizedBundleDiscount = r.grossPaise - preCouponByLine[index];
-    const discountedGross = preCouponByLine[index] - lineDiscount;
+    const discountedGross = preCouponByLine[index] - lineDiscount - perLineCredit[index];
     const split = splitTaxInclusive(
       discountedGross,
       r.line.taxRatePercent,
@@ -418,12 +509,14 @@ export function buildQuote(input: QuoteInput): Quote {
       // Only named when the bundle actually beat the product discount on this
       // line — showing "Bundle offer" for a line it did nothing for would be
       // misleading, even though the bundle nominally claimed the line.
-      bundleName: realizedBundleDiscount > 0 ? (bundles.perLineBundle[index] ?? undefined) : undefined,
+      bundleName: realizedBundleDiscount > 0 ? (offerName[index] ?? undefined) : undefined,
       // Membership, unlike the name, counts even where this line's own sale price
       // won: it's still one of the products that make up the kit.
-      bundleId: bundles.perLineBundleId[index] ?? undefined,
-      bundleUnits: bundles.perLineUnits[index],
+      bundleId: kitResult.perLineBundleId[index] ?? undefined,
+      bundleUnits: kitResult.perLineUnits[index],
       discountPaise: lineDiscount,
+      creditPaise: perLineCredit[index],
+      boxId: r.line.boxId,
       taxablePaise: split.netPaise,
       taxPaise: split.taxPaise,
       taxRatePercent: r.line.taxRatePercent,
@@ -439,6 +532,8 @@ export function buildQuote(input: QuoteInput): Quote {
   });
 
   // --- 6. Shipping ---------------------------------------------------------
+  // Judged before referral credit, which pays for the goods the way money
+  // would: spending ₹100 of credit shouldn't cost the shopper free delivery.
   const discountedSubtotal = subtotalPaise - bundleDiscountPaise - discountPaise;
   const shippingPaise =
     discountedSubtotal === 0 || discountedSubtotal >= shipping.freeAbovePaise
@@ -465,14 +560,19 @@ export function buildQuote(input: QuoteInput): Quote {
     productDiscountPaise: listSubtotalPaise - subtotalPaise,
     subtotalPaise,
     bundleDiscountPaise,
-    appliedBundles: bundles.applied,
+    appliedBundles: kitResult.applied,
+    appliedBoxes,
     discountPaise,
+    creditPaise,
+    creditKind: creditPaise > 0 ? credit?.kind : undefined,
+    creditShortfallPaise,
+    creditBlockedByCoupon,
     shippingPaise,
     taxPaise,
     cgstPaise,
     sgstPaise,
     igstPaise,
-    totalPaise: discountedSubtotal + shippingPaise,
+    totalPaise: discountedSubtotal - creditPaise + shippingPaise,
     appliedCouponCode: discountPaise > 0 ? input.coupon?.code : undefined,
     couponShortfallPaise,
     couponBlockedByCombo,

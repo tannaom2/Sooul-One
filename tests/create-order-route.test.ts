@@ -10,9 +10,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => {
   const tx = {
+    $queryRaw: vi.fn(async () => []),
     order: { create: vi.fn() },
     orderItem: { createMany: vi.fn() },
-    cartItem: { deleteMany: vi.fn() },
+    cartItem: { deleteMany: vi.fn(), count: vi.fn(async () => 1) },
+    cartBox: { deleteMany: vi.fn(), count: vi.fn(async () => 0) },
     coupon: { updateMany: vi.fn() },
   };
   return {
@@ -20,8 +22,9 @@ const h = vi.hoisted(() => {
     db: {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       coupon: { fields: { maxUses: "maxUses" } },
-      order: { update: vi.fn() },
+      order: { update: vi.fn(), findUnique: vi.fn(async () => null as unknown) },
       consentRecord: { create: vi.fn(async () => ({})) },
+      customer: { update: vi.fn(async () => ({})) },
     },
     limitPublic: vi.fn(),
     readSessionId: vi.fn(),
@@ -35,6 +38,8 @@ const h = vi.hoisted(() => {
     recordOrderEvent: vi.fn(),
     expireTag: vi.fn(),
     razorpayCreate: vi.fn(),
+    getCustomer: vi.fn(),
+    codRequiresCode: vi.fn(),
     afterCallbacks: [] as (() => Promise<unknown>)[],
   };
 });
@@ -58,6 +63,12 @@ vi.mock("@/lib/analytics", () => ({ recordEvent: h.recordEvent }));
 vi.mock("@/lib/order-events", () => ({ recordOrderEvent: h.recordOrderEvent }));
 vi.mock("@/lib/cache-tags", () => ({ CATALOG_TAG: "catalog", expireTag: h.expireTag }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
+vi.mock("@/server/customer-auth", () => ({ getCustomer: h.getCustomer, codRequiresCode: h.codRequiresCode }));
+vi.mock("@/server/referrals", () => ({
+  checkoutCredit: vi.fn(async () => ({ credit: null, note: null })),
+  onOrderPlaced: vi.fn(async () => undefined),
+  CreditChanged: class CreditChanged extends Error {},
+}));
 vi.mock("razorpay", () => ({
   default: class {
     orders = { create: h.razorpayCreate };
@@ -104,7 +115,9 @@ function quoteResult(overrides: Record<string, unknown> = {}) {
       productDiscountPaise: 0,
       bundleDiscountPaise: 0,
       appliedBundles: [],
+      appliedBoxes: [],
       discountPaise: 0,
+      creditPaise: 0,
       shippingPaise: 5900,
       taxPaise: 2176,
       totalPaise: 45700,
@@ -112,16 +125,17 @@ function quoteResult(overrides: Record<string, unknown> = {}) {
       ...overrides,
     },
     cartItems: [{ productId: "p1", product: { hsnCode: "2008" } }],
+    cartBoxes: [],
     estimatedDeliveryDate: new Date("2026-10-01"),
     gstTreatment: "INTRA_STATE",
   };
 }
 
-function post(body: unknown) {
+function post(body: unknown, headers: Record<string, string> = {}) {
   return POST(
     new Request("http://localhost/api/checkout/create-order", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
     }),
   );
@@ -143,6 +157,104 @@ beforeEach(() => {
   }));
   delete process.env.RAZORPAY_KEY_ID;
   delete process.env.RAZORPAY_KEY_SECRET;
+  h.tx.cartItem.count.mockResolvedValue(1);
+  h.tx.cartBox.count.mockResolvedValue(0);
+  h.db.order.findUnique.mockResolvedValue(null);
+  // Codes can't be sent (no SMS provider): cash on delivery works as before.
+  h.getCustomer.mockResolvedValue(null);
+  h.codRequiresCode.mockReturnValue(false);
+});
+
+describe("one order per checkout attempt (double clicks and retries)", () => {
+  const KEY = "3f2b8c1e-7d4a-4e9b-a1c2-5d6e7f8a9b0c";
+  const earlier = { orderNumber: "SO-1", accessToken: "tok", paymentGateway: "COD", paymentId: null, totalAmount: "457.00", sessionId: "session-1" };
+
+  it("hands back the first order for the same attempt, without placing another", async () => {
+    h.db.order.findUnique.mockResolvedValue(earlier);
+    const res = await post(INPUT, { "Idempotency-Key": KEY });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ orderNumber: "SO-1", accessToken: "tok", replayed: true });
+    expect(h.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("never hands another basket's order to someone who guessed its key", async () => {
+    h.db.order.findUnique.mockResolvedValue({ ...earlier, sessionId: "someone-else" });
+    const res = await post(INPUT, { "Idempotency-Key": KEY });
+    expect((await res.json()).orderNumber).not.toBe("SO-1");
+  });
+
+  it("refuses a basket another request has just ordered (locked, then found empty)", async () => {
+    h.tx.cartItem.count.mockResolvedValue(0);
+    const res = await post(INPUT);
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("ALREADY_ORDERED");
+    expect(h.tx.order.create).not.toHaveBeenCalled();
+    expect(h.tx.$queryRaw).toHaveBeenCalled();
+  });
+
+  it("when two requests with one key race, the loser gets the winner's order", async () => {
+    h.tx.order.create.mockRejectedValueOnce(Object.assign(new Error("unique"), { code: "P2002" }));
+    h.db.order.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(earlier);
+    const res = await post(INPUT, { "Idempotency-Key": KEY });
+    expect(res.status).toBe(200);
+    expect((await res.json()).orderNumber).toBe("SO-1");
+  });
+
+  it("stores the key on the order it places", async () => {
+    await post(INPUT, { "Idempotency-Key": KEY });
+    expect(h.tx.order.create.mock.calls[0][0].data.idempotencyKey).toBe(KEY);
+  });
+
+  it("ignores a malformed key rather than trusting it", async () => {
+    await post(INPUT, { "Idempotency-Key": "x" });
+    expect(h.db.order.findUnique).not.toHaveBeenCalled();
+    expect(h.tx.order.create.mock.calls[0][0].data.idempotencyKey).toBeNull();
+  });
+});
+
+describe("cash on delivery and the proven mobile number", () => {
+  const ASHA = { id: "cust-1", phone: "9876543210", name: "Asha", email: null };
+
+  it("asks for a code before reserving anything, once codes can be sent", async () => {
+    h.codRequiresCode.mockReturnValue(true);
+    const res = await post(INPUT);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("PHONE_CODE_REQUIRED");
+    expect(h.quoteCart).not.toHaveBeenCalled();
+    expect(h.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("asks again when the signed-in number isn't the one on the order", async () => {
+    h.codRequiresCode.mockReturnValue(true);
+    h.getCustomer.mockResolvedValue({ ...ASHA, phone: "9123456780" });
+    expect((await post(INPUT)).status).toBe(403);
+  });
+
+  it("places the order for the proven number, linked to the account and marked verified", async () => {
+    h.codRequiresCode.mockReturnValue(true);
+    h.getCustomer.mockResolvedValue(ASHA);
+    const res = await post(INPUT);
+    expect(res.status).toBe(200);
+    const data = h.tx.order.create.mock.calls[0][0].data;
+    expect(data.customerId).toBe("cust-1");
+    expect(data.phoneVerifiedAt).toBeInstanceOf(Date);
+  });
+
+  it("never asks for a code for online payment, but still links a signed-in shopper's order", async () => {
+    h.codRequiresCode.mockReturnValue(true);
+    h.getCustomer.mockResolvedValue({ ...ASHA, phone: "9123456780" });
+    await post({ ...INPUT, paymentMethod: "RAZORPAY" });
+    const data = h.tx.order.create.mock.calls[0][0].data;
+    expect(data.customerId).toBe("cust-1");
+    expect(data.phoneVerifiedAt).toBeNull();
+  });
+
+  it("keeps a guest's order unlinked and unverified when codes can't be sent", async () => {
+    expect((await post(INPUT)).status).toBe(200);
+    const data = h.tx.order.create.mock.calls[0][0].data;
+    expect(data.customerId).toBeNull();
+    expect(data.phoneVerifiedAt).toBeNull();
+  });
 });
 
 describe("refusals before anything is reserved", () => {

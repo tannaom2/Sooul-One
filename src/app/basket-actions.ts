@@ -13,6 +13,7 @@ import {
   writeBasketCount,
 } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
+import { removeCartBox, saveCartBox } from "@/server/boxes";
 import { reportError } from "@/lib/observability";
 import { EMPTY_BASKET, MAX_LINE_QUANTITY, type BasketResult } from "@/lib/basket-types";
 
@@ -159,6 +160,52 @@ export async function setBasketQuantities(changes: { itemId: string; quantity: n
     return { ok: true, basket: await snapshotFor(sessionId) };
   } catch (error) {
     reportError("basket/set-many", error);
+    return { ok: false, message: TRY_AGAIN };
+  }
+}
+
+const boxSchema = z.object({
+  boxId: z.string().min(1).max(40),
+  picks: z.array(z.object({ productId: z.string().min(1).max(40), quantity: z.number().int().min(1).max(10) })).min(1).max(12),
+  replaceCartBoxId: z.string().min(1).max(40).optional(),
+});
+
+/**
+ * Put a finished box in the basket (Make Your Own Box), or replace the one
+ * being edited. The server checks the box's rules and stock again; nothing
+ * the shopper's browser says about prices is used.
+ */
+export async function saveBox(input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }): Promise<BasketResult> {
+  const parsed = boxSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "That box couldn't be added. Reload the page and try again." };
+  const sessionId = await getOrCreateSessionId();
+  try {
+    const saved = await saveCartBox(sessionId, parsed.data);
+    if (!saved.ok) return { ok: false, message: saved.message, basket: await snapshotFor(sessionId) };
+  } catch (error) {
+    reportError("basket/save-box", error, { boxId: input.boxId });
+    return { ok: false, message: TRY_AGAIN };
+  }
+  after(() =>
+    recordEvent(sessionId, "ADD_TO_CART", { metadata: { via: "box", boxId: parsed.data.boxId, items: parsed.data.picks.length } }),
+  );
+  try {
+    return { ok: true, basket: await snapshotFor(sessionId) };
+  } catch (error) {
+    reportError("basket/save-box-snapshot", error);
+    return { ok: false, message: "Added, but your basket didn't refresh. Open it again to see it." };
+  }
+}
+
+export async function removeBox(cartBoxId: string): Promise<BasketResult> {
+  if (typeof cartBoxId !== "string" || cartBoxId.length === 0 || cartBoxId.length > 40) return { ok: false, message: TRY_AGAIN };
+  const sessionId = await readSessionId();
+  if (!sessionId) return { ok: true, basket: EMPTY_BASKET };
+  try {
+    await removeCartBox(sessionId, cartBoxId);
+    return { ok: true, basket: await snapshotFor(sessionId) };
+  } catch (error) {
+    reportError("basket/remove-box", error);
     return { ok: false, message: TRY_AGAIN };
   }
 }

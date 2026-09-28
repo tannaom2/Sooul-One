@@ -1,7 +1,16 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { addManyToBasket, addToBasket, loadBasket, removeUnavailableItems, setBasketQuantities, setBasketQuantity } from "@/app/basket-actions";
+import {
+  addManyToBasket,
+  addToBasket,
+  loadBasket,
+  removeBox as removeBoxAction,
+  removeUnavailableItems,
+  saveBox as saveBoxAction,
+  setBasketQuantities,
+  setBasketQuantity,
+} from "@/app/basket-actions";
 import type { BasketSnapshot } from "@/lib/basket-types";
 import { track } from "@/lib/track";
 
@@ -36,6 +45,9 @@ interface CartContextValue {
   setQuantities: (changes: { itemId: string; quantity: number }[]) => Promise<void>;
   /** Drop what can't ship, trim what partly can. */
   removeUnavailable: () => Promise<void>;
+  /** A finished box (Make Your Own Box), new or replacing one being edited. Resolves true when it went in. */
+  saveBox: (input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }) => Promise<boolean>;
+  removeBox: (cartBoxId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -88,6 +100,38 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
     if (result.ok) accept(result.basket);
   }, [accept]);
 
+  // Other tabs of this site: a change here tells them, and a tab coming back
+  // into view re-reads the basket, so no tab shows a stale count or total.
+  // (Checkout re-prices on the server regardless; this is about what's shown.)
+  const channel = useRef<BroadcastChannel | null>(null);
+  const lastLoad = useRef(0);
+  useEffect(() => {
+    const reload = () => {
+      lastLoad.current = Date.now();
+      void refresh();
+    };
+    try {
+      channel.current = new BroadcastChannel("soulone-basket");
+      channel.current.onmessage = reload;
+    } catch {
+      channel.current = null; // older browsers: the focus check below still covers it
+    }
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastLoad.current > 5000) reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      channel.current?.close();
+    };
+  }, [refresh]);
+  /** After this tab changed the basket: let the others know. */
+  const announce = useCallback(() => {
+    try {
+      channel.current?.postMessage("changed");
+    } catch {}
+  }, []);
+
   const openBasket = useCallback(() => {
     setOpen(true);
     setError(null);
@@ -116,6 +160,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
           const result = await addToBasket(productId, quantity);
           if (result.ok) {
             accept(result.basket);
+            announce();
           } else {
             setError(result.message);
             if (result.basket) accept(result.basket);
@@ -123,7 +168,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
           resolve(result.ok);
         });
       }),
-    [accept, addOptimistic],
+    [accept, addOptimistic, announce],
   );
 
   const addMany = useCallback(
@@ -136,7 +181,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
           // A kit's products go in together and count as one item.
           addOptimistic({ type: "add", quantity: 1 });
           const result = await addManyToBasket(productIds);
-          if (result.ok) accept(result.basket);
+          if (result.ok) (accept(result.basket), announce());
           else {
             setError(result.message);
             if (result.basket) accept(result.basket);
@@ -144,7 +189,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
           resolve(result.ok);
         });
       }),
-    [accept, addOptimistic],
+    [accept, addOptimistic, announce],
   );
 
   const setQuantity = useCallback(
@@ -154,12 +199,12 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         startTransition(async () => {
           addOptimistic({ type: "set", changes: [{ itemId, quantity }] });
           const result = await setBasketQuantity(itemId, quantity);
-          if (result.ok) accept(result.basket);
+          if (result.ok) (accept(result.basket), announce());
           else setError(result.message);
           resolve();
         });
       }),
-    [accept, addOptimistic],
+    [accept, addOptimistic, announce],
   );
 
   const setQuantities = useCallback(
@@ -169,12 +214,12 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         startTransition(async () => {
           addOptimistic({ type: "set", changes });
           const result = await setBasketQuantities(changes);
-          if (result.ok) accept(result.basket);
+          if (result.ok) (accept(result.basket), announce());
           else setError(result.message);
           resolve();
         });
       }),
-    [accept, addOptimistic],
+    [accept, addOptimistic, announce],
   );
 
   const removeUnavailable = useCallback(
@@ -183,12 +228,47 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         setError(null);
         startTransition(async () => {
           const result = await removeUnavailableItems();
-          if (result.ok) accept(result.basket);
+          if (result.ok) (accept(result.basket), announce());
           else setError(result.message);
           resolve();
         });
       }),
-    [accept],
+    [accept, announce],
+  );
+
+  const saveBox = useCallback(
+    (input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }) =>
+      new Promise<boolean>((resolve) => {
+        setError(null);
+        setOpen(true);
+        track({ type: "CART_OPENED" });
+        startTransition(async () => {
+          // A box counts as one item, and an edited box replaces itself.
+          if (!input.replaceCartBoxId) addOptimistic({ type: "add", quantity: 1 });
+          const result = await saveBoxAction(input);
+          if (result.ok) (accept(result.basket), announce());
+          else {
+            setError(result.message);
+            if (result.basket) accept(result.basket);
+          }
+          resolve(result.ok);
+        });
+      }),
+    [accept, addOptimistic, announce],
+  );
+
+  const removeBox = useCallback(
+    (cartBoxId: string) =>
+      new Promise<void>((resolve) => {
+        setError(null);
+        startTransition(async () => {
+          const result = await removeBoxAction(cartBoxId);
+          if (result.ok) (accept(result.basket), announce());
+          else setError(result.message);
+          resolve();
+        });
+      }),
+    [accept, announce],
   );
 
   // Report the prompts the shopper actually saw, once each per page view.
@@ -220,6 +300,8 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         setQuantity,
         setQuantities,
         removeUnavailable,
+        saveBox,
+        removeBox,
         refresh,
       }}
     >

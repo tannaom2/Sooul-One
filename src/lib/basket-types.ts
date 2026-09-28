@@ -37,6 +37,28 @@ export interface BasketKit extends Omit<Kit, "members"> {
   readonly growLabel: string | null;
 }
 
+/** A box the shopper built (Make Your Own Box), shown as one block. */
+export interface BasketBox {
+  readonly cartBoxId: string;
+  readonly boxId: string;
+  readonly slug: string;
+  readonly name: string;
+  /** "Box of Gummies" or "The True Store". */
+  readonly kindLabel: string;
+  /** False once the owner switches the box off: it can only be removed. */
+  readonly available: boolean;
+  readonly size: number;
+  readonly boxPricePaise: number;
+  /** What the items cost at list price. */
+  readonly listPaise: number;
+  /** What the shopper pays for them. */
+  readonly finalPaise: number;
+  readonly savingPaise: number;
+  /** Why the box isn't complete (and its price doesn't apply), or null. */
+  readonly issue: string | null;
+  readonly items: readonly { productId: string; slug: string; name: string; brandName: string; quantity: number; message: string | null }[];
+}
+
 export interface BasketOffer {
   readonly bundleId: string;
   readonly name: string;
@@ -56,6 +78,7 @@ export interface BasketSnapshot {
   readonly freeDelivery: FreeDeliveryProgress;
   readonly appliedOffers: readonly { id: string; name: string; discountPaise: number }[];
   readonly kits: readonly BasketKit[];
+  readonly boxes: readonly BasketBox[];
   readonly nextOffer: BasketOffer | null;
   readonly canProceed: boolean;
 }
@@ -72,6 +95,7 @@ export const EMPTY_BASKET: BasketSnapshot = {
   freeDelivery: { qualified: false, gapPaise: 0, fraction: 0 },
   appliedOffers: [],
   kits: [],
+  boxes: [],
   nextOffer: null,
   canProceed: false,
 };

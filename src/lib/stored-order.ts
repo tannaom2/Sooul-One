@@ -49,6 +49,9 @@ export interface StoredOrder {
   readonly bundleLabel?: string | null;
   readonly discountAmount: StoredAmount;
   readonly couponCode?: string | null;
+  /** Referral credit or welcome discount; absent on orders from before referrals. */
+  readonly creditAmount?: StoredAmount | null;
+  readonly creditKind?: string | null;
   readonly shippingAmount: StoredAmount;
   readonly shippingTaxAmount?: StoredAmount | null;
   readonly taxAmount: StoredAmount;

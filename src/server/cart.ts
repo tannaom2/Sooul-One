@@ -9,10 +9,12 @@ import {
 } from "@/lib/session-cookie";
 import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
-import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteLineInput } from "@/lib/checkout/quote";
+import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteBox, type QuoteCredit, type QuoteLineInput } from "@/lib/checkout/quote";
+import { boxIssues, boxIssueMessage, boxKindLabel } from "@/lib/checkout/boxes";
+import { BOX_RULE_INCLUDE, boxRuleOf } from "@/server/boxes";
 import { groupKits } from "@/lib/checkout/kits";
 import { freeDeliveryProgress, growKitOptions, rankOfferNudges, settleNudge, type OfferNudge } from "@/lib/checkout/basket-nudges";
-import { MAX_LINE_QUANTITY, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
+import { MAX_LINE_QUANTITY, type BasketBox, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR, formatPriceTag } from "@/lib/money";
 import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
@@ -182,7 +184,8 @@ function engineLinesOf(quote: Quote) {
   return quote.lines.map((l) => ({
     productId: l.productId,
     unitPaise: l.quantityAvailable > 0 ? Math.round(l.listGrossPaise / l.quantityAvailable) : 0,
-    quantity: l.quantityAvailable,
+    // Box items belong to their box; kits and offer prompts leave them alone.
+    quantity: l.boxId ? 0 : l.quantityAvailable,
   }));
 }
 
@@ -278,28 +281,38 @@ export async function removeUnavailable(sessionId: string): Promise<void> {
   if (!result) return;
   const itemIdByProduct = new Map(result.cartItems.map((i) => [i.productId, i.id]));
   const { remove, trim } = unavailableFixes(
-    result.quote.lines.map((l) => ({
+    result.quote.lines.filter((l) => !l.boxId).map((l) => ({
       itemId: itemIdByProduct.get(l.productId) ?? "",
       quantity: l.quantityRequested,
       quantityAvailable: l.quantityAvailable,
     })),
   );
   const cartFilter = { cart: { sessionId } };
+  // A box item that can't ship comes out of its box; the box then asks for a swap.
+  const blockedBoxItems = result.cartBoxes.flatMap((b) =>
+    b.items.filter((i) => result.quote.lines.some((l) => l.boxId === b.cartBoxId && l.productId === i.productId && l.status !== "OK")).map((i) => i.id),
+  );
   await db.$transaction([
     db.cartItem.deleteMany({ where: { id: { in: remove.filter(Boolean) }, ...cartFilter } }),
     ...trim.map((t) => db.cartItem.updateMany({ where: { id: t.itemId, ...cartFilter }, data: { quantity: t.quantity } })),
+    db.cartBoxItem.deleteMany({ where: { id: { in: blockedBoxItems }, cartBox: { cart: { sessionId } } } }),
   ]);
 }
 
 export async function clearCart(sessionId: string) {
-  // One statement (filtered through the cart relation), not a lookup then a delete.
-  await db.cartItem.deleteMany({ where: { cart: { sessionId } } });
+  // Filtered through the cart relation, not a lookup then a delete.
+  await db.$transaction([
+    db.cartItem.deleteMany({ where: { cart: { sessionId } } }),
+    db.cartBox.deleteMany({ where: { cart: { sessionId } } }),
+  ]);
 }
 
 export interface QuoteContext {
   pincode?: string;
   state?: string;
   couponCode?: string;
+  /** Referral credit on offer for this shopper (src/server/referrals.ts); checkout only. */
+  credit?: QuoteCredit | null;
 }
 
 /**
@@ -317,8 +330,13 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   // of relation loading compared with going through Cart.
   // The owner can switch bundle offers off (Store controls); cached, so no extra round trip.
   const controls = await getStoreControls();
-  const [items, bundleRows, found] = await Promise.all([
+  const [items, cartBoxRows, bundleRows, found] = await Promise.all([
     db.cartItem.findMany({ where: { cart: { sessionId } }, include: CART_ITEM_INCLUDE }),
+    db.cartBox.findMany({
+      where: { cart: { sessionId } },
+      include: { box: { include: BOX_RULE_INCLUDE }, items: { include: { product: CART_ITEM_INCLUDE.product } } },
+      orderBy: { createdAt: "asc" },
+    }),
     controls.bundlesEnabled
       ? db.bundle.findMany({
           where: { isActive: true },
@@ -333,7 +351,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
       ? db.coupon.findUnique({ where: { code: context.couponCode.toUpperCase() } })
       : Promise.resolve(null),
   ]);
-  if (items.length === 0) return null;
+  if (items.length === 0 && cartBoxRows.length === 0) return null;
   const cart = { items };
 
   const zone = context.pincode ? zoneForPincode(context.pincode) : SLOWEST_SERVED_ZONE;
@@ -341,10 +359,11 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
 
   const gstTreatment = gstTreatmentFor(context.state, SELLER_STATE);
 
-  const lines: QuoteLineInput[] = cart.items.map((item) => {
+  const toLine = (item: { productId: string; quantity: number; variantId?: string | null; variant?: { priceOverride: { toString(): string } | null } | null; product: (typeof items)[number]["product"] }, boxId?: string): QuoteLineInput => {
     const price = liveUnitPrice(item.product, item.variant);
 
     return {
+      boxId,
       productId: item.productId,
       variantId: item.variantId ?? undefined,
       name: item.product.name,
@@ -366,7 +385,27 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
       // brand or its category takes it off sale here too.
       active: isSellable(item.product),
     };
+  };
+  const lines: QuoteLineInput[] = [
+    ...cart.items.map((item) => toLine(item)),
+    ...cartBoxRows.flatMap((cb) => cb.items.map((i) => toLine(i, cb.id))),
+  ];
+
+  // Each box the shopper built, checked against its rules as they stand now.
+  const cartBoxes = cartBoxRows.map((cb) => {
+    const rule = boxRuleOf(cb.box);
+    const issues = cb.box.isActive
+      ? boxIssues(rule, cb.items.map((i) => ({ productId: i.productId, quantity: i.quantity })))
+      : [{ kind: "NOT_IN_BOX" as const, productId: "" }];
+    const nameOf = (id: string) => cb.items.find((i) => i.productId === id)?.product.name ?? "An item";
+    return {
+      cartBoxId: cb.id,
+      box: { id: cb.box.id, slug: cb.box.slug, name: cb.box.name, kind: cb.box.kind, isActive: cb.box.isActive, pricePaise: rule.pricePaise, size: cb.box.size },
+      items: cb.items,
+      issue: !cb.box.isActive ? "This box isn't available any more. Remove it, or its items stay at their usual price." : issues[0] ? boxIssueMessage(issues[0], nameOf) : null,
+    };
   });
+  const boxes: QuoteBox[] = cartBoxes.map((b) => ({ id: b.cartBoxId, boxId: b.box.id, name: b.box.name, pricePaise: b.box.pricePaise, complete: b.issue === null }));
 
   const bundles: BundleRule[] = bundleRows.map((b) => ({
     id: b.id,
@@ -395,7 +434,10 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     }
   }
 
-  const quote = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon, bundles });
+  const built = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon, bundles, boxes, credit: context.credit ?? undefined });
+  // A box that needs attention holds checkout: its items would otherwise be
+  // charged at their usual prices without the shopper deciding to.
+  const quote: Quote = cartBoxes.some((b) => b.issue) ? { ...built, canProceed: false } : built;
   if (coupon?.minOrderPaise && quote.couponShortfallPaise > 0) {
     couponMessage = minimumOrderMessage(coupon.minOrderPaise, quote.couponShortfallPaise, formatINR);
   }
@@ -421,6 +463,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   return {
     quote,
     cartItems: cart.items,
+    cartBoxes,
     gstTreatment,
     bundles,
     bundlePrices,
@@ -444,7 +487,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
   const kits = await loadBasketKits(result);
   const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
 
-  const lines = quote.lines.map((line) => {
+  const lines = quote.lines.filter((line) => !line.boxId).map((line) => {
     const item = itemById.get(line.productId);
     return {
       itemId: item?.id ?? "",
@@ -467,7 +510,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
 
   // What quote.ts compares against the free-delivery threshold.
   const discounted = quote.subtotalPaise - quote.bundleDiscountPaise - quote.discountPaise;
-  const shippable = quote.lines.filter((l) => l.quantityAvailable > 0).map((l) => l.productId);
+  const shippable = quote.lines.filter((l) => l.quantityAvailable > 0 && !l.boxId).map((l) => l.productId);
   // Every offer within reach, kept only where the engine would really apply it
   // (a product already in a kit can't make a second offer), best first.
   const engineLines = engineLinesOf(quote);
@@ -513,20 +556,59 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
     };
   }
 
+  const boxes = basketBoxes(result);
   return {
-    // A kit counts as one item; units outside kits count one each.
-    count: lines.reduce((n, l) => n + Math.max(0, l.quantity - l.kitUnits), 0) + kits.reduce((n, k) => n + k.sets, 0),
+    // A kit or a box counts as one item; units outside them count one each.
+    count: lines.reduce((n, l) => n + Math.max(0, l.quantity - l.kitUnits), 0) + kits.reduce((n, k) => n + k.sets, 0) + boxes.length,
     lines,
     itemsPaise: quote.listSubtotalPaise,
     savingsPaise: quote.productDiscountPaise + quote.bundleDiscountPaise + quote.discountPaise,
     shippingPaise: quote.shippingPaise,
     totalPaise: quote.totalPaise,
     freeDelivery: freeDeliveryProgress(discounted, DEFAULT_SHIPPING_POLICY.freeAbovePaise),
-    appliedOffers: quote.appliedBundles.map((b) => ({ id: b.id, name: b.name, discountPaise: b.discountPaise })),
+    appliedOffers: [
+      ...quote.appliedBundles.map((b) => ({ id: b.id, name: b.name, discountPaise: b.discountPaise })),
+      ...quote.appliedBoxes.map((b) => ({ id: b.boxId, name: b.name, discountPaise: b.discountPaise })),
+    ],
     kits,
+    boxes,
     nextOffer: nextOffer && nextOffer.suggestions.length >= nextOffer.missing ? nextOffer : null,
     canProceed: quote.canProceed,
   };
+}
+
+/** The shopper's boxes as the basket shows them: price paid, what the items would cost, what's wrong. */
+export function basketBoxes(result: Pick<CartQuote, "quote" | "cartBoxes">): BasketBox[] {
+  return result.cartBoxes.map((b) => {
+    const boxLines = result.quote.lines.filter((l) => l.boxId === b.cartBoxId);
+    const listPaise = boxLines.reduce((n, l) => n + l.listGrossPaise, 0);
+    const finalPaise = boxLines.reduce((n, l) => n + l.grossPaise - l.bundleDiscountPaise, 0);
+    return {
+      cartBoxId: b.cartBoxId,
+      boxId: b.box.id,
+      slug: b.box.slug,
+      name: b.box.name,
+      kindLabel: boxKindLabel(b.box.kind),
+      available: b.box.isActive,
+      size: b.box.size,
+      boxPricePaise: b.box.pricePaise,
+      listPaise,
+      finalPaise,
+      savingPaise: Math.max(0, listPaise - finalPaise),
+      issue: b.issue,
+      items: b.items.map((i) => {
+        const line = boxLines.find((l) => l.productId === i.productId);
+        return {
+          productId: i.productId,
+          slug: i.product.slug,
+          name: i.product.name,
+          brandName: i.product.brand?.name ?? "",
+          quantity: i.quantity,
+          message: line && line.status !== "OK" ? (line.customerMessage ?? null) : null,
+        };
+      }),
+    };
+  });
 }
 
 /** Rewrite the menu-badge cookie from the server's basket. Server Actions and route handlers only. */

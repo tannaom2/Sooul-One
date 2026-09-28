@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { loadBasketKits, priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
+import { basketBoxes, loadBasketKits, priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
 import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
 import { KitBlock } from "@/components/basket/kit-block";
+import { BoxBlock } from "@/components/basket/box-block";
 import { RemoveUnavailableButton } from "@/components/remove-unavailable-button";
 import { formatPriceTag } from "@/lib/money";
 import { formatDate } from "@/lib/format";
@@ -22,7 +23,7 @@ export default async function CartPage() {
     result = null;
   }
 
-  if (!result || result.cartItems.length === 0) {
+  if (!result || (result.cartItems.length === 0 && result.cartBoxes.length === 0)) {
     return (
       <>
         <PageHeader title="Your basket" />
@@ -50,6 +51,9 @@ export default async function CartPage() {
   const itemById = new Map(cartItems.map((i) => [i.productId, i]));
   const kits = await loadBasketKits(result);
   const kitUnits = new Map(kits.flatMap((k) => k.members.map((m) => [m.productId, m.units] as const)));
+  const boxes = basketBoxes(result);
+  const boxNeedsAttention = boxes.some((b) => b.issue);
+  const linesBlocked = quote.lines.some((l) => l.status !== "OK");
 
   return (
     <>
@@ -57,6 +61,13 @@ export default async function CartPage() {
 
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 lg:grid-cols-[1fr_340px]">
         <div>
+          {boxes.length > 0 && (
+            <div className="mb-3 grid gap-3">
+              {boxes.map((box) => (
+                <BoxBlock key={box.cartBoxId} box={box} refreshPage />
+              ))}
+            </div>
+          )}
           {kits.length > 0 && (
             <div className="mb-2 grid gap-3">
               {kits.map((kit) => (
@@ -66,7 +77,7 @@ export default async function CartPage() {
           )}
           <ul>
             {/* A kit product's extra units first, next to the kits. */}
-            {[...quote.lines].sort((a, b) => Number(kitUnits.has(b.productId)) - Number(kitUnits.has(a.productId))).map((line) => {
+            {quote.lines.filter((l) => !l.boxId).sort((a, b) => Number(kitUnits.has(b.productId)) - Number(kitUnits.has(a.productId))).map((line) => {
               // Units inside a kit are shown in the kit above; this line shows the rest.
               const inKits = kitUnits.get(line.productId) ?? 0;
               if (line.quantityRequested - inKits <= 0) return null;
@@ -170,9 +181,11 @@ export default async function CartPage() {
               ) : (
                 <>
                   <p className="mb-2 text-small text-alert">
-                    Some items can&rsquo;t ship as they are. Remove them to check out with the rest.
+                    {boxNeedsAttention && !linesBlocked
+                      ? "Your box needs attention: fix it or remove it to check out."
+                      : "Some items can\u2019t ship as they are. Remove them to check out with the rest."}
                   </p>
-                  <RemoveUnavailableButton />
+                  {linesBlocked && <RemoveUnavailableButton />}
                 </>
               )}
               <p className="mt-3 text-micro text-ink-faint">

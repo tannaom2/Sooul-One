@@ -8,6 +8,7 @@ import { BasketSync } from "@/components/basket/basket-sync";
 import { OrderTracker } from "@/components/order-tracker";
 import { orderProgress } from "@/lib/order-progress";
 import { asAddress } from "@/lib/stored-order";
+import { getCustomer } from "@/server/customer-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +49,13 @@ export default async function OrderPage({
     },
   });
   // A wrong or missing token gets the same 404 as a nonexistent order, so the
-  // page can't be used to confirm which order numbers exist.
-  if (!order || !orderTokenMatches(t, order.accessToken)) notFound();
+  // page can't be used to confirm which order numbers exist. A signed-in
+  // shopper needs no token for their own orders (the account page links here).
+  if (!order) notFound();
+  if (!orderTokenMatches(t, order.accessToken)) {
+    const customer = order.customerId ? await getCustomer() : null;
+    if (!customer || customer.id !== order.customerId) notFound();
+  }
 
   const address = asAddress(order.shippingAddress);
 
@@ -63,7 +69,7 @@ export default async function OrderPage({
       <OrderTracker progress={orderProgress(order, order.events)} />
       {order.invoiceNumber && (
         <p className="mt-4 text-small">
-          <Link href={`/order/${order.orderNumber}/invoice?t=${encodeURIComponent(t ?? "")}`} className="underline">
+          <Link href={`/order/${order.orderNumber}/invoice?t=${encodeURIComponent(order.accessToken ?? "")}`} className="underline">
             Tax invoice {order.invoiceNumber}
           </Link>
         </p>
@@ -99,6 +105,12 @@ export default async function OrderPage({
             <div className="panel-row">
               <dt>Discount code{order.couponCode ? ` (${order.couponCode})` : ""}</dt>
               <dd className="text-veg">−{formatPriceTag(decimalToPaise(order.discountAmount))}</dd>
+            </div>
+          )}
+          {decimalToPaise(order.creditAmount) > 0 && (
+            <div className="panel-row">
+              <dt>{order.creditKind === "WELCOME" ? "Welcome offer" : "Referral credit"}</dt>
+              <dd className="text-veg">−{formatPriceTag(decimalToPaise(order.creditAmount))}</dd>
             </div>
           )}
           <div className="panel-row">

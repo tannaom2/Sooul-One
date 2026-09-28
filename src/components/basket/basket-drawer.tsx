@@ -8,6 +8,7 @@ import { MAX_LINE_QUANTITY } from "@/lib/basket-types";
 import { useCart } from "./cart-provider";
 import { QuantityStepper } from "./quantity-stepper";
 import { KitBlock } from "./kit-block";
+import { BoxBlock } from "./box-block";
 
 /**
  * Slide-over basket. Opens on add-to-basket and from the menu, so adding a
@@ -56,12 +57,15 @@ export function BasketDrawer() {
   }, [isOpen, closeBasket]);
 
   const lines = basket?.lines ?? [];
+  const boxes = basket?.boxes ?? [];
+  const empty = lines.length === 0 && boxes.length === 0;
+  const boxNeedsAttention = boxes.some((b) => b.issue);
   const loading = isOpen && !basket;
 
   return (
     <div className={`fixed inset-0 z-[60] ${isOpen ? "" : "pointer-events-none"}`} aria-hidden={!isOpen} inert={!isOpen}>
       <div
-        className={`absolute inset-0 bg-ink/40 transition-opacity duration-200 motion-reduce:transition-none ${isOpen ? "opacity-100" : "opacity-0"}`}
+        className={`absolute inset-0 bg-overlay transition-opacity duration-200 motion-reduce:transition-none ${isOpen ? "opacity-100" : "opacity-0"}`}
         onClick={closeBasket}
       />
       <div
@@ -69,7 +73,7 @@ export function BasketDrawer() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="basket-title"
-        className={`absolute top-0 right-0 flex h-full w-full max-w-md flex-col bg-paper shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+        className={`absolute top-0 right-0 flex h-full w-full max-w-md flex-col bg-elevated shadow-elevated transition-transform duration-200 ease-out motion-reduce:transition-none ${isOpen ? "translate-x-0" : "translate-x-full"}`}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex items-center justify-between border-b border-rule px-5 py-4">
@@ -94,7 +98,7 @@ export function BasketDrawer() {
                 <div key={i} className="h-20 animate-pulse bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} />
               ))}
             </div>
-          ) : lines.length === 0 ? (
+          ) : empty ? (
             <div className="py-10 text-center">
               <p className="font-semibold">Nothing in your basket yet</p>
               <p className="mt-1 text-small text-ink-soft">Snacks and gummies ship together in one parcel.</p>
@@ -147,6 +151,14 @@ export function BasketDrawer() {
                 </div>
               )}
 
+              {boxes.length > 0 && (
+                <div className="mb-4 grid gap-3">
+                  {boxes.map((box) => (
+                    <BoxBlock key={box.cartBoxId} box={box} onNavigate={closeBasket} />
+                  ))}
+                </div>
+              )}
+
               {basket && basket.kits.length > 0 && (
                 <div className="mb-4 grid gap-3">
                   {basket.kits.map((kit) => (
@@ -196,7 +208,7 @@ export function BasketDrawer() {
           )}
         </div>
 
-        {basket && lines.length > 0 && (
+        {basket && !empty && (
           <div className="border-t border-rule px-5 py-4">
             <dl className="grid gap-1 text-small">
               {basket.savingsPaise > 0 && (
@@ -221,10 +233,16 @@ export function BasketDrawer() {
               </Link>
             ) : (
               <>
-                <p className="mt-3 text-small text-alert">Some items can&rsquo;t ship as they are.</p>
-                <button type="button" onClick={() => void removeUnavailable()} disabled={pending} className="btn btn-solid mt-2 w-full">
-                  Remove unavailable items
-                </button>
+                <p className="mt-3 text-small text-alert">
+                  {boxNeedsAttention && basket.lines.every((l) => l.status === "OK")
+                    ? "Finish or remove your box to check out."
+                    : "Some items can\u2019t ship as they are."}
+                </p>
+                {basket.lines.some((l) => l.status !== "OK") || boxes.some((b) => b.items.some((i) => i.message)) ? (
+                  <button type="button" onClick={() => void removeUnavailable()} disabled={pending} className="btn btn-solid mt-2 w-full">
+                    Remove unavailable items
+                  </button>
+                ) : null}
               </>
             )}
             <Link href="/cart" onClick={closeBasket} className="mt-2 block text-center text-small underline">

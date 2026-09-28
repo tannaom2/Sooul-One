@@ -11,10 +11,25 @@ import {
   type CheckoutStep,
 } from "@/lib/checkout/steps";
 
-const DRAFT_KEY = "soulone_checkout_draft";
+/** Exported so signing out can clear it: it holds a signed-in shopper's pre-filled details. */
+export const CHECKOUT_DRAFT_KEY = "soulone_checkout_draft";
+const DRAFT_KEY = CHECKOUT_DRAFT_KEY;
 
-/** The saved draft, if any. Only call in the browser (the page renders the form after hydration). */
-function readDraft(): CheckoutForm {
+/**
+ * The saved draft, if any, with a signed-in shopper's details filling any
+ * field the draft leaves empty (what they typed this visit wins). Only call
+ * in the browser (the page renders the form after hydration).
+ */
+function readDraft(prefill: Partial<CheckoutForm>): CheckoutForm {
+  const draft = readSavedDraft();
+  const filled = { ...draft };
+  for (const key of Object.keys(prefill) as (keyof CheckoutForm)[]) {
+    if (!filled[key] && prefill[key]) filled[key] = prefill[key]!;
+  }
+  return filled;
+}
+
+function readSavedDraft(): CheckoutForm {
   try {
     const saved = sessionStorage.getItem(DRAFT_KEY);
     return saved ? ({ ...EMPTY_FORM, ...JSON.parse(saved) } as CheckoutForm) : EMPTY_FORM;
@@ -30,8 +45,8 @@ function readDraft(): CheckoutForm {
  * rules. The draft lives in sessionStorage (this tab only, gone when it
  * closes) so a refresh or a detour to the basket doesn't lose what was typed.
  */
-export function useCheckout() {
-  const [form, setForm] = useState<CheckoutForm>(readDraft);
+export function useCheckout(prefill: Partial<CheckoutForm> = {}) {
+  const [form, setForm] = useState<CheckoutForm>(() => readDraft(prefill));
   // A returning shopper resumes at the first unfinished step.
   const [step, setStep] = useState<CheckoutStep>(() => firstIncompleteStep(form));
   const [errors, setErrors] = useState<Record<string, string>>({});

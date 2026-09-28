@@ -218,6 +218,13 @@ export const getGummiesProducts = unstable_cache(
   CATALOG,
 );
 
+/** Standard card data for these products (the box page's pool), in no particular order. */
+export async function getProductSummaries(ids: readonly string[]): Promise<ProductSummary[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.product.findMany({ where: { ...SELLABLE_PRODUCT_WHERE, id: { in: [...ids] } }, include: LIST_INCLUDE });
+  return withRatings(rows);
+}
+
 export const getFeatured = unstable_cache(
   async (limit = 6): Promise<ProductSummary[]> => {
     const rows = await db.product.findMany({

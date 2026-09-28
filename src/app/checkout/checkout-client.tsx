@@ -8,7 +8,10 @@ import { formatDate } from "@/lib/format";
 import { track } from "@/lib/track";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import type { CheckoutState, PaymentMethod } from "@/lib/store-controls";
-import { STEPS, normalise, stepSummary, validateStep, type CheckoutStep } from "@/lib/checkout/steps";
+import { STEPS, normalise, stepSummary, validateStep, type CheckoutForm as FormValues, type CheckoutStep } from "@/lib/checkout/steps";
+import { maskMobile } from "@/lib/mobile";
+import { requestSignInCode } from "@/app/account/actions";
+import { PhoneCodeForm, type CodeSent } from "@/components/account/phone-code-form";
 import { useCheckout } from "./use-checkout";
 import { useQuote } from "./use-quote";
 import { usePincode } from "./use-pincode";
@@ -45,11 +48,18 @@ const PAY_OPTIONS: { value: PayChoice; title: string; detail: string }[] = [
 
 const noop = () => () => {};
 
+/** The signed-in shopper, if any, and whether cash on delivery asks for a code here. */
+export interface CheckoutAccount {
+  readonly phone: string | null;
+  readonly prefill: Partial<FormValues>;
+  readonly codNeedsCode: boolean;
+}
+
 /**
  * The form restores a draft from sessionStorage, which only exists in the
  * browser, so it renders after hydration; the server sends the page frame.
  */
-export function CheckoutClient({ state }: { state: CheckoutState }) {
+export function CheckoutClient({ state, account }: { state: CheckoutState; account: CheckoutAccount }) {
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
   // Closed before launch, or paused by the owner (src/lib/store-controls.ts).
   if (!state.open) {
@@ -71,13 +81,20 @@ export function CheckoutClient({ state }: { state: CheckoutState }) {
       </div>
     );
   }
-  return <CheckoutForm methods={state.methods} />;
+  return <CheckoutForm methods={state.methods} account={account} />;
 }
 
-function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
+function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[]; account: CheckoutAccount }) {
   const router = useRouter();
-  const { form, step, errors, setErrors, set, setForm, next, edit, clearDraft } = useCheckout();
-  const { quote, couponRejected, empty } = useQuote(form.postalCode, form.state, form.couponCode);
+  const { form, step, errors, setErrors, set, setForm, next, edit, clearDraft } = useCheckout(account.prefill);
+  // The number proven by code in this browser: the signed-in one, or the one
+  // just confirmed below. Cash on delivery to any other number asks again.
+  const [provenPhone, setProvenPhone] = useState(account.phone);
+  const [codeSent, setCodeSent] = useState<CodeSent | null>(null);
+  // One id per checkout visit, sent with every Place order: a double click or
+  // a retry after a dropped connection gets the same order back, never two.
+  const [attemptKey] = useState(() => crypto.randomUUID());
+  const { quote, couponRejected, empty, creditNote, referralWaiting } = useQuote(form.postalCode, form.state, form.couponCode);
   const place = usePincode(form.postalCode);
   // Only what this deployment can take right now: UPI and card once Razorpay
   // is set up, cash on delivery unless the owner has switched it off.
@@ -100,10 +117,14 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
   // shopper typed themselves (only empty fields, or ones we filled before).
   useEffect(() => {
     if (!place?.city || !place.state) return;
+    // Read what we filled last time now: the updater below runs later, after
+    // the ref already holds this pincode's values, so a corrected pincode
+    // would otherwise leave the first one's city and state behind.
+    const previous = autofilled.current;
     setForm((f) => ({
       ...f,
-      city: !f.city || f.city === autofilled.current.city ? place.city! : f.city,
-      state: !f.state || f.state === autofilled.current.state ? place.state! : f.state,
+      city: !f.city || f.city === previous.city ? place.city! : f.city,
+      state: !f.state || f.state === previous.state ? place.state! : f.state,
     }));
     autofilled.current = { city: place.city, state: place.state };
   }, [place, setForm]);
@@ -136,7 +157,20 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
     if (first) document.getElementById(first)?.focus();
   }
 
-  async function submit() {
+  /** Text a code to the order's number; the payment step then asks for it. */
+  async function askForCode(phone: string) {
+    const sent = await requestSignInCode(phone);
+    if (sent.ok) {
+      setCodeSent({ phone, sentTo: sent.sentTo, resendIn: sent.resendIn, demoCode: sent.demoCode });
+    } else if (sent.resendIn) {
+      // One went out moments ago (a double tap, or back from another step).
+      setCodeSent({ phone, sentTo: maskMobile(phone), resendIn: sent.resendIn, note: "We sent you a code a moment ago." });
+    } else {
+      setError(sent.message);
+    }
+  }
+
+  async function submit(justProven?: string) {
     // Re-check the earlier steps directly: a restored draft may have skipped
     // one, and a server rule could have changed. Send the shopper back to the
     // first step with a problem.
@@ -154,9 +188,13 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
 
     try {
       const clean = normalise(form);
+      if (pay === "COD" && account.codNeedsCode && clean.phone !== (justProven ?? provenPhone)) {
+        await askForCode(clean.phone);
+        return;
+      }
       const response = await fetch("/api/checkout/create-order", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attemptKey },
         body: JSON.stringify({
           ...clean,
           line2: clean.line2 || undefined,
@@ -170,6 +208,12 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
       if (response.status === 409) {
         setBlocked(body.blocked ?? []);
         setError(body.message);
+        return;
+      }
+      // The server's own check (a session that ended, another tab signed out).
+      if (response.status === 403 && body.code === "PHONE_CODE_REQUIRED") {
+        setProvenPhone(null);
+        await askForCode(clean.phone);
         return;
       }
       if (!response.ok) {
@@ -236,6 +280,9 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
   // Out of area as soon as a full pincode is typed: by range, or by India Post's state.
   const outsideArea = place?.serviceable === false || (/^\d{6}$/.test(form.postalCode) && !inServicePincode(form.postalCode));
   const stepIndex = STEPS.indexOf(step);
+  const codNeedsCodeNow = account.codNeedsCode && normalise(form).phone !== provenPhone;
+  // Only for the number still on the form, and only while paying on delivery.
+  const showCode = codeSent !== null && pay === "COD" && codeSent.phone === normalise(form).phone;
   const payLabel = !total ? "Place order" : pay === "COD" ? `Place order · pay ${total} on delivery` : `Pay ${total}${pay === "UPI" ? " with UPI" : ""}`;
 
   const field = (
@@ -274,10 +321,13 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
             <div className="panel-row"><dt>Product discounts</dt><dd className="text-veg">−{formatPriceTag(quote.productDiscountPaise)}</dd></div>
           )}
           {quote.bundleDiscountPaise > 0 && (
-            <div className="panel-row"><dt>Combo savings ({quote.appliedBundles.map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatPriceTag(quote.bundleDiscountPaise)}</dd></div>
+            <div className="panel-row"><dt>Combo savings ({[...quote.appliedBundles, ...(quote.appliedBoxes ?? [])].map((b: any) => b.name).join(", ")})</dt><dd className="text-veg">−{formatPriceTag(quote.bundleDiscountPaise)}</dd></div>
           )}
           {quote.discountPaise > 0 && (
             <div className="panel-row"><dt>Discount code</dt><dd className="text-veg">−{formatPriceTag(quote.discountPaise)}</dd></div>
+          )}
+          {quote.creditPaise > 0 && (
+            <div className="panel-row"><dt>{creditNote ?? "Referral credit"}</dt><dd className="text-veg">−{formatPriceTag(quote.creditPaise)}</dd></div>
           )}
           <div className="panel-row"><dt>Delivery</dt><dd>{quote.shippingPaise === 0 ? "Free" : formatPriceTag(quote.shippingPaise)}</dd></div>
           <div className="panel-row text-ink-faint"><dt>of which GST</dt><dd>{formatPriceTag(quote.taxPaise)}</dd></div>
@@ -294,6 +344,20 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
           ))}
         </div>
       )}
+      {quote && creditNote && quote.creditPaise === 0 && quote.creditShortfallPaise > 0 && (
+        <p className="px-3.5 pb-2 text-micro text-veg">
+          {creditNote}: add {formatPriceTag(quote.creditShortfallPaise)} more to use it.
+        </p>
+      )}
+      {quote && creditNote && quote.creditBlockedByCoupon && (
+        <p className="px-3.5 pb-2 text-micro text-ink-soft">{creditNote} can&rsquo;t be combined with a discount code. Remove the code to use it instead.</p>
+      )}
+      {referralWaiting && !account.phone && (
+        <p className="px-3.5 pb-2 text-micro">
+          You have a friend&rsquo;s offer waiting.{" "}
+          <Link href="/account/sign-in?next=/checkout" className="underline">Sign in with your number</Link> to use it.
+        </p>
+      )}
       <p className="px-3.5 pb-3 text-micro text-ink-faint">Nothing is added after this: no handling, packing or COD fees.</p>
     </div>
   );
@@ -303,7 +367,22 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 lg:grid-cols-[1fr_340px] lg:py-12">
         <div>
           <h1 className="text-h1 font-extrabold">Checkout</h1>
-          <p className="mt-1 text-small text-ink-soft">No account needed · Step {stepIndex + 1} of 3</p>
+          <p className="mt-1 text-small text-ink-soft">
+            {account.phone ? (
+              <>Signed in with <span className="tabular">{maskMobile(account.phone)}</span></>
+            ) : (
+              <>
+                No account needed
+                {account.codNeedsCode && (
+                  <>
+                    {" "}·{" "}
+                    <Link href="/account/sign-in?next=/checkout" className="underline">Sign in</Link>
+                  </>
+                )}
+              </>
+            )}{" "}
+            · Step {stepIndex + 1} of 3
+          </p>
 
           {/* Phones: the total, collapsible, before the form. */}
           <details className="mt-5 lg:hidden">
@@ -383,13 +462,16 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
                           {payOptions.map((o) => (
                             <label
                               key={o.value}
-                              className={`flex cursor-pointer items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${pay === o.value ? "border-ink bg-shelf" : "border-rule"}`}
+                              className={`flex cursor-pointer items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${pay === o.value ? "border-strong bg-shelf" : "border-rule"}`}
                               style={{ borderRadius: "var(--radius-panel)" }}
                             >
                               <input type="radio" name="pay" className="mt-1" checked={pay === o.value} onChange={() => choosePay(o.value)} />
                               <span>
                                 <span className="block text-small font-semibold">{o.title}</span>
-                                <span className="block text-micro text-ink-soft">{o.detail}</span>
+                                <span className="block text-micro text-ink-soft">
+                                  {o.detail}
+                                  {o.value === "COD" && codNeedsCodeNow && " We'll text you a code to confirm your number."}
+                                </span>
                               </span>
                             </label>
                           ))}
@@ -409,9 +491,33 @@ function CheckoutForm({ methods }: { methods: readonly PaymentMethod[] }) {
                         <span>{MARKETING_CONSENT_TEXT}</span>
                       </label>
 
-                      <button onClick={submit} disabled={busy || !quote?.canProceed} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">
-                        {busy ? "Working…" : payLabel}
-                      </button>
+                      {showCode && codeSent ? (
+                        <div className="border-t border-rule pt-4">
+                          <p className="mb-3 text-small font-semibold">Confirm your number to place this cash on delivery order</p>
+                          <PhoneCodeForm
+                            key={codeSent.phone}
+                            sent={codeSent}
+                            submitLabel={total ? `Confirm and place order · pay ${total} on delivery` : "Confirm and place order"}
+                            onChangeNumber={() => {
+                              setCodeSent(null);
+                              edit("contact");
+                            }}
+                            onVerified={async () => {
+                              const phone = codeSent.phone;
+                              setProvenPhone(phone);
+                              setCodeSent(null);
+                              await submit(phone);
+                            }}
+                          />
+                          <p className="mt-3 text-micro text-ink-faint">
+                            This also saves your details: next time, sign in with this number and checkout fills itself in.
+                          </p>
+                        </div>
+                      ) : (
+                        <button onClick={() => submit()} disabled={busy || !quote?.canProceed} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">
+                          {busy ? "Working…" : payLabel}
+                        </button>
+                      )}
                       {quote && !quote.canProceed && (
                         <p className="text-small text-alert">Some items can&rsquo;t ship right now. <Link href="/cart" className="underline">Review your basket</Link>.</p>
                       )}

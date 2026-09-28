@@ -19,6 +19,8 @@ import { getCheckoutState } from "@/server/store-settings";
 import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import { reportError } from "@/lib/observability";
 import { limitPublic } from "@/server/rate-limit";
+import { codRequiresCode, getCustomer } from "@/server/customer-auth";
+import { CreditChanged, checkoutCredit, onOrderPlaced } from "@/server/referrals";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -48,6 +50,37 @@ class SoldOut extends Error {
 /** The coupon reached its maxUses between the quote and this transaction. */
 class CouponUsedUp extends Error {}
 
+/** Another request already turned this basket into an order (a double click without a key). */
+class AlreadyOrdered extends Error {}
+
+/** A browser-made checkout-attempt id: letters, digits and dashes, bounded. */
+function attemptKey(request: Request): string | null {
+  const key = request.headers.get("idempotency-key")?.trim();
+  return key && /^[A-Za-z0-9-]{16,64}$/.test(key) ? key : null;
+}
+
+const isUniqueViolation = (error: unknown) => (error as { code?: string } | null)?.code === "P2002";
+
+/**
+ * The answer the first request got, for a repeat of the same attempt: the
+ * same order, never a second one. An online order that's still unpaid gets
+ * its Razorpay order again so the payment window can reopen.
+ */
+function replay(order: { orderNumber: string; accessToken: string | null; paymentGateway: string | null; paymentId: string | null; totalAmount: { toString(): string } }) {
+  if (order.paymentGateway === "COD") {
+    return NextResponse.json({ orderNumber: order.orderNumber, accessToken: order.accessToken, method: "COD", replayed: true });
+  }
+  return NextResponse.json({
+    orderNumber: order.orderNumber,
+    accessToken: order.accessToken,
+    method: "RAZORPAY",
+    razorpayOrderId: order.paymentId,
+    keyId: process.env.RAZORPAY_KEY_ID,
+    amount: Math.round(Number(order.totalAmount.toString()) * 100),
+    replayed: true,
+  });
+}
+
 export async function POST(request: Request) {
   const limited = await limitPublic("createOrder");
   if (limited) return limited;
@@ -55,6 +88,14 @@ export async function POST(request: Request) {
   const sessionId = await readSessionId();
   if (!sessionId) {
     return NextResponse.json({ message: "Your basket is empty." }, { status: 400 });
+  }
+
+  // The same checkout attempt again (a double click, a retry after a dropped
+  // connection): the first request's order, not a second one.
+  const key = attemptKey(request);
+  if (key) {
+    const earlier = await db.order.findUnique({ where: { idempotencyKey: key } });
+    if (earlier && earlier.sessionId === sessionId) return replay(earlier);
   }
 
   const parsed = checkoutInputSchema.safeParse(await request.json().catch(() => null));
@@ -86,6 +127,23 @@ export async function POST(request: Request) {
     );
   }
 
+  // Cash on delivery is only for a number proven by SMS code, once codes can
+  // be sent (src/lib/otp.ts): a COD order costs a courier trip both ways if
+  // nobody's there to pay, so a typed-in stranger's number isn't enough.
+  // Proving the number signs the shopper in, so "proven" means the signed-in
+  // account's number is the one on this order.
+  const customer = await getCustomer();
+  const phoneProven = Boolean(customer?.phone && customer.phone === input.phone);
+  if (input.paymentMethod === "COD" && !phoneProven && codRequiresCode()) {
+    return NextResponse.json(
+      {
+        code: "PHONE_CODE_REQUIRED",
+        message: "Confirm your mobile number with the code we text you to pay on delivery.",
+      },
+      { status: 403 },
+    );
+  }
+
   // Delivery area (Gujarat only, service-area.ts). Checked against India
   // Post's state for the pincode, not the typed one; if the directory is
   // unreachable, the pincode range and typed state still have to agree.
@@ -98,10 +156,14 @@ export async function POST(request: Request) {
   }
 
   // --- 1 & 2: authoritative re-quote --------------------------------------
+  // Referral credit or a referred friend's welcome discount (src/server/referrals.ts);
+  // the quote decides whether it applies (minimum order, no discount code).
+  const { credit } = await checkoutCredit(customer?.id);
   const result = await quoteCart(sessionId, {
     pincode: input.postalCode,
     state: input.state,
     couponCode: input.couponCode,
+    credit,
   });
 
   if (!result) return NextResponse.json({ message: "Your basket is empty." }, { status: 400 });
@@ -141,7 +203,10 @@ export async function POST(request: Request) {
   // Tax facts are recorded as charged, for the GST invoice (src/lib/invoice.ts):
   // the HSN and rate of the day, and each row's share of the line's taxable
   // value and tax after every discount, split exactly across its batches.
-  const hsnByProduct = new Map(result.cartItems.map((i) => [i.productId, i.product.hsnCode ?? null]));
+  const hsnByProduct = new Map([
+    ...result.cartItems.map((i) => [i.productId, i.product.hsnCode ?? null] as const),
+    ...result.cartBoxes.flatMap((b) => b.items.map((i) => [i.productId, i.product.hsnCode ?? null] as const)),
+  ]);
   const itemRows = quote.lines.flatMap((line) => {
     const unit = line.grossPaise / Math.max(line.quantityAvailable, 1);
     const allocations: { batchId: string | null; quantity: number }[] = line.allocations.length
@@ -177,13 +242,26 @@ export async function POST(request: Request) {
   const order = await db
     .$transaction(
       async (tx) => {
+        // One order at a time per basket: a second request for the same basket
+        // waits here, then finds it already ordered (COD empties it below).
+        await tx.$queryRaw`SELECT id FROM "Cart" WHERE "sessionId" = ${sessionId} FOR UPDATE`;
+        const [items, boxes] = await Promise.all([
+          tx.cartItem.count({ where: { cart: { sessionId } } }),
+          tx.cartBox.count({ where: { cart: { sessionId } } }),
+        ]);
+        if (items + boxes === 0) throw new AlreadyOrdered();
+
         const created = await tx.order.create({
           data: {
             orderNumber: orderNumber(),
             accessToken: newOrderAccessToken(),
+            idempotencyKey: key,
             sessionId,
+            // A signed-in shopper's order is theirs even if it goes to another number.
+            customerId: customer?.id ?? null,
             guestEmail: input.email,
             guestPhone: input.phone,
+            phoneVerifiedAt: phoneProven ? new Date() : null,
             // Cash on delivery is confirmed the moment it's placed; online
             // orders wait for the webhook.
             status: isCod ? "PROCESSING" : "PENDING_PAYMENT",
@@ -191,8 +269,13 @@ export async function POST(request: Request) {
             subtotal: fromPaise(quote.subtotalPaise),
             productDiscountAmount: fromPaise(quote.productDiscountPaise),
             bundleDiscountAmount: fromPaise(quote.bundleDiscountPaise),
-            bundleLabel: quote.appliedBundles.length ? quote.appliedBundles.map((b) => b.name).join(", ") : null,
+            bundleLabel:
+              quote.appliedBundles.length + quote.appliedBoxes.length
+                ? [...quote.appliedBundles, ...quote.appliedBoxes].map((b) => b.name).join(", ")
+                : null,
             discountAmount: fromPaise(quote.discountPaise),
+            creditAmount: fromPaise(quote.creditPaise),
+            creditKind: quote.creditKind ?? null,
             shippingAmount: fromPaise(quote.shippingPaise),
             taxAmount: fromPaise(quote.taxPaise),
             totalAmount: fromPaise(quote.totalPaise),
@@ -210,10 +293,24 @@ export async function POST(request: Request) {
         // extra statement per relation plus a re-read of the order.
         await tx.orderItem.createMany({ data: itemRows.map((row) => ({ ...row, orderId: created.id })) });
 
+        // Spend the wallet credit the quote took off, and move a referred
+        // friend's first order on: in this transaction, so neither can happen
+        // without the order.
+        await onOrderPlaced(tx, {
+          id: created.id,
+          customerId: customer?.id ?? null,
+          creditPaise: quote.creditPaise,
+          creditKind: quote.creditKind ?? null,
+          valueAfterOffersPaise: quote.subtotalPaise - quote.bundleDiscountPaise,
+        });
+
         // A COD order is final once placed, so its basket empties with it.
         // (Online payments empty it in the webhook, once the payment has
         // cleared, so a dismissed payment window leaves the basket intact.)
-        if (isCod) await tx.cartItem.deleteMany({ where: { cart: { sessionId } } });
+        if (isCod) {
+          await tx.cartItem.deleteMany({ where: { cart: { sessionId } } });
+          await tx.cartBox.deleteMany({ where: { cart: { sessionId } } });
+        }
 
         // Shared rows last. The coupon and stock rows are what concurrent
         // checkouts queue for, and each is locked from its update until
@@ -240,7 +337,9 @@ export async function POST(request: Request) {
       { maxWait: 10_000, timeout: 20_000 },
     )
     .catch((error: unknown) => {
-      if (error instanceof SoldOut || error instanceof CouponUsedUp) return error;
+      if (error instanceof SoldOut || error instanceof CouponUsedUp || error instanceof CreditChanged || error instanceof AlreadyOrdered) return error;
+      // Two requests with the same attempt key raced: the other one won.
+      if (key && isUniqueViolation(error)) return new AlreadyOrdered();
       throw error;
     });
 
@@ -250,6 +349,20 @@ export async function POST(request: Request) {
         message: "Some items in your basket can't be sent right now.",
         blocked: [{ name: order.productName, reason: "Just sold out while you were checking out." }],
       },
+      { status: 409 },
+    );
+  }
+  if (order instanceof AlreadyOrdered) {
+    const earlier = key ? await db.order.findUnique({ where: { idempotencyKey: key } }) : null;
+    if (earlier && earlier.sessionId === sessionId) return replay(earlier);
+    return NextResponse.json(
+      { code: "ALREADY_ORDERED", message: "This basket has just been ordered. Check your orders before trying again." },
+      { status: 409 },
+    );
+  }
+  if (order instanceof CreditChanged) {
+    return NextResponse.json(
+      { message: "Your referral credit changed while you were checking out. Check the total and place the order again." },
       { status: 409 },
     );
   }
@@ -270,6 +383,13 @@ export async function POST(request: Request) {
       method: input.paymentMethod,
       totalPaise: quote.totalPaise,
     });
+    // An account made by confirming the number moments ago has no name yet:
+    // take the one this order is addressed to.
+    if (customer && !customer.name) {
+      await db.customer
+        .update({ where: { id: customer.id }, data: { name: input.name.slice(0, 120) } })
+        .catch((error) => reportError("customer-name", error, { orderId: order.id }));
+    }
     // Proof of the optional marketing opt-in: who, when, where, and the exact
     // wording shown. Only a tick is recorded; no record means no consent.
     if (input.marketingConsent) {
