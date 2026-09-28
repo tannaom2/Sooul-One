@@ -68,9 +68,9 @@ enum RegulatoryType {
 }
 
 model Brand {
-  id            String     @id @default(cuid())
+  id            String         @id @default(cuid())
   /// "the-true-store" | "woman-axis" | "kids-vault" | "man-rituals" | future lines
-  slug          String     @unique
+  slug          String         @unique
   name          String
   tagline       String?
   /// Brand accent colour. Seeded as a neutral placeholder until the brand kit exists —
@@ -78,82 +78,87 @@ model Brand {
   colorToken    String
   description   String?
   /// True for The True Store — the only brand operating physical superstores.
-  isRetailBrand Boolean    @default(false)
-  isActive      Boolean    @default(true)
+  isRetailBrand Boolean        @default(false)
+  isActive      Boolean        @default(true)
   categories    Category[]
   products      Product[]
   bundles       Bundle[] // [FIX] back-relation for Bundle.brand
   quizResponses QuizResponse[] // [FIX] back-relation for QuizResponse.brand
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Category {
-  id            String         @id @default(cuid())
-  brandId       String
-  brand         Brand          @relation(fields: [brandId], references: [id])
-  slug          String
+  id                  String         @id @default(cuid())
+  brandId             String
+  brand               Brand          @relation(fields: [brandId], references: [id])
+  slug                String
   /// e.g. "Hair Fall" (Man Rituals), "Healthy Namkeen" (True Store — proposed, confirm)
-  name          String
-  description   String?
-  imageUrl      String?
-  sortOrder     Int            @default(0)
-  isActive      Boolean        @default(true)
-  products      Product[]
+  name                String
+  description         String?
+  imageUrl            String?
+  sortOrder           Int            @default(0)
+  isActive            Boolean        @default(true)
+  products            Product[]
   quizRecommendations QuizResponse[] // [FIX] back-relation for QuizResponse.recommendedCategory
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   @@unique([brandId, slug])
 }
 
 model Product {
-  id               String         @id @default(cuid())
-  sku              String         @unique
-  name             String
-  slug             String         @unique
-  brandId          String
-  brand            Brand          @relation(fields: [brandId], references: [id])
-  categoryId       String
-  category         Category       @relation(fields: [categoryId], references: [id])
-  regulatoryType   RegulatoryType
-  shortDescription String
+  id                String         @id @default(cuid())
+  sku               String         @unique
+  name              String
+  slug              String         @unique
+  brandId           String
+  brand             Brand          @relation(fields: [brandId], references: [id])
+  categoryId        String
+  category          Category       @relation(fields: [categoryId], references: [id])
+  regulatoryType    RegulatoryType
+  shortDescription  String
   /// Markdown. For HEALTH_SUPPLEMENT this must stay in structure/function language
   /// ("supports", "helps maintain") and never therapeutic language ("treats",
   /// "cures", "prevents"). Enforced at the admin boundary — see src/lib/compliance/claims.ts.
-  description      String
-  basePrice        Decimal        @db.Decimal(10, 2)
-  compareAtPrice   Decimal?       @db.Decimal(10, 2)
+  description       String
+  basePrice         Decimal        @db.Decimal(10, 2)
+  compareAtPrice    Decimal?       @db.Decimal(10, 2)
   /// [ADDED] Percentage-off promotion. `basePrice` stays the undiscounted price;
   /// the shopper pays basePrice less `discountPercent` while `discountActive`.
-  discountActive   Boolean        @default(false)
-  discountPercent  Decimal?       @db.Decimal(5, 2)
-  hsnCode          String?
-  taxRatePercent   Decimal        @default(18) @db.Decimal(4, 2)
+  discountActive    Boolean        @default(false)
+  discountPercent   Decimal?       @db.Decimal(5, 2)
+  hsnCode           String?
+  taxRatePercent    Decimal        @default(18) @db.Decimal(4, 2)
+  /// What one unit costs SooulOne, landed. Finance-only; never shown to
+  /// shoppers. The box editor uses it to refuse boxes that could sell below cost.
+  unitCost          Decimal?       @db.Decimal(10, 2)
   /// ONLINE stock only. Retail superstore stock is deliberately out of scope
   /// (Decision #3) — this number never represents in-store availability.
-  stockQuantity     Int           @default(0)
-  lowStockThreshold Int           @default(10)
+  stockQuantity     Int            @default(0)
+  boxProducts       BoxProduct[]
+  cartBoxItems      CartBoxItem[]
+  lowStockThreshold Int            @default(10)
   weightGrams       Int?
-  isActive          Boolean       @default(true)
-  isFeatured        Boolean       @default(false)
-  isOfferZone       Boolean       @default(false)
+  isActive          Boolean        @default(true)
+  isFeatured        Boolean        @default(false)
+  isOfferZone       Boolean        @default(false)
   /// "Also sold in our stores" — display only, never a live stock claim.
-  availableInRetail Boolean       @default(false)
+  availableInRetail Boolean        @default(false)
   /// For short-shelf-life items unsuited to shipping.
-  retailOnly        Boolean       @default(false)
+  retailOnly        Boolean        @default(false)
 
   // --- Required for EVERY regulatory type ---
   /// Veg/non-veg logo. Not defaulted: for gummies this depends on gelatin vs.
   /// pectin/agar, which is an unresolved formulation fact (Section 14).
-  isVeg          Boolean?
-  allergens      String[] @default([])
+  isVeg         Boolean?
+  allergens     String[] @default([])
   /// [MOVED] Total shelf life from manufacture. The brief placed this in the
   /// food-only block, but health supplements are food products under the FSS
   /// Act, 2006, so the "any food article" delivery rule reaches them too.
   /// Required for all three types at the validation layer — see
   /// src/lib/checkout/quote.ts for the scope reasoning and the counsel flag.
-  shelfLifeDays  Int?
+  shelfLifeDays Int?
 
   // --- Food-specific (regulatoryType = PACKAGED_FOOD | BEVERAGE) ---
   /// { calories, protein, carbs, sugar, fat, sodium, fiber, ... } per serving.
@@ -204,8 +209,8 @@ model Product {
   orderItems        OrderItem[]
   cartItems         CartItem[]
   bundleEligibility BundleEligibleProduct[]
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   @@index([brandId, isActive])
   @@index([categoryId, isActive])
@@ -275,25 +280,72 @@ model StoreLocation {
   createdAt    DateTime @default(now())
 }
 
+/// A shopper account. Created the first time someone proves they own a
+/// mobile number with a one-time code (src/server/customer-auth.ts), never
+/// from typed checkout details: anyone can type anyone's number.
 model Customer {
-  id               String         @id @default(cuid())
-  email            String         @unique
-  phone            String?
+  id               String            @id @default(cuid())
+  /// A verified email only, for email or Google sign-in later. The email
+  /// typed at checkout stays on the order (guestEmail), since two people can
+  /// type the same one.
+  email            String?           @unique
+  /// 10 digits, no +91. Proven by one-time code before the row exists.
+  phone            String?           @unique
+  phoneVerifiedAt  DateTime?
   passwordHash     String?
-  name             String
+  name             String            @default("")
   emailVerifiedAt  DateTime?
-  loyaltyPoints    Int            @default(0)
+  lastSignInAt     DateTime?
+  sessions         CustomerSession[]
+  loyaltyPoints    Int               @default(0)
   /// Explicit, unchecked-by-default opt-in. A phone number collected for
   /// delivery updates is not permission to send offers (Section 8.5).
-  marketingConsent Boolean        @default(false)
-  whatsappOptIn    Boolean        @default(false)
+  marketingConsent Boolean           @default(false)
+  whatsappOptIn    Boolean           @default(false)
   addresses        Address[]
   orders           Order[]
   cart             Cart?
   reviews          Review[]
   referralCode     ReferralCode?
+  referralsMade    Referral[]        @relation("Referrer")
+  referredBy       Referral?         @relation("Referee")
+  walletEntries    WalletEntry[]
   quizResponses    QuizResponse[]
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime          @default(now())
+}
+
+/// A signed-in browser. Only a SHA-256 of the cookie's token is stored, so a
+/// database leak can't be replayed as a sign-in. Deleting the row signs that
+/// browser out; deleting all of a customer's rows is "sign out everywhere".
+/// Separate from the owner console's sign-in on purpose (src/lib/auth.ts).
+model CustomerSession {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  /// SHA-256 of the browser's basket-session id: lets a referral from the
+  /// referrer's own browser be spotted without fingerprinting anyone.
+  deviceHash String?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([customerId])
+}
+
+/// A one-time code sent to a mobile number. The code is stored as an HMAC,
+/// allows a few tries, expires in minutes and is used once
+/// (src/lib/otp.ts). Old rows are pruned as new ones are made.
+model PhoneOtp {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
 }
 
 model Address {
@@ -317,6 +369,7 @@ model Cart {
   customer   Customer?  @relation(fields: [customerId], references: [id])
   sessionId  String?    @unique
   items      CartItem[]
+  boxes      CartBox[]
   updatedAt  DateTime   @updatedAt
 }
 
@@ -337,70 +390,84 @@ model CartItem {
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  orderNumber     String      @unique
-  customerId      String?
-  customer        Customer?   @relation(fields: [customerId], references: [id])
-  guestEmail      String?
-  guestPhone      String?
-  status          OrderStatus @default(PENDING_PAYMENT)
-  items           OrderItem[]
-  events          OrderEvent[]
+  id                    String       @id @default(cuid())
+  orderNumber           String       @unique
+  customerId            String?
+  customer              Customer?    @relation(fields: [customerId], references: [id])
+  guestEmail            String?
+  guestPhone            String?
+  /// When guestPhone was proven by one-time code for this order (required for
+  /// cash on delivery once SMS is set up). Null means it was only typed.
+  phoneVerifiedAt       DateTime?
+  status                OrderStatus  @default(PENDING_PAYMENT)
+  items                 OrderItem[]
+  events                OrderEvent[]
   /// Sum of lines at the price paid, after product-level discounts.
-  subtotal        Decimal     @db.Decimal(10, 2)
+  subtotal              Decimal      @db.Decimal(10, 2)
   /// [ADDED] Saved through product-level discounts (list price minus price paid).
-  productDiscountAmount Decimal @default(0) @db.Decimal(10, 2)
+  productDiscountAmount Decimal      @default(0) @db.Decimal(10, 2)
   /// [ADDED] Saved through bundle / combination offers.
-  bundleDiscountAmount  Decimal @default(0) @db.Decimal(10, 2)
-  bundleLabel     String?
+  bundleDiscountAmount  Decimal      @default(0) @db.Decimal(10, 2)
+  bundleLabel           String?
   /// Coupon discount only.
-  discountAmount  Decimal     @default(0) @db.Decimal(10, 2)
-  shippingAmount  Decimal     @default(0) @db.Decimal(10, 2)
-  taxAmount       Decimal     @default(0) @db.Decimal(10, 2)
-  totalAmount     Decimal     @db.Decimal(10, 2)
-  couponCode      String?
-  shippingAddress Json
-  billingAddress  Json
-  paymentGateway  String?
-  paymentId       String?
-  paymentStatus   String?
+  discountAmount        Decimal      @default(0) @db.Decimal(10, 2)
+  /// Referral credit or a referred friend's welcome discount (never with a coupon).
+  creditAmount          Decimal      @default(0) @db.Decimal(10, 2)
+  /// "WALLET" (the referrer spending credit) or "WELCOME" (a friend's first order).
+  creditKind            String?
+  shippingAmount        Decimal      @default(0) @db.Decimal(10, 2)
+  taxAmount             Decimal      @default(0) @db.Decimal(10, 2)
+  totalAmount           Decimal      @db.Decimal(10, 2)
+  couponCode            String?
+  shippingAddress       Json
+  billingAddress        Json
+  paymentGateway        String?
+  paymentId             String?
+  paymentStatus         String?
   /// The guest cart session this order was placed from (src/server/cart.ts).
   /// Nothing reads it for order fulfilment — it exists so the Razorpay
   /// webhook, which arrives as a server-to-server call with no session cookie
   /// of its own, can still record ORDER_PAID against the same funnel session
   /// that recorded PRODUCT_VIEW / ADD_TO_CART / CHECKOUT_STARTED earlier.
-  sessionId       String?
+  sessionId             String?
+  /// One checkout attempt, sent by the browser as Idempotency-Key: a double
+  /// click or a network retry gets the first order back instead of a second one.
+  idempotencyKey        String?      @unique
   /// Unguessable secret required to view /order/[orderNumber]. The order
   /// number alone is a timestamp plus ~1,300 combinations — enumerable — and
   /// that page shows the customer's name and address. Null on orders placed
   /// before this existed; those pages simply stop being viewable.
-  accessToken     String?     @unique
-  trackingNumber  String?
-  courierPartner  String?
+  accessToken           String?      @unique
+  trackingNumber        String?
+  courierPartner        String?
   /// The delivery date shown to the shopper at checkout, kept so on-time
   /// delivery can be measured against what was actually promised.
-  promisedDeliveryDate DateTime?
-  deliveredAt     DateTime?
+  promisedDeliveryDate  DateTime?
+  deliveredAt           DateTime?
   /// Set when an order ends as CANCELLED, RTO or RETURNED.
-  closedAt        DateTime?
+  closedAt              DateTime?
   /// Why it ended: a code from CLOSE_REASONS in src/lib/order-lifecycle.ts.
-  closeReason     String?
+  closeReason           String?
   /// GST tax invoice, issued when the order ships: consecutive per financial
   /// year, so orders cancelled before dispatch leave no gaps in the series.
-  invoiceNumber   String?     @unique
-  invoiceDate     DateTime?
+  invoiceNumber         String?      @unique
+  invoiceDate           DateTime?
   /// GST on the delivery charge, and whether tax was CGST+SGST (INTRA_STATE)
   /// or IGST (INTER_STATE), as charged at checkout.
-  shippingTaxAmount Decimal?  @db.Decimal(10, 2)
-  gstTreatment    String?
-  placedAt        DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  shippingTaxAmount     Decimal?     @db.Decimal(10, 2)
+  gstTreatment          String?
+  placedAt              DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   @@index([status, placedAt])
   /// The Razorpay webhook and reconciliation find orders by payment id.
   @@index([paymentId])
   /// Repeat-customer analytics and support look-ups by email.
   @@index([guestEmail, placedAt])
+  /// A shopper's account page lists their orders, newest first.
+  @@index([customerId, placedAt])
+  /// Signing in links earlier guest orders placed with the same number.
+  @@index([guestPhone, placedAt])
 }
 
 model OrderItem {
@@ -420,20 +487,20 @@ model OrderItem {
   batchId String?
   batch   ProductBatch? @relation(fields: [batchId], references: [id])
 
-  productNameSnapshot String
-  unitPriceSnapshot   Decimal @db.Decimal(10, 2)
+  productNameSnapshot   String
+  unitPriceSnapshot     Decimal  @db.Decimal(10, 2)
   /// [ADDED] Undiscounted unit price at purchase, so the bill can show the saving.
   listUnitPriceSnapshot Decimal? @db.Decimal(10, 2)
-  quantity            Int
-  lineTotal           Decimal @db.Decimal(10, 2)
+  quantity              Int
+  lineTotal             Decimal  @db.Decimal(10, 2)
   /// Tax facts at the moment of sale, for the GST invoice: the product's own
   /// rate or HSN may change later, and the invoice must not.
-  hsnCode             String?
-  taxRatePercent      Decimal? @db.Decimal(4, 2)
+  hsnCode               String?
+  taxRatePercent        Decimal? @db.Decimal(4, 2)
   /// This row's share of the line's value after every discount, split into
   /// taxable value and GST exactly as checkout charged it.
-  taxableAmount       Decimal? @db.Decimal(10, 2)
-  taxAmount           Decimal? @db.Decimal(10, 2)
+  taxableAmount         Decimal? @db.Decimal(10, 2)
+  taxAmount             Decimal? @db.Decimal(10, 2)
 
   @@index([orderId])
   @@index([productId])
@@ -456,23 +523,23 @@ model Coupon {
 
 /// Gift hampers for The True Store; "build your routine" kits for the gummies brands.
 model Bundle {
-  id               String                 @id @default(cuid())
+  id               String                  @id @default(cuid())
   brandId          String
-  brand            Brand                  @relation(fields: [brandId], references: [id])
-  slug             String                 @unique
+  brand            Brand                   @relation(fields: [brandId], references: [id])
+  slug             String                  @unique
   /// e.g. "Diwali Namkeen Hamper", "Build Your Kids Vault Kit"
   name             String
   description      String?
-  minItems         Int                    @default(2)
+  minItems         Int                     @default(2)
   maxItems         Int?
   discountType     DiscountType
-  discountValue    Decimal                @db.Decimal(10, 2)
+  discountValue    Decimal                 @db.Decimal(10, 2)
   /// Optional step-up: the discount (same type) when a kit holds one more product
   /// than minItems, e.g. 12% for 2 products and 15% for 3. Set, maxItems is minItems + 1.
-  stepUpValue      Decimal?               @db.Decimal(10, 2)
+  stepUpValue      Decimal?                @db.Decimal(10, 2)
   eligibleProducts BundleEligibleProduct[]
-  isActive         Boolean                @default(true)
-  createdAt        DateTime               @default(now())
+  isActive         Boolean                 @default(true)
+  createdAt        DateTime                @default(now())
 }
 
 model BundleEligibleProduct {
@@ -487,14 +554,17 @@ model BundleEligibleProduct {
 }
 
 model ReferralCode {
-  id             String   @id @default(cuid())
-  customerId     String   @unique
-  customer       Customer @relation(fields: [customerId], references: [id])
-  code           String   @unique
-  referrerReward Decimal  @default(0) @db.Decimal(10, 2)
-  refereeReward  Decimal  @default(0) @db.Decimal(10, 2)
-  timesRedeemed  Int      @default(0)
-  createdAt      DateTime @default(now())
+  id             String     @id @default(cuid())
+  customerId     String     @unique
+  customer       Customer   @relation(fields: [customerId], references: [id])
+  code           String     @unique
+  referrerReward Decimal    @default(0) @db.Decimal(10, 2)
+  refereeReward  Decimal    @default(0) @db.Decimal(10, 2)
+  /// Rewards paid out through this code; stops at the programme's cap.
+  timesRedeemed  Int        @default(0)
+  isActive       Boolean    @default(true)
+  referrals      Referral[]
+  createdAt      DateTime   @default(now())
 }
 
 /// Gummies brands only (Decision #8). Scoring logic and result copy come from
@@ -527,21 +597,21 @@ model Review {
 }
 
 model AdminUser {
-  id           String          @id @default(cuid())
-  email        String          @unique
-  passwordHash String
-  name         String
-  role         AdminRole       @default(STAFF)
-  mfaSecret    String?
-  isActive     Boolean         @default(true)
-  lastLoginAt  DateTime?
+  id             String              @id @default(cuid())
+  email          String              @unique
+  passwordHash   String
+  name           String
+  role           AdminRole           @default(STAFF)
+  mfaSecret      String?
+  isActive       Boolean             @default(true)
+  lastLoginAt    DateTime?
   /// Bumped on reset access and deactivation. Sessions carry the value they
   /// were issued with, and requirePermission rejects a mismatch, so a lost
   /// phone that is still signed in is signed out the moment access is reset.
-  sessionVersion Int         @default(0)
-  auditLogs    AdminAuditLog[]
-  recoveryCodes AdminRecoveryCode[]
-  createdAt    DateTime        @default(now())
+  sessionVersion Int                 @default(0)
+  auditLogs      AdminAuditLog[]
+  recoveryCodes  AdminRecoveryCode[]
+  createdAt      DateTime            @default(now())
 }
 
 /// Append-only: a database trigger (see migration
@@ -576,14 +646,14 @@ model AdminAuditLog {
 /// page. Covers events with no admin behind them (placed by the customer,
 /// paid via the Razorpay webhook), which the admin audit log can't hold.
 model OrderEvent {
-  id         String   @id @default(cuid())
+  id         String          @id @default(cuid())
   orderId    String
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order      Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   type       OrderEventType
   actorType  OrderEventActor
   actorEmail String?
   detail     Json?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime        @default(now())
 
   @@index([orderId, createdAt])
 }
@@ -698,15 +768,24 @@ model ConsentRecord {
 /// RTO spike, a stock problem or a holiday doesn't need a code change. One
 /// row (id "default"); every change is in the activity log.
 model StoreSettings {
-  id             String   @id @default("default")
+  id                 String     @id @default("default")
   /// Stops new orders at checkout, showing pauseMessage.
-  ordersPaused   Boolean  @default(false)
-  pauseMessage   String?
+  ordersPaused       Boolean    @default(false)
+  pauseMessage       String?
   /// Cash on delivery offered at checkout.
-  codEnabled     Boolean  @default(true)
+  codEnabled         Boolean    @default(true)
   /// Bundle offers applied in the basket and checkout.
-  bundlesEnabled Boolean  @default(true)
-  updatedAt      DateTime @updatedAt
+  bundlesEnabled     Boolean    @default(true)
+  /// Shoppers get a Day/Night switch on the storefront (src/lib/theme.ts).
+  themeToggleVisible Boolean    @default(true)
+  /// The storefront's theme while the switch is hidden.
+  forcedTheme        StoreTheme @default(LIGHT)
+  updatedAt          DateTime   @updatedAt
+}
+
+enum StoreTheme {
+  LIGHT
+  DARK
 }
 
 /// Single-use backup codes for two-factor sign-in, for when the authenticator
@@ -733,4 +812,237 @@ model RateLimit {
   windowStart DateTime
 
   @@index([windowStart])
+}
+
+// ---------------------------------------------------------------------------
+// Make Your Own Box: "pick any 3 for ₹999" across brands.
+// ---------------------------------------------------------------------------
+
+/// What a box may hold: gummies (any of the three gummies brands) or The True
+/// Store's snacks. Never both: food and supplements stay in separate boxes.
+enum BoxKind {
+  GUMMIES
+  TRUE_STORE
+}
+
+enum BoxSlotMode {
+  /// Every sellable product in the slot's brands and price range.
+  ALL
+  /// Only products worth clearing: near their shipping cut-off, or slow to sell.
+  CLEARANCE
+}
+
+enum BoxProductSource {
+  RULE
+  MANUAL
+}
+
+/// A mix-and-match box at one fixed price (src/lib/checkout/boxes.ts). Its
+/// own model, not a kind of Bundle: kits take a percentage off one brand's
+/// products, boxes charge a fixed price across brands, and the basket keeps
+/// a box the shopper built apart from its product lines.
+model Box {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  name            String
+  /// Set when the box is made and never changed (src/lib/checkout/boxes.ts).
+  kind            BoxKind      @default(GUMMIES)
+  description     String?
+  /// The price of one complete box, GST included.
+  price           Decimal      @db.Decimal(10, 2)
+  /// Exactly this many items make a box.
+  size            Int
+  /// The same product at most this many times in one box.
+  maxPerProduct   Int          @default(1)
+  /// Owner's override for clearance boxes that may sell below cost; logged.
+  allowBelowCost  Boolean      @default(false)
+  isActive        Boolean      @default(false)
+  poolRefreshedAt DateTime?
+  slots           BoxSlot[]
+  products        BoxProduct[]
+  cartBoxes       CartBox[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+/// A section of the box page ("For her", "For kids") and the rule that fills it.
+model BoxSlot {
+  id             String       @id @default(cuid())
+  boxId          String
+  box            Box          @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  label          String
+  hint           String?
+  sortOrder      Int          @default(0)
+  /// Picks this section needs before the box is complete (0 = optional).
+  minPicks       Int          @default(0)
+  maxPicks       Int?
+  brandIds       String[]
+  categoryIds    String[]
+  minPrice       Decimal?     @db.Decimal(10, 2)
+  maxPrice       Decimal?     @db.Decimal(10, 2)
+  mode           BoxSlotMode  @default(ALL)
+  /// CLEARANCE: shippable stock whose shipping cut-off is within this many days.
+  nearExpiryDays Int?
+  /// CLEARANCE: at least this many days of stock at the last 30 days' sales rate.
+  minDaysOfCover Int?
+  products       BoxProduct[]
+
+  @@index([boxId])
+}
+
+/// The box's pool: rebuilt from the slot rules by the refresh
+/// (src/server/boxes.ts); pins and exclusions survive it.
+model BoxProduct {
+  id          String           @id @default(cuid())
+  boxId       String
+  box         Box              @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  slotId      String
+  slot        BoxSlot          @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  source      BoxProductSource @default(RULE)
+  excluded    Boolean          @default(false)
+  /// Why the rule picked it ("near cut-off: 41 days"), shown to the owner.
+  reason      String?
+  refreshedAt DateTime         @default(now())
+
+  @@unique([boxId, productId])
+  @@index([slotId])
+}
+
+/// A box the shopper built, kept apart from the basket's product lines.
+model CartBox {
+  id        String        @id @default(cuid())
+  cartId    String
+  cart      Cart          @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  boxId     String
+  box       Box           @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  items     CartBoxItem[]
+  createdAt DateTime      @default(now())
+
+  @@index([cartId])
+}
+
+model CartBoxItem {
+  id        String  @id @default(cuid())
+  cartBoxId String
+  cartBox   CartBox @relation(fields: [cartBoxId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int     @default(1)
+
+  @@index([cartBoxId])
+}
+
+// ---------------------------------------------------------------------------
+// Referrals: capped, paid only once a friend's first order is delivered and
+// past the return window (src/lib/referrals.ts).
+// ---------------------------------------------------------------------------
+
+enum ReferralStatus {
+  /// A new customer signed up through a link or code.
+  ATTRIBUTED
+  /// Their first order is placed.
+  QUALIFYING
+  /// Delivered; waiting out the return window (or a person's review if flagged).
+  HELD
+  REWARDED
+  VOID
+  EXPIRED
+}
+
+enum WalletEntryKind {
+  REFERRAL_CREDIT
+  ORDER_REDEMPTION
+  REDEMPTION_REFUND
+  ADJUSTMENT
+}
+
+/// The programme's rules: one row ("default"), set by the owner.
+model ReferralProgram {
+  id                      String   @id @default("default")
+  isActive                Boolean  @default(false)
+  referrerReward          Decimal  @default(100) @db.Decimal(10, 2)
+  refereeReward           Decimal  @default(100) @db.Decimal(10, 2)
+  /// Both the friend's welcome discount and spending credit need this order
+  /// value, counted after kit, box and sale discounts.
+  minOrderValue           Decimal  @default(799) @db.Decimal(10, 2)
+  maxCreditPerOrder       Decimal  @default(100) @db.Decimal(10, 2)
+  maxRewardsPerReferrer   Int      @default(5)
+  holdDays                Int      @default(7)
+  attributionDays         Int      @default(30)
+  creditExpiryDays        Int      @default(180)
+  /// When a code has paid its last reward: does the friend still get their discount?
+  refereeDiscountAfterCap Boolean  @default(false)
+  /// Referrals scoring at or above this wait for a person's review.
+  riskThreshold           Int      @default(50)
+  /// Rewards wait for review once a calendar month's credits would pass this.
+  monthlyBudget           Decimal? @db.Decimal(10, 2)
+  updatedAt               DateTime @updatedAt
+}
+
+model Referral {
+  id                String          @id @default(cuid())
+  codeId            String
+  code              ReferralCode    @relation(fields: [codeId], references: [id])
+  referrerId        String
+  referrer          Customer        @relation("Referrer", fields: [referrerId], references: [id])
+  /// A customer can be referred once.
+  refereeId         String          @unique
+  referee           Customer        @relation("Referee", fields: [refereeId], references: [id])
+  status            ReferralStatus  @default(ATTRIBUTED)
+  /// "LINK" (the shared link) or "CODE" (typed in).
+  via               String
+  qualifyingOrderId String?         @unique
+  holdUntil         DateTime?
+  riskScore         Int             @default(0)
+  riskSignals       Json?
+  /// Waiting for a person: risky, or over the monthly budget.
+  flagged           Boolean         @default(false)
+  voidReason        String?
+  events            ReferralEvent[]
+  attributedAt      DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([referrerId, attributedAt])
+  @@index([status, holdUntil])
+}
+
+/// Append-only history of a referral's stages.
+model ReferralEvent {
+  id         String   @id @default(cuid())
+  referralId String
+  referral   Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  fromStatus String?
+  toStatus   String
+  /// "SYSTEM", or the admin's email.
+  actor      String
+  detail     Json?
+  createdAt  DateTime @default(now())
+
+  @@index([referralId, createdAt])
+}
+
+/// Money a customer holds, as an append-only ledger (src/lib/wallet.ts works
+/// out the balance). A redemption records which credits it used, so a refund
+/// puts back exactly those and each credit keeps its own expiry.
+model WalletEntry {
+  id          String          @id @default(cuid())
+  customerId  String
+  customer    Customer        @relation(fields: [customerId], references: [id])
+  /// Rupees, signed: credits positive, redemptions negative.
+  amount      Decimal         @db.Decimal(10, 2)
+  kind        WalletEntryKind
+  referralId  String?
+  orderId     String?
+  /// Credits only.
+  expiresAt   DateTime?
+  /// Redemptions and refunds: [{ creditId, paise }].
+  allocations Json?
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  @@unique([kind, referralId])
+  @@unique([kind, orderId])
+  @@index([customerId, createdAt])
 }
