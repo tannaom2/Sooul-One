@@ -24,6 +24,8 @@ export interface ReadinessFacts {
   readonly liveProductsMissingDeclarations: readonly string[];
   readonly liveProductsWithoutPhotos: readonly string[];
   readonly emailConfigured: boolean;
+  /** MSG91 keys set, so shoppers can get sign-in codes (src/lib/otp.ts). */
+  readonly smsConfigured: boolean;
   readonly cronConfigured: boolean;
   readonly onlinePayments: boolean;
   readonly errorMonitoring: boolean;
@@ -125,6 +127,16 @@ export function evaluateReadiness(f: ReadinessFacts): Readiness {
       detail: f.emailConfigured ? undefined : "Without it customers get no confirmation, and the email is their only link back to their order.",
       status: f.emailConfigured ? "done" : "missing",
       blocking: true,
+    },
+    {
+      id: "sms",
+      group: "Operations",
+      label: "SMS codes set up (MSG91, DLT-approved template)",
+      detail: f.smsConfigured
+        ? undefined
+        : "Until then shoppers can't sign in or see their past orders, and cash on delivery orders go through without a code proving the number.",
+      status: f.smsConfigured ? "done" : "warning",
+      blocking: false,
     },
     {
       id: "cron",

@@ -24,6 +24,7 @@ const ready: ReadinessFacts = {
   liveProductsMissingDeclarations: [],
   liveProductsWithoutPhotos: [],
   emailConfigured: true,
+  smsConfigured: true,
   cronConfigured: true,
   onlinePayments: false,
   errorMonitoring: false,

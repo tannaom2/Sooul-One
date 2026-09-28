@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { onOrderStatusChanged } from "@/server/referrals";
 import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { recordOrderEvent } from "@/lib/order-events";
@@ -40,7 +41,10 @@ export async function GET(request: Request) {
         where: { id: order.id, status: { in: ["PENDING_PAYMENT", "FAILED"] } },
         data: { status: "CANCELLED", closeReason: "PAYMENT_NOT_COMPLETED", closedAt: new Date() },
       });
-      if (count === 1) await releaseStock(tx, order);
+      if (count === 1) {
+        await releaseStock(tx, order);
+        await onOrderStatusChanged(tx, order.id, "CANCELLED", "SYSTEM");
+      }
       return count === 1;
     });
     if (!changed) continue;

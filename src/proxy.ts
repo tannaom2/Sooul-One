@@ -6,6 +6,7 @@ import {
   SESSION_COOKIE_OPTIONS,
 } from "@/lib/session-cookie";
 import { contentSecurityPolicy, newNonce } from "@/lib/csp";
+import { CUSTOMER_COOKIE, CUSTOMER_COOKIE_OPTIONS } from "@/lib/customer-session";
 
 /**
  * Runs before every page request. Three jobs:
@@ -72,6 +73,12 @@ export function proxy(request: NextRequest) {
     response.cookies.set(SESSION_COOKIE, existing, SESSION_COOKIE_OPTIONS);
     const count = request.cookies.get(BASKET_COUNT_COOKIE)?.value;
     if (count) response.cookies.set(BASKET_COUNT_COOKIE, count, BASKET_COUNT_COOKIE_OPTIONS);
+  }
+  // A signed-in shopper's cookie slides with each page visit, like the basket's;
+  // the session itself decides whether it's still valid (src/lib/customer-session.ts).
+  const signedIn = request.cookies.get(CUSTOMER_COOKIE)?.value;
+  if (signedIn && !isAdmin && !isApi && request.method === "GET") {
+    response.cookies.set(CUSTOMER_COOKIE, signedIn, CUSTOMER_COOKIE_OPTIONS);
   }
   return response;
 }

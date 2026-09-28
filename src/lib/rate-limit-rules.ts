@@ -14,7 +14,11 @@ interface HeaderReader {
  * there are no proxy headers, so every request counts as "local".
  */
 export function clientIp(h: HeaderReader): string {
-  const direct = h.get("true-client-ip") ?? h.get("cf-connecting-ip");
+  // CF-Connecting-IP first: Cloudflare always sets it and overwrites any a
+  // client sent. True-Client-IP is only set when that Cloudflare option is
+  // switched on; otherwise it passes through from the client, so trusting it
+  // first let anyone pick a fresh address per request and dodge every limit.
+  const direct = h.get("cf-connecting-ip") ?? (process.env.TRUST_TRUE_CLIENT_IP === "1" ? h.get("true-client-ip") : null);
   const forwarded = h.get("x-forwarded-for")?.split(",")[0];
   const ip = (direct ?? forwarded ?? h.get("x-real-ip") ?? "").trim();
   return ip ? ip.slice(0, 64) : "local";
@@ -88,3 +92,25 @@ export type PublicScope = keyof typeof PUBLIC_LIMITS;
  * password already, so they're keyed on the account.
  */
 export const MFA_LIMIT: Limit = { max: 5, windowSeconds: FIFTEEN_MINUTES };
+
+/**
+ * Shopper sign-in codes. Each SMS costs money and lands on a real phone, so
+ * sending is capped per number (nobody can be flooded with texts) and per
+ * connection (nobody can run up the SMS bill across many numbers). The
+ * per-connection caps allow for carrier-grade NAT, where many shoppers share
+ * one address. Wrong guesses are also capped per code (MAX_ATTEMPTS in
+ * src/lib/otp.ts); this caps them across codes.
+ */
+export const OTP_LIMITS = {
+  sendPerPhone: { max: 5, windowSeconds: 60 * 60 },
+  sendPerIp: { max: 20, windowSeconds: FIFTEEN_MINUTES },
+  verifyPerIp: { max: 40, windowSeconds: FIFTEEN_MINUTES },
+} as const satisfies Record<string, Limit>;
+
+export function otpKeys(phone: string, ip: string) {
+  return {
+    sendPerPhone: `otp:send:phone:${phone}`,
+    sendPerIp: `otp:send:ip:${ip}`,
+    verifyPerIp: `otp:verify:ip:${ip}`,
+  } as const;
+}

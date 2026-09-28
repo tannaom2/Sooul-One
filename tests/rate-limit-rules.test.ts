@@ -4,9 +4,21 @@ import { SIGN_IN_LIMITS, clientIp, signInBlocked, signInKeys } from "../src/lib/
 const headers = (values: Record<string, string>) => ({ get: (name: string) => values[name] ?? null });
 
 describe("clientIp", () => {
-  it("prefers the headers Cloudflare sets over X-Forwarded-For", () => {
-    expect(clientIp(headers({ "true-client-ip": "81.97.145.24", "x-forwarded-for": "6.6.6.6, 10.0.0.1" }))).toBe("81.97.145.24");
+  it("prefers the address Cloudflare sets (CF-Connecting-IP) over anything a client can send", () => {
     expect(clientIp(headers({ "cf-connecting-ip": "81.97.145.24", "x-forwarded-for": "6.6.6.6" }))).toBe("81.97.145.24");
+    expect(clientIp(headers({ "cf-connecting-ip": "81.97.145.24", "true-client-ip": "1.2.3.4" }))).toBe("81.97.145.24");
+  });
+
+  it("ignores a True-Client-IP a client made up, unless the host is known to set it", () => {
+    // Without Cloudflare's True-Client-IP option on, this header comes straight
+    // from the client: trusting it let anyone dodge every limit.
+    expect(clientIp(headers({ "true-client-ip": "1.2.3.4", "x-forwarded-for": "81.97.145.24" }))).toBe("81.97.145.24");
+    process.env.TRUST_TRUE_CLIENT_IP = "1";
+    try {
+      expect(clientIp(headers({ "true-client-ip": "81.97.145.24", "x-forwarded-for": "6.6.6.6" }))).toBe("81.97.145.24");
+    } finally {
+      delete process.env.TRUST_TRUE_CLIENT_IP;
+    }
   });
 
   it("takes the first X-Forwarded-For entry, where Render puts the client", () => {

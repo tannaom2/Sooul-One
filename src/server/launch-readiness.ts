@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { BUSINESS_TAG, CATALOG_TAG } from "@/lib/cache-tags";
 import { getBusinessProfile } from "@/server/business";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
+import { codeDelivery } from "@/lib/otp";
 import { DRAFT_POLICIES } from "@/lib/policy-status";
 import { LIVE_REQUIRED } from "@/lib/validation/product";
 import {
@@ -44,6 +45,7 @@ export async function getReadiness(): Promise<Readiness> {
       .map((p) => p.name),
     liveProductsWithoutPhotos: products.filter((p) => p._count.images === 0).map((p) => p.name),
     emailConfigured: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+    smsConfigured: codeDelivery(process.env) === "sms",
     cronConfigured: Boolean(process.env.CRON_SECRET),
     onlinePayments: onlinePaymentsEnabled(),
     errorMonitoring: Boolean(process.env.SENTRY_DSN),
