@@ -6,6 +6,7 @@ import { reportError } from "@/lib/observability";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
 import { DEFAULT_CONTROLS, checkoutState, type CheckoutState, type StoreControls } from "@/lib/store-controls";
 import { ordersOpen } from "@/server/launch-readiness";
+import { DEFAULT_THEME_SETTINGS, type ThemeSettings } from "@/lib/theme";
 
 /**
  * The owner's store controls. Read on every checkout and quote, so cached and
@@ -25,6 +26,25 @@ export const getStoreControls = unstable_cache(
     }
   },
   ["store-controls"],
+  { revalidate: 3600, tags: [SETTINGS_TAG] },
+);
+
+/**
+ * The storefront's Day/Night settings (src/lib/theme.ts). Read by the root
+ * layout on every page, so cached the same way and expired on save. A
+ * database error shows the switch in Day mode rather than failing the page.
+ */
+export const getThemeSettings = unstable_cache(
+  async (): Promise<ThemeSettings> => {
+    try {
+      const row = await db.storeSettings.findUnique({ where: { id: "default" }, select: { themeToggleVisible: true, forcedTheme: true } });
+      return row ? { toggleVisible: row.themeToggleVisible, forcedTheme: row.forcedTheme === "DARK" ? "dark" : "light" } : DEFAULT_THEME_SETTINGS;
+    } catch (error) {
+      reportError("theme-settings", error);
+      return DEFAULT_THEME_SETTINGS;
+    }
+  },
+  ["theme-settings"],
   { revalidate: 3600, tags: [SETTINGS_TAG] },
 );
 

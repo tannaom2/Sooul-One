@@ -27,7 +27,7 @@ export function ProductGallery({
     return (
       <div
         className="flex aspect-square w-full items-end p-5 sm:aspect-[4/3]"
-        style={{ background: `color-mix(in srgb, ${accent} 12%, white)`, borderRadius: "var(--radius-panel)" }}
+        style={{ background: `color-mix(in srgb, ${accent} 12%, var(--color-paper))`, borderRadius: "var(--radius-panel)" }}
       >
         <span className="text-small font-semibold" style={{ color: accent }}>
           {fallbackLabel}
@@ -78,7 +78,7 @@ export function ProductGallery({
               onClick={() => show(i)}
               aria-label={`Photo ${i + 1} of ${images.length}`}
               aria-current={i === active}
-              className={`h-14 w-14 overflow-hidden border ${i === active ? "border-ink" : "border-rule"}`}
+              className={`h-14 w-14 overflow-hidden border ${i === active ? "border-strong" : "border-rule"}`}
               style={{ borderRadius: "var(--radius-panel)" }}
             >
               <Image src={img.url} alt="" width={56} height={56} sizes="56px" loading="eager" className="h-full w-full object-cover" />

@@ -62,7 +62,7 @@ export function ConcernTiles({
                   replace={!single}
                   scroll={single ? undefined : false}
                   aria-current={isActive ? "page" : undefined}
-                  className="flex h-full items-center gap-3 border bg-paper p-3 transition-colors hover:border-ink"
+                  className="flex h-full items-center gap-3 border bg-surface p-3 transition-colors hover:border-strong"
                   style={{ borderRadius: "var(--radius-panel)", borderColor: isActive ? accent : "var(--color-rule)" }}
                 >
                   <span

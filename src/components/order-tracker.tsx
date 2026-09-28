@@ -15,13 +15,13 @@ export function OrderTracker({ progress }: { progress: OrderProgress }) {
             <div className="flex flex-col items-center sm:flex-row">
               <span
                 aria-hidden
-                className={`grid h-6 w-6 shrink-0 place-items-center text-micro font-bold ${s.done ? "bg-ink text-paper" : "border border-rule text-ink-faint"}`}
+                className={`grid h-6 w-6 shrink-0 place-items-center text-micro font-bold ${s.done ? "bg-primary text-on-primary" : "border border-rule text-ink-faint"}`}
                 style={{ borderRadius: 999 }}
               >
                 {s.done ? "✓" : i + 1}
               </span>
               {i < progress.stages.length - 1 && (
-                <span aria-hidden className={`h-6 w-px sm:h-px sm:w-full ${progress.stages[i + 1].done ? "bg-ink" : "bg-rule"}`} />
+                <span aria-hidden className={`h-6 w-px sm:h-px sm:w-full ${progress.stages[i + 1].done ? "bg-primary" : "bg-rule"}`} />
               )}
             </div>
             <div className="pb-3 sm:pb-0">

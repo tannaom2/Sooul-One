@@ -92,11 +92,12 @@ export default async function Home() {
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Link
             href="/true-store"
-            className="flex flex-col justify-between gap-6 border border-rule p-6 hover:border-ink"
-            style={{ background: "color-mix(in srgb, var(--color-truestore) 10%, white)" }}
+            className="flex flex-col justify-between gap-6 border border-rule p-6 hover:border-strong"
+            style={{ background: "color-mix(in srgb, var(--color-truestore) 10%, var(--color-paper))" }}
           >
             <div>
-              <h3 className="text-h3 font-bold" style={{ color: "#9a6a05" }}>
+              {/* Turmeric's text shade: the bright one is for fills and fails as text. */}
+              <h3 className="text-h3 font-bold" style={{ color: "var(--color-truestore-text)" }}>
                 The True Store
               </h3>
               <p className="mt-2 max-w-[42ch] text-small text-ink-soft">
@@ -112,7 +113,7 @@ export default async function Home() {
               <Link
                 key={b.slug}
                 href={`/gummies/${b.slug}`}
-                className="border border-rule p-5 hover:border-ink"
+                className="border border-rule p-5 hover:border-strong"
               >
                 <h3 className="text-h3 font-bold" style={{ color: b.accent }}>
                   {b.name}

@@ -29,7 +29,7 @@ export default async function Stores() {
         {stores.length > 0 ? (
           <ul className="grid gap-px border border-rule bg-rule sm:grid-cols-2">
             {stores.map((s: { id: string; name: string; addressLine1: string; addressLine2: string | null; city: string; state: string; postalCode: string; phone: string | null; openingHours: string | null; latitude: number | null; longitude: number | null }) => (
-              <li key={s.id} className="bg-paper p-6">
+              <li key={s.id} className="bg-surface p-6">
                 <h2 className="text-h3 font-bold">{s.name}</h2>
                 <address className="mt-2 not-italic text-small text-ink-soft">
                   {s.addressLine1}

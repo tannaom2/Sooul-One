@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import { after } from "next/server";
@@ -10,46 +10,80 @@ import { formatPriceTag } from "@/lib/money";
 import { BasketButton } from "@/components/basket/basket-button";
 import { BasketDrawer } from "@/components/basket/basket-drawer";
 import { MobileMenu } from "@/components/mobile-menu";
+import { codeDelivery } from "@/lib/otp";
+import { activeBoxes } from "@/server/boxes";
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { getBusinessProfile } from "@/server/business";
+import { getThemeSettings } from "@/server/store-settings";
+import { CONSOLE_THEME_SETTINGS, CONSOLE_THEME_STORAGE_KEY, THEME_STORAGE_KEY, themeBootScript } from "@/lib/theme";
+import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
 /**
- * Fonts are loaded via a stylesheet link rather than `next/font/google`.
- *
- * `next/font` downloads and self-hosts the files at BUILD time, which is
- * lovely until the build runs somewhere without egress to fonts.googleapis.com
- * — a locked-down CI runner, an air-gapped box, or an offline laptop — where
- * it fails the whole build over a typeface. A stylesheet link moves that
- * fetch to the browser, so the build stays portable.
- *
- * The trade is a small flash of fallback text on first paint. The CSS variable
- * stacks in globals.css name real fallbacks so that flash is legible rather
- * than blank. If you would rather have zero layout shift and can guarantee
- * build-time egress, swapping back to `next/font/google` is a contained change
- * to this file.
+ * Fonts are files in public/fonts with @font-face rules in globals.css, not
+ * `next/font/google` (which fetches from Google at BUILD time and fails the
+ * build without egress) and not a Google Fonts stylesheet (a third-party,
+ * render-blocking request on every first visit). The two Latin files are
+ * preloaded below so text paints in the brand fonts sooner; the Latin
+ * Extended ones (with the rupee sign) load when a page uses them.
  */
+const PRELOADED_FONTS = ["/fonts/public-sans-latin-v1.woff2", "/fonts/bricolage-grotesque-latin-v1.woff2"];
+
+const TITLE = "SooulOne — nutrition, honestly labelled";
+const DESCRIPTION =
+  "Healthy namkeen, sweets and snacks from The True Store, and daily gummies from Woman Axis, Kids Vault and Man Rituals. Every label, in full, before you buy.";
 
 export const metadata: Metadata = {
   // Required for Next.js to resolve relative canonical/OG URLs to absolute
   // ones. Falls back to localhost in dev; set SITE_URL before going live or
   // every canonical and Open Graph image resolves to the wrong domain.
   metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
-  title: "SooulOne — nutrition, honestly labelled",
-  description:
-    "Healthy namkeen, sweets and snacks from The True Store, and daily gummies from Woman Axis, Kids Vault and Man Rituals. Every label, in full, before you buy.",
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: "SooulOne",
+  // Made by scripts/brand/make-icons.cjs. /manifest.webmanifest comes from app/manifest.ts.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  // What WhatsApp, Facebook and X show when a page is shared. Product pages set their own.
+  openGraph: {
+    type: "website",
+    siteName: "SooulOne",
+    locale: "en_IN",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [{ url: "/og-default.png", width: 1200, height: 630, alt: "SooulOne" }],
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-default.png"] },
 };
 
-function Nav() {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // The browser bar on phones, matching the header's top strip.
+  themeColor: "#241c15",
+};
+
+async function Nav({ showThemeToggle }: { showThemeToggle: boolean }) {
+  // Accounts need codes to be sendable (src/lib/otp.ts); until then there's
+  // nothing to sign in to, so no link.
+  const accounts = codeDelivery(process.env) !== "off";
+  // "Make your box" only while a box is live (cached with the catalogue).
+  const hasBox = (await activeBoxes().catch(() => [])).length > 0;
   return (
     <header className="sticky top-0 z-50 border-b border-rule bg-paper/95 backdrop-blur print:hidden">
       {/* Said up front, so shoppers outside the area learn it before they fill a basket. */}
-      <p className="bg-ink px-5 py-1.5 text-center text-micro font-semibold text-paper">
+      <p className="bg-inverse px-5 py-1.5 text-center text-micro font-semibold text-on-inverse">
         Delivering across {SERVICE_AREA.label} · Free delivery over {formatPriceTag(DEFAULT_SHIPPING_POLICY.freeAbovePaise)}
       </p>
       <nav className="relative mx-auto flex max-w-6xl items-center gap-6 px-5 py-3">
-        <MobileMenu />
+        <MobileMenu showAccount={accounts} showBox={hasBox} />
         <Link href="/" className="font-display text-lead font-extrabold tracking-tight">
           SooulOne
         </Link>
@@ -60,11 +94,28 @@ function Nav() {
           <Link href="/gummies" className="hover:underline">
             Gummies
           </Link>
+          {hasBox && (
+            <Link href="/box" className="font-semibold text-veg hover:underline">
+              Make your box
+            </Link>
+          )}
           <Link href="/stores" className="hover:underline">
             Find a store
           </Link>
         </div>
-        <BasketButton />
+        <div className="ml-auto flex items-center gap-1 sm:gap-3">
+          {showThemeToggle && <ThemeToggle />}
+          {accounts && (
+            <Link href="/account" className="flex h-11 items-center gap-1.5 px-2 text-small font-medium hover:underline" aria-label="Your account">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+              </svg>
+              <span className="hidden sm:inline">Account</span>
+            </Link>
+          )}
+          <BasketButton />
+        </div>
       </nav>
     </header>
   );
@@ -195,23 +246,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     if (sessionId) after(() => recordEvent(sessionId, "VISIT", { metadata: { path } }));
   }
 
+  // Day/Night (src/lib/theme.ts). Forced: set here, in the HTML. A choice:
+  // set by the inline script before the first paint, carrying this request's
+  // CSP nonce (src/proxy.ts). The owner console has its own switch and saved
+  // choice; the storefront setting never forces it.
+  const theme = isAdmin ? CONSOLE_THEME_SETTINGS : await getThemeSettings();
+  const themeKey = isAdmin ? CONSOLE_THEME_STORAGE_KEY : THEME_STORAGE_KEY;
+  const forced = !theme.toggleVisible ? theme.forcedTheme : undefined;
+  const nonce = /'nonce-([^']+)'/.exec(requestHeaders.get("content-security-policy") ?? "")?.[1];
+
   return (
-    <html lang="en">
+    // The boot script sets data-theme before React hydrates, hence the warning suppression.
+    <html lang="en" data-theme={forced} style={forced ? { colorScheme: forced } : undefined} suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/*
-          eslint-disable-next-line @next/next/no-page-custom-font --
-          This rule warns that a custom font "will only load for a single page"
-          unless it is declared in `pages/_document.js`. That premise is Pages
-          Router-specific: this IS the App Router root layout, so the link
-          applies to every route, which is exactly what the rule wants. The
-          deliberate choice not to use `next/font` here is explained above.
-        */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap"
-        />
+        {theme.toggleVisible && <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeBootScript(theme, themeKey) }} />}
+        {PRELOADED_FONTS.map((href) => (
+          <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
+        ))}
       </head>
       <body>
         {/* The owner console has its own chrome (admin/layout.tsx); the
@@ -222,7 +273,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           // The badge count comes from a cookie the basket actions keep current,
           // so showing it costs no database call on every page.
           <CartProvider initialCount={Math.max(0, Number((await cookies()).get(BASKET_COUNT_COOKIE)?.value) || 0)}>
-            <Nav />
+            <Nav showThemeToggle={theme.toggleVisible} />
             <main>{children}</main>
             <Footer />
             <BasketDrawer />

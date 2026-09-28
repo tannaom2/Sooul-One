@@ -87,21 +87,41 @@ export function Price({
 }
 
 export const BRAND_ACCENT: Record<string, string> = {
-  "the-true-store": "var(--color-truestore)",
+  "the-true-store": "var(--color-truestore-text)",
   "woman-axis": "var(--color-womanaxis)",
   "kids-vault": "var(--color-kidsvault)",
   "man-rituals": "var(--color-manrituals)",
 };
 
-export function ProductCard({ product }: { product: ProductSummary }) {
+/**
+ * The one product card, used on every page that lists products: shop pages,
+ * brand pages, the home page and the box page. Pages differ only in the
+ * action below the card (the box page's "Add to box") and, in "box" mode, in
+ * hiding the combo badge, since a combo doesn't apply inside a box. Stock
+ * reads the same everywhere: "Only N left" when low, "Out of stock" when gone.
+ */
+export function ProductCard({
+  product,
+  mode = "shop",
+  action,
+  selected = false,
+}: {
+  product: ProductSummary;
+  mode?: "shop" | "box";
+  /** Rendered under the card, outside its link (a link can't hold a button). */
+  action?: React.ReactNode;
+  /** Highlighted: e.g. already in the box being built. */
+  selected?: boolean;
+}) {
   const accent = BRAND_ACCENT[product.brandSlug] ?? "var(--color-ink)";
+  const inCombo = product.inCombo && mode === "shop";
 
   return (
-    <Link
-      href={`/product/${product.slug}`}
-      className="group flex flex-col gap-3 border border-rule p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-ink"
+    <div
+      className={`group flex flex-col gap-3 border bg-surface p-4 transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-strong hover:shadow-card ${selected ? "border-veg bg-shelf" : "border-rule"}`}
       style={{ borderRadius: "var(--radius-panel)" }}
     >
+    <Link href={`/product/${product.slug}`} className="flex flex-1 flex-col gap-3">
       {product.imageUrl ? (
         <Image
           src={product.imageUrl}
@@ -115,7 +135,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
       ) : (
         <div
           className="flex aspect-[4/3] items-end justify-start p-3"
-          style={{ background: `color-mix(in srgb, ${accent} 12%, white)` }}
+          style={{ background: `color-mix(in srgb, ${accent} 12%, var(--color-paper))` }}
         >
           <span className="text-micro font-semibold" style={{ color: accent }}>
             {product.categoryName}
@@ -130,11 +150,11 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         <VegMark isVeg={product.isVeg} />
       </div>
 
-      {(product.rating || product.inCombo) && (
+      {(product.rating || inCombo) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {product.rating && <Rating avg={product.rating.avg} count={product.rating.count} size="micro" />}
           {/* Part of a live combo; the product page shows the combo price. */}
-          {product.inCombo && (
+          {inCombo && (
             <span className="border px-2 py-0.5 text-micro font-semibold" style={{ borderColor: accent, color: accent, borderRadius: 999 }}>
               Combo offer
             </span>
@@ -177,6 +197,8 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         )}
       </div>
     </Link>
+    {action}
+    </div>
   );
 }
 

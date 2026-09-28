@@ -10,7 +10,7 @@ import { GUMMY_BRANDS } from "@/lib/gummy-brands";
  * link is followed (the layout stays mounted across pages, so it would
  * otherwise stay open) and on Escape.
  */
-export function MobileMenu() {
+export function MobileMenu({ showAccount = false, showBox = false }: { showAccount?: boolean; showBox?: boolean }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const panelId = useId();
@@ -47,7 +47,7 @@ export function MobileMenu() {
       </button>
 
       {open && (
-        <div id={panelId} className="absolute inset-x-0 top-full border-b border-rule bg-paper px-5 pb-4 shadow-sm">
+        <div id={panelId} className="absolute inset-x-0 top-full border-b border-rule bg-elevated px-5 pb-4 shadow-elevated">
           <nav aria-label="Menu" className="divide-y divide-rule">
             <Link href="/true-store" className={link}>
               The True Store
@@ -66,9 +66,19 @@ export function MobileMenu() {
                 ))}
               </ul>
             </div>
+            {showBox && (
+              <Link href="/box" className={`${link} text-veg`}>
+                Make your box
+              </Link>
+            )}
             <Link href="/stores" className={link}>
               Find a store
             </Link>
+            {showAccount && (
+              <Link href="/account" className={link}>
+                Your account
+              </Link>
+            )}
           </nav>
         </div>
       )}

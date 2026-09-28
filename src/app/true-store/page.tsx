@@ -39,7 +39,7 @@ export default async function TrueStore({ searchParams }: { searchParams: Promis
         options={options}
         active={active}
         total={products.length}
-        accent="var(--color-truestore)"
+        accent="var(--color-truestore-text)"
       />
       <section className="mx-auto max-w-6xl px-5 py-12">
         {products.length > 0 ? (

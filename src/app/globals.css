@@ -1,5 +1,44 @@
 @import "tailwindcss";
 
+/* Fonts, served from our own domain (public/fonts): no third-party request
+   blocking the first paint, and nothing leaves the site. Both are variable
+   fonts, so one file per character set covers every weight. latin-ext holds
+   the rupee sign (U+20B9), so pages with prices load it too. To update, fetch
+   the Google Fonts CSS again and replace the files, bumping -v1 in the names
+   (they are cached for a year as immutable). */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+  src: url("/fonts/bricolage-grotesque-latin-ext-v1.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+  src: url("/fonts/bricolage-grotesque-latin-v1.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/public-sans-latin-ext-v1.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/public-sans-latin-v1.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* ==========================================================================
    SooulOne design system
 
@@ -16,28 +55,59 @@
    Store. Each gummies brand gets one accent, used at brand level only.
    ========================================================================== */
 
+/* Tailwind's utilities, as aliases of the semantic tokens below. The names
+   predate the token layer and are kept (text-ink is text-primary, bg-paper is
+   bg-base, and so on), so switching theme is one set of variables, not a
+   dark: variant on every element. New code can use the semantic names:
+   bg-surface, bg-elevated, bg-inverse, text-on-primary, border-strong...
+   Never name a colour after a font size (base, small, micro, lead...): Tailwind
+   would give text-base both, and the colour would win. */
 @theme {
+  /* --- Content --- */
+  --color-ink: var(--text-primary);
+  --color-ink-soft: var(--text-secondary);
+  --color-ink-faint: var(--text-muted);
+  --color-on-primary: var(--text-on-primary);
+  --color-on-accent: var(--text-on-accent);
+  --color-on-inverse: var(--text-on-inverse);
+
   /* --- Surfaces --- */
-  --color-ink: #241c15; /* roasted brown-black, committed rather than tinted grey */
-  --color-ink-soft: #5b4f45;
-  --color-ink-faint: #8c7f73;
-  --color-paper: #ffffff;
-  --color-shelf: #f2ede4; /* warm neutral band, the colour of kraft board */
-  --color-rule: #ddd3c5;
+  /* bg-paper is the base surface; there's no "base" colour, since text-base is the body font size. */
+  --color-paper: var(--bg-base);
+  --color-shelf: var(--bg-muted); /* the kraft band */
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-overlay: var(--bg-overlay);
+  --color-inverse: var(--bg-inverse);
+
+  /* --- Borders --- */
+  --color-rule: var(--border-subtle);
+  --color-subtle: var(--border-subtle);
+  --color-strong: var(--border-strong);
+
+  /* --- Actions: the brand's primary is its roasted brown-black; turmeric is the accent --- */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent: var(--accent);
 
   /* --- Statutory marks. Reserved. Never decorative. --- */
-  --color-veg: #1f7a3d;
-  --color-nonveg: #8b3a2e;
+  --color-veg: var(--mark-veg);
+  --color-nonveg: var(--mark-nonveg);
 
-  /* --- Brand accents --- */
-  --color-truestore: #e8a317; /* turmeric */
-  --color-womanaxis: #b5477e;
-  --color-kidsvault: #2e7fbf;
-  --color-manrituals: #1f5c4d;
+  /* --- Brand accents (text-safe; turmeric has a separate fill) --- */
+  --color-truestore: var(--brand-truestore); /* turmeric, for fills and marks */
+  --color-truestore-text: var(--brand-truestore-text); /* turmeric, deepened to read as text */
+  --color-womanaxis: var(--brand-womanaxis);
+  --color-kidsvault: var(--brand-kidsvault);
+  --color-manrituals: var(--brand-manrituals);
 
   /* --- Feedback --- */
-  --color-alert: #b03a2e;
-  --color-caution: #c9760a;
+  --color-alert: var(--feedback-alert);
+  --color-caution: var(--feedback-caution);
+
+  /* --- Elevation: shadows by day, lighter surfaces by night --- */
+  --shadow-card: var(--elevation-card);
+  --shadow-elevated: var(--elevation-raised);
 
   /* --- Type --- */
   --font-display: "Bricolage Grotesque", "Trebuchet MS", "Segoe UI", sans-serif;
@@ -54,6 +124,116 @@
   --text-hero: clamp(2.75rem, 7vw, 4.75rem);
 
   --radius-panel: 4px; /* shallow. packaging is die-cut, not pill-shaped */
+}
+
+/* --------------------------------------------------------------------------
+   Semantic tokens: Day (default) and Night (src/lib/theme.ts)
+
+   Every colour pair below is checked against WCAG 2.1 AA: 4.5:1 for text,
+   3:1 for control edges (input borders, the primary button against the page).
+   The script and its results are in docs/THEME.md.
+
+   Day: white and warm off-white (kraft) surfaces; cards and overlays lift with
+   soft shadows.
+
+   Night, following Material's dark-theme guidance, in the brand's own warmth:
+   - No pure black: the base is a roasted-brown charcoal, tinted with the
+     brand the way Material recommends, so it reads as SooulOne, not a generic
+     slate theme. Pure black makes light text smear (halation).
+   - No pure white: text is a warm off-white, softer on the eyes.
+   - Depth by lighter surfaces, not shadows (which vanish on dark): base, then
+     surface (+~4%), then elevated (+~9%) for drawers, menus and the box tray.
+   - Accents desaturated and lifted: a CTA is a muted cream, not a glaring
+     white slab; brand colours are softened so they don't vibrate.
+   - Photos and pack art dimmed slightly (below), so a white pack isn't the
+     brightest thing on a dark screen.
+   The statutory veg and non-veg marks stay unmistakably green and brown-red.
+   Night applies on screen only: printed invoices and labels stay Day.
+   -------------------------------------------------------------------------- */
+:root {
+  --bg-base: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-muted: #f2ede4; /* warm off-white, the colour of kraft board */
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgb(36 28 21 / 0.45);
+  --bg-inverse: #241c15;
+
+  --text-primary: #241c15; /* roasted brown-black, committed rather than tinted grey */
+  --text-secondary: #5b4f45;
+  --text-muted: #72665a;
+  --text-on-primary: #ffffff;
+  --text-on-accent: #ffffff;
+  --text-on-inverse: #ffffff;
+
+  --border-subtle: #ddd3c5; /* hairlines and dividers */
+  --border-strong: #241c15; /* the statutory panel's heavy rule */
+  --border-input: #8c7f73; /* 3:1 so a field's edge is visible */
+
+  --primary: #241c15;
+  --primary-hover: #3a2e24;
+  --accent: #e8a317;
+
+  --mark-veg: #1f7a3d;
+  --mark-nonveg: #8b3a2e;
+
+  --brand-truestore: #e8a317;
+  --brand-truestore-text: #8a5e00;
+  --brand-womanaxis: #a53f72;
+  --brand-kidsvault: #256ca3;
+  --brand-manrituals: #1f5c4d;
+
+  --feedback-alert: #b03a2e;
+  --feedback-caution: #9c5a05;
+
+  --elevation-card: 0 1px 2px rgb(36 28 21 / 0.06), 0 4px 12px rgb(36 28 21 / 0.07);
+  --elevation-raised: 0 2px 6px rgb(36 28 21 / 0.08), 0 16px 40px rgb(36 28 21 / 0.16);
+}
+
+@media screen {
+  :root[data-theme="dark"] {
+    --bg-base: #16110d;
+    --bg-surface: #1e1813;
+    --bg-muted: #1b1511;
+    --bg-elevated: #2d241d;
+    --bg-overlay: rgb(8 6 4 / 0.66);
+    --bg-inverse: #2d241d;
+
+    --text-primary: #ece3d7;
+    --text-secondary: #c4b7a8;
+    --text-muted: #a09385;
+    --text-on-primary: #16110d;
+    --text-on-accent: #16110d;
+    --text-on-inverse: #ece3d7;
+
+    --border-subtle: #3a3029;
+    --border-strong: #a89a8b;
+    --border-input: #7d7064;
+
+    --primary: #ddd1c2;
+    --primary-hover: #e9dfd3;
+    --accent: #e0aa45;
+
+    --mark-veg: #6cc089;
+    --mark-nonveg: #de8c79;
+
+    --brand-truestore: #e0aa45;
+    --brand-truestore-text: #e9b75a;
+    --brand-womanaxis: #e592bb;
+    --brand-kidsvault: #7cb8e6;
+    --brand-manrituals: #6fc2a8;
+
+    --feedback-alert: #ef8a7d;
+    --feedback-caution: #e6a857;
+
+    /* Shadows don't read on dark: a hairline separates, the lighter surface lifts. */
+    --elevation-card: 0 0 0 1px rgb(255 255 255 / 0.04);
+    --elevation-raised: 0 0 0 1px rgb(255 255 255 / 0.06), 0 16px 40px rgb(0 0 0 / 0.5);
+  }
+
+  /* Bright photos and pack art, dimmed a touch so they don't glare. */
+  :root[data-theme="dark"] img {
+    filter: brightness(0.9);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -78,8 +258,8 @@
   }
 
   body {
-    background: var(--color-paper);
-    color: var(--color-ink);
+    background: var(--bg-base);
+    color: var(--text-primary);
     font-family: var(--font-body);
     font-size: var(--text-base);
     line-height: 1.6;
@@ -98,7 +278,7 @@
 
   /* In base (not unlayered) so .field:focus below still wins for text inputs. */
   :focus-visible {
-    outline: 2px solid var(--color-ink);
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
 }
@@ -170,7 +350,7 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1.25rem;
-  border: 1.5px solid var(--color-ink);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-panel);
   font-weight: 600;
   font-size: var(--text-base);
@@ -185,21 +365,23 @@
 }
 
 .btn-solid {
-  background: var(--color-ink);
-  color: var(--color-paper);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-on-primary);
 }
 
 .btn-solid:hover:not(:disabled) {
-  background: #3a2e24;
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
 .btn-outline {
   background: transparent;
-  color: var(--color-ink);
+  color: var(--text-primary);
 }
 
 .btn-outline:hover:not(:disabled) {
-  background: var(--color-shelf);
+  background: var(--bg-muted);
 }
 
 .btn:disabled {
@@ -210,16 +392,16 @@
 .field {
   width: 100%;
   padding: 0.625rem 0.75rem;
-  border: 1.5px solid var(--color-rule);
+  border: 1.5px solid var(--border-input);
   border-radius: var(--radius-panel);
-  background: var(--color-paper);
+  background: var(--bg-surface);
   font: inherit;
   color: inherit;
 }
 
 .field:focus {
   outline: none;
-  border-color: var(--color-ink);
+  border-color: var(--text-primary);
 }
 
 .label {
@@ -235,13 +417,15 @@
    between rows, right-aligned tabular figures.
    -------------------------------------------------------------------------- */
 
+/* On the surface tone: the same as the page by day, a step lighter by night. */
 .panel {
-  border: 1.5px solid var(--color-ink);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-panel);
+  background: var(--bg-surface);
 }
 
 .panel-head {
-  border-bottom: 1.5px solid var(--color-ink);
+  border-bottom: 1.5px solid var(--border-strong);
   padding: 0.625rem 0.875rem;
   font-family: var(--font-display);
   font-weight: 700;

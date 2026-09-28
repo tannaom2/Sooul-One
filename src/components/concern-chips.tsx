@@ -14,6 +14,7 @@ export function ConcernChips({
   active,
   total,
   accent,
+  hrefFor = (slug) => (slug ? `${basePath}?concern=${slug}` : basePath),
 }: {
   label: string;
   basePath: string;
@@ -21,6 +22,8 @@ export function ConcernChips({
   active: string | null;
   total: number;
   accent: string;
+  /** Where each chip goes (the box page keeps its edit state in the address). */
+  hrefFor?: (slug: string | null) => string;
 }) {
   if (options.length < 2) return null;
   const chip = (href: string, text: string, count: number, isActive: boolean) => (
@@ -32,10 +35,10 @@ export function ConcernChips({
       // instead of stepping through every chip tapped.
       replace
       aria-current={isActive ? "page" : undefined}
-      className={`shrink-0 border px-3 py-1.5 text-small whitespace-nowrap ${isActive ? "font-semibold text-paper" : "border-rule text-ink-soft hover:border-ink hover:text-ink"}`}
+      className={`shrink-0 border px-3 py-1.5 text-small whitespace-nowrap ${isActive ? "font-semibold text-on-accent" : "border-rule text-ink-soft hover:border-strong hover:text-ink"}`}
       style={{ borderRadius: 999, ...(isActive && { background: accent, borderColor: accent }) }}
     >
-      {text} <span className={isActive ? "opacity-80" : "text-ink-faint"}>{count}</span>
+      {text} <span className={isActive ? "" : "text-ink-faint"}>{count}</span>
     </Link>
   );
 
@@ -44,8 +47,8 @@ export function ConcernChips({
       <div className="mx-auto max-w-6xl px-5 py-4">
         <p className="mb-2 text-micro font-semibold tracking-wide text-ink-faint uppercase">{label}</p>
         <div className="flex flex-wrap gap-2">
-          {chip(basePath, "All", total, active === null)}
-          {options.map((o) => chip(`${basePath}?concern=${o.slug}`, o.name, o.count, o.slug === active))}
+          {chip(hrefFor(null), "All", total, active === null)}
+          {options.map((o) => chip(hrefFor(o.slug), o.name, o.count, o.slug === active))}
         </div>
       </div>
     </nav>

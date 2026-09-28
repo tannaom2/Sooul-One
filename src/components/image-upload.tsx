@@ -75,7 +75,7 @@ export function ImageUpload({ productId, images }: { productId?: string; images?
                 className="border border-rule"
               />
               {img.isPrimary && (
-                <span className="absolute bottom-0 left-0 bg-ink px-1 text-micro text-paper">
+                <span className="absolute bottom-0 left-0 bg-inverse px-1 text-micro text-on-inverse">
                   main
                 </span>
               )}
