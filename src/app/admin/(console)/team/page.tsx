@@ -41,8 +41,8 @@ export default async function TeamPage() {
           return (
             <div
               key={m.id}
-              className="grid gap-3 border-b border-rule px-4 py-4 last:border-b-0 lg:grid-cols-[1fr_auto] lg:items-center"
-              style={m.isActive ? undefined : { opacity: 0.6 }}
+              // Deactivated: a kraft background, not faded text, so it stays readable.
+              className={`grid gap-3 border-b border-rule px-4 py-4 last:border-b-0 lg:grid-cols-[1fr_auto] lg:items-center ${m.isActive ? "" : "bg-shelf"}`}
             >
               <div className="min-w-0 text-small">
                 <p>

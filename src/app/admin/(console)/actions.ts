@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { CATALOG_TAG, STORES_TAG, expireTag } from "@/lib/cache-tags";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { onOrderStatusChanged } from "@/server/referrals";
 import { audit, requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { diffFields } from "@/lib/audit-diff";
@@ -236,6 +237,17 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     ingredients: input.ingredients ?? null,
   };
 
+  // Landed cost: finance data, set only by roles that can see it, and only
+  // when the field was on the form (a copy editor's save leaves it alone).
+  if (can(session.role, "finance:view") && form.has("unitCost")) {
+    const raw = String(form.get("unitCost") ?? "").trim();
+    const cost = raw === "" ? null : Number(raw);
+    if (cost != null && (!Number.isFinite(cost) || cost < 0 || cost > 100_000)) {
+      return { ok: false, message: "Check the landed cost.", fieldErrors: { unitCost: ["Enter a cost in rupees, or leave it blank."] } };
+    }
+    data.unitCost = cost;
+  }
+
   if (input.regulatoryType === "PACKAGED_FOOD" || input.regulatoryType === "BEVERAGE") {
     data.nutritionFacts = input.nutritionFacts;
   }
@@ -455,6 +467,8 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
     if (count === 1 && statusChanges && releasesStock(status)) {
       await releaseStock(tx, { id: orderId, couponCode: previous.couponCode });
     }
+    // Referral credit an order won't use goes back; a friend's referral moves on.
+    if (count === 1 && statusChanges) await onOrderStatusChanged(tx, orderId, status, session.email);
     // The GST invoice is issued when the goods leave, so orders cancelled
     // before dispatch never take a number and the series has no gaps.
     if (count === 1 && statusChanges && status === "SHIPPED" && !previous.invoiceNumber) {

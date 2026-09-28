@@ -48,11 +48,14 @@ export function ProductForm({
   brands,
   product,
   canEditPricing = true,
+  canSeeCost = false,
 }: {
   brands: Brand[];
   product?: any;
   /** False for copy editors: prices show read-only (still submitted, so the server can confirm they didn't change). */
   canEditPricing?: boolean;
+  /** Landed cost is finance data: only roles that see revenue see or set it. */
+  canSeeCost?: boolean;
 }) {
   const locked = !canEditPricing;
   const [state, submit, pending] = useActionState(saveProduct, INITIAL);
@@ -257,6 +260,15 @@ export function ProductForm({
         </div>
         <Field label="Warn when shippable stock is at or below" name="lowStockThreshold" type="number" defaultValue={String(product?.lowStockThreshold ?? 10)} />
         <Field label="Pack weight (g)" name="weightGrams" type="number" defaultValue={product?.weightGrams?.toString()} optional />
+        {canSeeCost && (
+          <Field
+            label="Landed cost per unit (₹)"
+            name="unitCost"
+            defaultValue={product?.unitCost?.toString()}
+            optional
+            hint="Never shown to shoppers. Boxes use it to refuse prices that could sell below cost."
+          />
+        )}
       </div>
 
       {/* --- Discount promotion --- */}

@@ -14,6 +14,9 @@ const AREAS: Record<string, string> = {
   Order: "Orders",
   ProductBatch: "Stock batches",
   Bundle: "Bundles",
+  Box: "Boxes",
+  Referral: "Referrals",
+  ReferralProgram: "Referral rules",
   Review: "Reviews",
   StoreLocation: "Stores",
   ProductImage: "Images",
@@ -21,7 +24,7 @@ const AREAS: Record<string, string> = {
   PaymentReconciliation: "Reconciliation",
 };
 
-const WARNING_ACTIONS = new Set(["SIGN_IN_FAILED", "SIGN_IN_LOCKED", "MFA_FAILED", "MFA_LOCKED", "DELETE_BUNDLE", "TEAM_DEACTIVATE", "TEAM_RESET_ACCESS"]);
+const WARNING_ACTIONS = new Set(["SIGN_IN_FAILED", "SIGN_IN_LOCKED", "MFA_FAILED", "MFA_LOCKED", "DELETE_BUNDLE", "DELETE_BOX", "REFERRAL_PAY", "REFERRAL_VOID", "TEAM_DEACTIVATE", "TEAM_RESET_ACCESS"]);
 
 const when = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",

@@ -49,7 +49,8 @@ export default async function BundlesPage() {
       ) : (
         <div className="grid gap-3">
           {bundles.map((b) => (
-            <div key={b.id} className="panel" style={{ opacity: b.isActive ? 1 : 0.6 }}>
+            <div key={b.id} className={`panel ${b.isActive ? "" : "bg-shelf"}`}>
+              {/* Off: a kraft background, not faded text, so it stays readable (WCAG 1.4.3). */}
               <div className="panel-head flex flex-wrap items-center justify-between gap-2">
                 <span>
                   {b.name} <span className="text-micro font-normal text-ink-faint">· {b.brand.name}</span>

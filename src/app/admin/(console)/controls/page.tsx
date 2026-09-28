@@ -4,6 +4,7 @@ import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
 import { DEFAULT_CONTROLS, type StoreControls } from "@/lib/store-controls";
+import { DEFAULT_THEME_SETTINGS, type ThemeSettings } from "@/lib/theme";
 import { ControlsForm } from "./controls-form";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +14,13 @@ export default async function StoreControlsPage() {
   if (!session) return <NoAccess />;
 
   let controls: StoreControls = DEFAULT_CONTROLS;
+  let theme: ThemeSettings = DEFAULT_THEME_SETTINGS;
   try {
     const row = await db.storeSettings.findUnique({ where: { id: "default" } });
-    if (row) controls = { ordersPaused: row.ordersPaused, pauseMessage: row.pauseMessage, codEnabled: row.codEnabled, bundlesEnabled: row.bundlesEnabled };
+    if (row) {
+      controls = { ordersPaused: row.ordersPaused, pauseMessage: row.pauseMessage, codEnabled: row.codEnabled, bundlesEnabled: row.bundlesEnabled };
+      theme = { toggleVisible: row.themeToggleVisible, forcedTheme: row.forcedTheme === "DARK" ? "dark" : "light" };
+    }
   } catch (error) {
     reportError("admin/controls", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
@@ -30,7 +35,7 @@ export default async function StoreControlsPage() {
           recorded in Activity.
         </p>
       </div>
-      <ControlsForm controls={controls} onlinePayments={onlinePaymentsEnabled()} />
+      <ControlsForm controls={controls} theme={theme} onlinePayments={onlinePaymentsEnabled()} />
     </div>
   );
 }

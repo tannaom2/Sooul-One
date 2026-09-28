@@ -117,6 +117,9 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               {decimalToPaise(order.bundleDiscountAmount) > 0 && (
                 <div className="panel-row"><dt>{order.bundleLabel ?? "Bundle offer"}</dt><dd className="text-veg">−{money(order.bundleDiscountAmount)}</dd></div>
               )}
+              {decimalToPaise(order.creditAmount) > 0 && (
+                <div className="panel-row"><dt>{order.creditKind === "WELCOME" ? "Welcome offer (referral)" : "Referral credit"}</dt><dd className="text-veg">−{money(order.creditAmount)}</dd></div>
+              )}
               {decimalToPaise(order.discountAmount) > 0 && (
                 <div className="panel-row"><dt>Discount {order.couponCode && `(${order.couponCode})`}</dt><dd className="text-veg">−{money(order.discountAmount)}</dd></div>
               )}
@@ -185,7 +188,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <div className="grid gap-1 p-3.5 text-small">
               <p className="font-semibold">{address.name}</p>
               <p className="break-words text-ink-soft">{order.guestEmail}</p>
-              <p className="tabular text-ink-soft">{order.guestPhone}</p>
+              <p className="text-ink-soft">
+                <span className="tabular">{order.guestPhone}</span>
+                {/* Proven by SMS code at checkout: the number is real and was in the shopper's hand. */}
+                {order.phoneVerifiedAt ? (
+                  <span className="ml-2 text-micro font-semibold text-veg">Verified by code</span>
+                ) : (
+                  <span className="ml-2 text-micro text-ink-faint">Not verified</span>
+                )}
+              </p>
+              <p className="text-micro text-ink-faint">{order.customerId ? "Has an account" : "Guest checkout"}</p>
               <p className="mt-2 text-ink-soft">
                 {address.line1}
                 {address.line2 ? `, ${address.line2}` : ""}

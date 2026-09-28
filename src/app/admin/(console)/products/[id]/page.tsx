@@ -39,7 +39,13 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
   return (
     <div>
       <h1 className="mb-6 text-h2 font-extrabold">{product.name}</h1>
-      <ProductForm brands={brands} product={product} canEditPricing={can(session.role, "products:pricing")} />
+      {/* Landed cost is finance data: kept out of the page for roles that can't see it. */}
+      <ProductForm
+        brands={brands}
+        product={can(session.role, "finance:view") ? product : { ...product, unitCost: null }}
+        canEditPricing={can(session.role, "products:pricing")}
+        canSeeCost={can(session.role, "finance:view")}
+      />
     </div>
   );
 }

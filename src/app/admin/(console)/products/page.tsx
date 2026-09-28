@@ -168,7 +168,7 @@ export default async function AdminProducts({
               href={productFiltersHref({ view: v, q, brand })}
               aria-current={active ? "page" : undefined}
               className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-small whitespace-nowrap ${
-                active ? "border-ink font-semibold" : "border-transparent text-ink-soft hover:text-ink"
+                active ? "border-strong font-semibold" : "border-transparent text-ink-soft hover:text-ink"
               }`}
             >
               {PRODUCT_VIEWS[v]} <span className="tabular text-ink-faint">{counts[i]}</span>

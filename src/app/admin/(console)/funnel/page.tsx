@@ -78,7 +78,7 @@ export default async function FunnelPage({
                 </div>
                 <div className="h-2 w-full bg-shelf">
                   <div
-                    className="h-2 bg-ink"
+                    className="h-2 bg-primary"
                     style={{ width: `${Math.max(2, (stage.sessions / maxSessions) * 100)}%` }}
                   />
                 </div>
