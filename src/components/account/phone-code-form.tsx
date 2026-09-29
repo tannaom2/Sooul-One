@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { confirmSignInCode, requestSignInCode } from "@/app/account/actions";
+import { Turnstile } from "@/components/turnstile";
 
 /**
  * Mobile number → 6-digit code, for signing in and for confirming a cash on
@@ -26,6 +27,7 @@ export function PhoneCodeForm({
   onVerified,
   onChangeNumber,
   autoFocus = true,
+  turnstileSiteKey = null,
 }: {
   sent?: CodeSent;
   submitLabel: string;
@@ -33,6 +35,8 @@ export function PhoneCodeForm({
   /** Checkout owns the number, so "Change number" goes back to its contact step. */
   onChangeNumber?: () => void;
   autoFocus?: boolean;
+  /** Set when Cloudflare Turnstile is on: sending a code needs a human check. */
+  turnstileSiteKey?: string | null;
 }) {
   const [phone, setPhone] = useState(initialSent?.phone ?? "");
   const [sent, setSent] = useState<CodeSent | null>(initialSent ?? null);
@@ -41,6 +45,9 @@ export function PhoneCodeForm({
   const [busy, setBusy] = useState(false);
   const [wait, setWait] = useState(initialSent?.resendIn ?? 0);
   const codeRef = useRef<HTMLInputElement>(null);
+  const [humanToken, setHumanToken] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
+  const needsHuman = Boolean(turnstileSiteKey) && !humanToken;
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -56,7 +63,9 @@ export function PhoneCodeForm({
     setBusy(true);
     setError(null);
     try {
-      const result = await requestSignInCode(number);
+      const result = await requestSignInCode(number, humanToken);
+      // A token works once: get a fresh one for a resend.
+      if (turnstileSiteKey) setHumanReset((n) => n + 1);
       if (result.ok) {
         setSent({ phone: number, sentTo: result.sentTo, resendIn: result.resendIn, demoCode: result.demoCode });
         setWait(result.resendIn);
@@ -123,7 +132,8 @@ export function PhoneCodeForm({
             aria-describedby={error ? "signin-error" : undefined}
           />
         </div>
-        <button type="submit" disabled={busy} className="btn btn-solid justify-self-start">
+        <Turnstile siteKey={turnstileSiteKey} action="sms-code" onToken={setHumanToken} resetKey={humanReset} />
+        <button type="submit" disabled={busy || needsHuman} className="btn btn-solid justify-self-start">
           {busy ? "Sending…" : "Send code"}
         </button>
         <p className="text-micro text-ink-faint">We&rsquo;ll text you a 6-digit code. No password to remember.</p>
@@ -176,8 +186,9 @@ export function PhoneCodeForm({
       <div aria-live="polite" role="status">
         {error && <p id="signin-code-error" className="text-small text-alert">{error}</p>}
       </div>
+      {wait <= 0 && <Turnstile siteKey={turnstileSiteKey} action="sms-code" onToken={setHumanToken} resetKey={humanReset} />}
       <div className="flex flex-wrap gap-x-5 gap-y-1 text-small">
-        <button type="button" className="underline disabled:no-underline disabled:text-ink-faint" disabled={busy || wait > 0} onClick={() => send(sent.phone)}>
+        <button type="button" className="underline disabled:no-underline disabled:text-ink-faint" disabled={busy || wait > 0 || needsHuman} onClick={() => send(sent.phone)}>
           {wait > 0 ? `Send a new code in ${wait}s` : "Send a new code"}
         </button>
         <button

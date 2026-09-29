@@ -6,7 +6,8 @@
  * CSP header). 'strict-dynamic' lets those scripts load others, which is how
  * checkout loads Razorpay's script. No 'unsafe-inline', so an injected
  * <script> or onclick= does nothing. The host list stays as a fallback for
- * browsers that predate 'strict-dynamic'.
+ * browsers that predate 'strict-dynamic'. Cloudflare Turnstile (src/lib/turnstile.ts)
+ * loads its script and challenge frame from challenges.cloudflare.com.
  *
  * Styles keep 'unsafe-inline': React style={{...}} props are style
  * attributes, which a nonce can't cover, and injected CSS can't run code.
@@ -20,11 +21,11 @@
 export function contentSecurityPolicy(nonce: string, { dev }: { dev: boolean }): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com${dev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com https://challenges.cloudflare.com${dev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data: https://res.cloudinary.com",
-    "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://challenges.cloudflare.com",
     "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com",
     "object-src 'none'",
     "form-action 'self'",

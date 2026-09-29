@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { isSellable } from "@/lib/basket-rules";
 import { reviewInputSchema } from "@/lib/validation/review";
 import { limitPublic } from "@/server/rate-limit";
+import { verifyTurnstile } from "@/lib/turnstile";
+import { clientIp } from "@/lib/rate-limit-rules";
 
 /**
  * Review submission.
@@ -21,6 +23,9 @@ import { limitPublic } from "@/server/rate-limit";
 export async function POST(request: Request) {
   const limited = await limitPublic("reviews");
   if (limited) return limited;
+  // Human check, when Turnstile is on: reviews are a favourite target for spam scripts.
+  const human = await verifyTurnstile(request.headers.get("x-turnstile-token"), { ip: clientIp(request.headers), expectedAction: "review", failOpen: true });
+  if (!human.ok) return NextResponse.json({ message: "Tick the human check, then submit your review." }, { status: 403 });
 
   const parsed = reviewInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

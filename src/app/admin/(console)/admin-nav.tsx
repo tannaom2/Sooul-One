@@ -6,8 +6,13 @@ import { usePathname } from "next/navigation";
 
 export type AdminNavGroup = { group: string | null; items: { href: string; label: string }[] };
 
-function isActive(path: string, href: string): boolean {
+function matches(path: string, href: string): boolean {
   return href === "/admin" ? path === "/admin" : path === href || path.startsWith(`${href}/`);
+}
+
+/** The most specific link wins: /admin/analytics/risk lights "RTO risk", not "Analytics" too. */
+function isActive(path: string, href: string, all: readonly string[]): boolean {
+  return matches(path, href) && !all.some((other) => other !== href && other.length > href.length && matches(path, other));
 }
 
 /**
@@ -21,6 +26,7 @@ export function AdminNav({ groups }: { groups: AdminNavGroup[] }) {
   // The link clicked on this page; forgotten as soon as the address changes.
   const [clicked, setClicked] = useState<{ href: string; from: string } | null>(null);
   const pendingHref = clicked && clicked.from === path ? clicked.href : null;
+  const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
   return (
     <nav aria-label="Owner console" className="flex flex-wrap gap-x-4 gap-y-1 px-5 pb-4 lg:block lg:flex-1 lg:overflow-y-auto lg:px-3">
       {groups.map((g) => (
@@ -28,7 +34,7 @@ export function AdminNav({ groups }: { groups: AdminNavGroup[] }) {
           {g.group && <p className="hidden px-2 pb-1 text-micro font-semibold tracking-wide text-ink-faint uppercase lg:block">{g.group}</p>}
           <ul className="flex flex-wrap gap-x-4 lg:block">
             {g.items.map((item) => {
-              const current = isActive(path, item.href);
+              const current = isActive(path, item.href, hrefs);
               // Looks active at once when clicked; announced as the current page once it is.
               const active = pendingHref ? item.href === pendingHref : current;
               return (

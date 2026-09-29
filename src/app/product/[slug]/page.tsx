@@ -1,3 +1,4 @@
+import { turnstileSiteKey } from "@/lib/turnstile";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { displayPrice, getOffersForProduct, getProductBySlug } from "@/server/catalog";
@@ -410,7 +411,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <div className="mt-8">
           <h3 className="mb-4 text-h3 font-bold">Write a review</h3>
-          <ReviewForm productId={product.id} />
+          <ReviewForm productId={product.id} turnstileSiteKey={turnstileSiteKey()} />
         </div>
       </section>
     </article>

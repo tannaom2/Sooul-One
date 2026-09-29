@@ -7,9 +7,18 @@ import {
 } from "@/lib/session-cookie";
 import { contentSecurityPolicy, newNonce } from "@/lib/csp";
 import { CUSTOMER_COOKIE, CUSTOMER_COOKIE_OPTIONS } from "@/lib/customer-session";
+import { PAGE_LIMITS, decide, guardMode, requestKind, suspicious, type Verdict } from "@/lib/bot-guard";
+import { MemoryLimiter } from "@/lib/memory-rate-limit";
+import { clientIp } from "@/lib/rate-limit-rules";
+import { verifyCrawler } from "@/server/crawler-verify";
 
 /**
- * Runs before every page request. Three jobs:
+ * Runs before every page request. Four jobs:
+ *
+ * -1. Bot guard (src/lib/bot-guard.ts): turn away scripts, headless browsers,
+ *    bulk scrapers and fake search engines, and throttle floods, before any
+ *    page or API does work. BOT_GUARD=off|monitor|block (block by default in
+ *    production; monitor elsewhere, which logs what it would have done).
  *
  * 0. Security: a fresh script nonce and Content-Security-Policy for every
  *    request (src/lib/csp.ts). The policy goes on the request too, which is
@@ -35,10 +44,61 @@ import { CUSTOMER_COOKIE, CUSTOMER_COOKIE_OPTIONS } from "@/lib/customer-session
 
 const BOT = /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|lighthouse/i;
 
-export function proxy(request: NextRequest) {
+const limiter = new MemoryLimiter();
+const MODE = guardMode(process.env.BOT_GUARD, process.env.NODE_ENV === "production");
+// QA suites and the demo drive a headless browser on purpose.
+const ALLOW_HEADLESS = process.env.BOT_GUARD_ALLOW_HEADLESS === "1";
+
+function refused(status: 403 | 429, retryAfter?: number): NextResponse {
+  return new NextResponse(status === 403 ? "Automated access isn't allowed." : "Too many requests. Slow down and try again shortly.", {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...(retryAfter ? { "Retry-After": String(retryAfter) } : {}) },
+  });
+}
+
+/** The bot guard's answer for this request: a response to send instead, or null to carry on. */
+async function guard(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (MODE === "off") return null;
+  const req = {
+    path: pathname,
+    userAgent: request.headers.get("user-agent"),
+    acceptLanguage: request.headers.get("accept-language"),
+    allowHeadless: ALLOW_HEADLESS,
+  };
+  const ip = clientIp(request.headers);
+  let verdict: Verdict = decide(req);
+  if (verdict.action === "allow" && verdict.reason === "exempt") return null;
+  let crawler = false;
+  if (verdict.action === "verify") {
+    // Verified: the crawler allowance. Failed: a fake. Unknown (DNS trouble): an ordinary visitor.
+    const check = await verifyCrawler(ip, verdict.crawler);
+    crawler = check === "verified";
+    verdict = check === "failed" ? { action: "block", reason: `fake ${verdict.crawler} crawler` } : { action: "allow" };
+  }
+
+  // Floods: page views, and Server Action posts (add to basket and the like).
+  const isAction = request.method === "POST" && request.headers.has("next-action");
+  // Page loads and background fetches (link prefetches, in-app navigations) have separate allowances.
+  const background = !isAction && requestKind(request.headers, request.nextUrl) === "background";
+  const scope = isAction ? "actions" : crawler ? "crawler" : background ? "background" : suspicious(req) ? "suspicious" : "pages";
+  const limit = PAGE_LIMITS[scope];
+  const over = verdict.action === "allow" && ip !== "local" && limiter.hit(`${scope}:${ip}`, limit.windowSeconds) > limit.max;
+
+  if (verdict.action === "allow" && !over) return null;
+  const reason = verdict.action === "block" ? verdict.reason : `over ${scope} limit`;
+  // The path and reason only: addresses are personal data and stay out of logs.
+  console.warn(`[bot-guard] ${MODE === "block" ? "refused" : "would refuse"} ${request.method} ${pathname}: ${reason}`);
+  if (MODE === "monitor") return null;
+  return over ? refused(429, limiter.retryAfter(`${scope}:${ip}`, limit.windowSeconds)) : refused(403);
+}
+
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAdmin = pathname.startsWith("/admin");
   const isApi = pathname.startsWith("/api");
+
+  const blocked = await guard(request, pathname);
+  if (blocked) return blocked;
 
   // Bots would otherwise each count as a new "visitor" in the funnel.
   const newSessionId =

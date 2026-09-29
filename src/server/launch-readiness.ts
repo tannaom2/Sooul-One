@@ -1,4 +1,5 @@
 import "server-only";
+import { turnstileEnabled } from "@/lib/turnstile";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { BUSINESS_TAG, CATALOG_TAG } from "@/lib/cache-tags";
@@ -46,6 +47,7 @@ export async function getReadiness(): Promise<Readiness> {
     liveProductsWithoutPhotos: products.filter((p) => p._count.images === 0).map((p) => p.name),
     emailConfigured: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
     smsConfigured: codeDelivery(process.env) === "sms",
+    botCheckConfigured: turnstileEnabled(),
     cronConfigured: Boolean(process.env.CRON_SECRET),
     onlinePayments: onlinePaymentsEnabled(),
     errorMonitoring: Boolean(process.env.SENTRY_DSN),

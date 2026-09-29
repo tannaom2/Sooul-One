@@ -83,6 +83,10 @@ export const PUBLIC_LIMITS = {
   pincode: { max: 60, windowSeconds: 10 * 60 },
   /** Browser analytics events; a flood would bloat the events table. */
   events: { max: 600, windowSeconds: 10 * 60 },
+  /** Storefront assistant messages: a long conversation is well under this. */
+  assistant: { max: 120, windowSeconds: 10 * 60 },
+  /** Assistant order lookups (number + mobile or email): slow enough that guessing is pointless. */
+  assistantLookup: { max: 15, windowSeconds: 10 * 60 },
 } as const satisfies Record<string, Limit>;
 
 export type PublicScope = keyof typeof PUBLIC_LIMITS;

@@ -8,9 +8,9 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
       // Per-session (cart/checkout), post-purchase (order), and the owner
-      // console — none of these are content a search result should ever land
+      // console, shopper accounts and referral links — none of these are content a search result should ever land
       // a stranger on.
-      disallow: ["/admin", "/api", "/cart", "/checkout", "/order"],
+      disallow: ["/admin", "/api", "/cart", "/checkout", "/order", "/account", "/r/"],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };

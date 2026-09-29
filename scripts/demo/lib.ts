@@ -7,6 +7,12 @@
  * Postgres, that it is connected to a database whose name ends in "_demo".
  */
 import pg from "pg";
+import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
+
+// Same as src/lib/db.ts: Node's 250 ms per-address connect attempt is shorter
+// than the round trip to Neon (us-east-2) from some networks, so connections
+// failed with ETIMEDOUT. Two seconds per address connects reliably.
+setDefaultAutoSelectFamilyAttemptTimeout(2000);
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 

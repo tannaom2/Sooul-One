@@ -38,6 +38,9 @@ const nextConfig: NextConfig = {
       { source: "/:icon(favicon.ico|favicon-16x16.png|favicon-32x32.png|apple-touch-icon.png|og-default.png)", headers: cache(DAY) },
       { source: "/:icon(android-chrome-.*\\.png)", headers: cache(DAY) },
       { source: "/demo-assets/:file*", headers: cache(DAY) },
+      // Belt and braces with robots.txt: the console and accounts never appear in search.
+      { source: "/:area(admin|account)/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
+      { source: "/:area(admin|account)", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
     ];
   },
 };

@@ -16,8 +16,18 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
 import { Pool } from "pg";
 import { withConnectRetry } from "./db-retry";
+
+// Node tries each of a host's addresses for only 250 ms before moving on
+// ("happy eyeballs"). Neon's pooler has several addresses, and a round trip to
+// us-east-2 takes about 200 ms from Singapore and 255–300 ms from some Indian
+// networks, so every attempt was cut off just short of connecting and the
+// connection failed with ETIMEDOUT after ~0.8 s. Two seconds per address
+// connects every time (measured: 0/10 → 10/10); a truly unreachable address
+// still fails over to the next.
+setDefaultAutoSelectFamilyAttemptTimeout(2000);
 
 function createClient(adapter: PrismaPg) {
   return new PrismaClient({

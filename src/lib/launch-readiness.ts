@@ -26,6 +26,8 @@ export interface ReadinessFacts {
   readonly emailConfigured: boolean;
   /** MSG91 keys set, so shoppers can get sign-in codes (src/lib/otp.ts). */
   readonly smsConfigured: boolean;
+  /** Cloudflare Turnstile keys set, so scripts can't place orders (src/lib/turnstile.ts). */
+  readonly botCheckConfigured: boolean;
   readonly cronConfigured: boolean;
   readonly onlinePayments: boolean;
   readonly errorMonitoring: boolean;
@@ -136,6 +138,16 @@ export function evaluateReadiness(f: ReadinessFacts): Readiness {
         ? undefined
         : "Until then shoppers can't sign in or see their past orders, and cash on delivery orders go through without a code proving the number.",
       status: f.smsConfigured ? "done" : "warning",
+      blocking: false,
+    },
+    {
+      id: "bot-check",
+      group: "Operations",
+      label: "Human check on checkout (Cloudflare Turnstile)",
+      detail: f.botCheckConfigured
+        ? undefined
+        : "Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY (free at Cloudflare). Until then a script could place orders that hold stock; rate limits still apply.",
+      status: f.botCheckConfigured ? "done" : "warning",
       blocking: false,
     },
     {

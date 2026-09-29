@@ -23,6 +23,9 @@ describe("contentSecurityPolicy", () => {
     expect(directive(csp, "script-src")).toContain("https://checkout.razorpay.com");
     expect(directive(csp, "frame-src")).toContain("https://api.razorpay.com");
     expect(directive(csp, "connect-src")).toContain("https://lumberjack.razorpay.com");
+    // Cloudflare Turnstile's script and challenge frame (src/lib/turnstile.ts).
+    expect(directive(csp, "script-src")).toContain("https://challenges.cloudflare.com");
+    expect(directive(csp, "frame-src")).toContain("https://challenges.cloudflare.com");
   });
 
   it("blocks plugins, framing by other sites and base-tag hijacks", () => {

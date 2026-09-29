@@ -1,5 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
+import { verifyTurnstile } from "@/lib/turnstile";
+import { clientIp } from "@/lib/rate-limit-rules";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
@@ -25,9 +28,17 @@ const TRY_AGAIN = "That didn't go through. Check your connection and try again."
 const phoneSchema = z.string().max(20);
 const codeSchema = z.string().max(12);
 
-export async function requestSignInCode(phone: string): Promise<SendCodeResult> {
+/**
+ * Text a sign-in code. With Cloudflare Turnstile on, a human-check token is
+ * required (from the sign-in form, or checkout's own widget): each text costs
+ * money, so a script can't run up the bill. Fails open if Cloudflare is
+ * unreachable; the per-number and per-connection limits still apply.
+ */
+export async function requestSignInCode(phone: string, humanToken?: string | null): Promise<SendCodeResult> {
   const parsed = phoneSchema.safeParse(phone);
   if (!parsed.success) return { ok: false, message: "Enter a 10-digit Indian mobile number." };
+  const human = await verifyTurnstile(humanToken, { ip: clientIp(await headers()), expectedAction: ["sms-code", "checkout"], failOpen: true });
+  if (!human.ok) return { ok: false, message: "Tick the human check, then send the code." };
   try {
     return await sendSignInCode(parsed.data);
   } catch (error) {

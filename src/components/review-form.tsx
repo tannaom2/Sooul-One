@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Turnstile } from "@/components/turnstile";
 
-export function ReviewForm({ productId }: { productId: string }) {
+export function ReviewForm({ productId, turnstileSiteKey = null }: { productId: string; turnstileSiteKey?: string | null }) {
   const [name, setName] = useState("");
   // No rating until the shopper picks one: a preset five stars gets submitted
   // untouched and inflates the average.
@@ -12,6 +13,9 @@ export function ReviewForm({ productId }: { productId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; rating?: string; comment?: string }>({});
   const [busy, setBusy] = useState(false);
+  // Human check when Turnstile is on (src/lib/turnstile.ts); a token works once.
+  const [humanToken, setHumanToken] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
 
   async function submit() {
     // Stays enabled at all times (per Web Interface Guidelines) — validation
@@ -31,9 +35,10 @@ export function ReviewForm({ productId }: { productId: string }) {
     try {
       const response = await fetch("/api/reviews", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(humanToken ? { "X-Turnstile-Token": humanToken } : {}) },
         body: JSON.stringify({ productId, customerName: name, rating, comment }),
       });
+      if (turnstileSiteKey) setHumanReset((n) => n + 1);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         setError(body.message ?? "That didn't save. Try again.");
@@ -112,7 +117,8 @@ export function ReviewForm({ productId }: { productId: string }) {
 
           {error && <p className="text-small text-alert">{error}</p>}
 
-          <button onClick={submit} disabled={busy} className="btn btn-solid w-fit">
+          <Turnstile siteKey={turnstileSiteKey} action="review" onToken={setHumanToken} resetKey={humanReset} />
+          <button onClick={submit} disabled={busy || (Boolean(turnstileSiteKey) && !humanToken)} className="btn btn-solid w-fit">
             {busy ? "Sending…" : "Submit review"}
           </button>
         </div>

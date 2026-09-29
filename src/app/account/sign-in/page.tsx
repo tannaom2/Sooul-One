@@ -4,6 +4,7 @@ import { codeDeliveryHere, getCustomer } from "@/server/customer-auth";
 import { SignInClient } from "./sign-in-client";
 import { ReferralCodeEntry } from "@/components/account/referral-code-entry";
 import { getProgram, rememberedCode } from "@/server/referrals";
+import { turnstileSiteKey } from "@/lib/turnstile";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sign in — SooulOne", robots: { index: false } };
@@ -29,7 +30,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
             that number show up straight away.
           </p>
           <div className="mt-8">
-            <SignInClient next={next} />
+            <SignInClient next={next} turnstileSiteKey={turnstileSiteKey()} />
           </div>
           {program.isActive && (
             <div className="mt-8 border-t border-rule pt-6">
