@@ -49,6 +49,16 @@ async function main() {
     // Matches the demo business profile, so the footer shows a licence.
     NEXT_PUBLIC_FSSAI_LICENCE_NUMBER: "10726001000417",
     NEXT_TELEMETRY_DISABLED: "1",
+    // The QA suite and screenshots drive a headless browser; the bot guard
+    // still turns away curl, scripts and scrapers (src/lib/bot-guard.ts).
+    BOT_GUARD_ALLOW_HEADLESS: "1",
+    // The admin copilot may be reached at http://localhost on the demo machine (docs/COPILOT.md).
+    COPILOT_ALLOW_LOCALHOST: "1",
+    // DEMO_TURNSTILE=1 shows the human check with Cloudflare's published
+    // always-pass test keys, which work on localhost only.
+    ...(process.env.DEMO_TURNSTILE === "1"
+      ? { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" }
+      : { TURNSTILE_SITE_KEY: "", TURNSTILE_SECRET_KEY: "" }),
   };
 
   // Next keeps a data cache on disk (catalogue, business profile). Starting

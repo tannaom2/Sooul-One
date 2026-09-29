@@ -29,6 +29,7 @@
     "demo:start": "tsx scripts/demo/demo-start.mts",
     "demo:down": "tsx scripts/demo/demo-down.mts",
     "demo:growth": "tsx scripts/demo/demo-growth.mts",
+    "demo:intel": "tsx scripts/demo/demo-intel.mts",
     "demo:migrate": "tsx scripts/demo/demo-migrate.mts"
   },
   "prisma": {
