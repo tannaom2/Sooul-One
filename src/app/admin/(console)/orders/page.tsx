@@ -7,6 +7,13 @@ import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
 import { ORDER_VIEWS, ORDERS_PAGE_SIZE, orderFiltersHref, parseOrderFilters, type OrderView } from "@/lib/order-filters";
 import { reportError } from "@/lib/observability";
+import { BarList, ChartCard, Pager, StackedBar, SERIES, BAD, GOOD } from "@/components/charts";
+import { riskBand } from "@/lib/intel/rto-risk";
+
+const STATUS_COLOR: Record<string, string> = {
+  DELIVERED: GOOD, SHIPPED: SERIES[1], PROCESSING: SERIES[0], PAID: SERIES[2], PENDING_PAYMENT: SERIES[4],
+  RTO: BAD, RETURNED: SERIES[3], CANCELLED: SERIES[4], FAILED: BAD, REFUNDED: SERIES[3],
+};
 
 export const dynamic = "force-dynamic";
 
@@ -120,47 +127,70 @@ export default async function Orders({
           }
         />
       ) : (
-        <div className="panel">
-          {orders.map((o) => {
-            const address = o.shippingAddress as any;
-            return (
-              <Link
-                key={o.id}
-                href={`/admin/orders/${o.id}`}
-                className="grid gap-x-4 gap-y-0.5 border-b border-rule px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[10rem_1fr_7rem_6rem] sm:items-center"
-              >
-                <span className="tabular font-semibold">{o.orderNumber}</span>
-                <span className="min-w-0 truncate text-ink-soft">
-                  {address?.name ?? o.guestEmail}
-                  <span className="text-ink-faint">
-                    {" "}
-                    · {o._count.items} {o._count.items === 1 ? "item" : "items"} · {formatDate(o.placedAt)}
-                  </span>
-                </span>
-                <span className="text-ink-soft">{o.status.replace(/_/g, " ").toLowerCase()}</span>
-                <span className="tabular font-semibold sm:text-right">{formatINR(decimalToPaise(o.totalAmount))}</span>
-              </Link>
-            );
-          })}
+        // The 10-item rule: ten orders, and beside them charts of exactly those ten.
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
+          <div className="grid gap-3">
+            <p className="text-micro text-ink-faint">
+              Showing {(page - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(page * ORDERS_PAGE_SIZE, total)} of {total}, newest first
+            </p>
+            <div className="panel">
+              {orders.map((o) => {
+                const address = o.shippingAddress as any;
+                return (
+                  <Link
+                    key={o.id}
+                    href={`/admin/orders/${o.id}`}
+                    className="grid gap-x-4 gap-y-0.5 border-b border-rule px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[10rem_1fr_7rem_6rem] sm:items-center"
+                  >
+                    <span className="tabular font-semibold">{o.orderNumber}</span>
+                    <span className="min-w-0 truncate text-ink-soft">
+                      {address?.name ?? o.guestEmail}
+                      <span className="text-ink-faint">
+                        {" "}
+                        · {o._count.items} {o._count.items === 1 ? "item" : "items"} · {formatDate(o.placedAt)}
+                      </span>
+                    </span>
+                    <span className="text-ink-soft">
+                      {o.status.replace(/_/g, " ").toLowerCase()}
+                      {o.riskScore !== null && ["PAID", "PROCESSING"].includes(o.status) && riskBand(o.riskScore) !== "LOW" && (
+                        <span className="block text-micro font-semibold text-alert">risk {o.riskScore}</span>
+                      )}
+                    </span>
+                    <span className="tabular font-semibold sm:text-right">{formatINR(decimalToPaise(o.totalAmount))}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <Pager page={page} pages={pages} href={(p) => orderFiltersHref({ ...filters, page: p })} />
+          </div>
+          <div className="grid gap-4">
+            <ChartCard title="Where these orders are" note="The ten orders on this page">
+              <StackedBar
+                parts={Object.entries(
+                  orders.reduce<Record<string, number>>((acc, o) => ({ ...acc, [o.status]: (acc[o.status] ?? 0) + 1 }), {}),
+                ).map(([status, value]) => ({ label: status.replace(/_/g, " ").toLowerCase(), value, color: STATUS_COLOR[status] ?? SERIES[4] }))}
+              />
+            </ChartCard>
+            <ChartCard title="How they pay">
+              <StackedBar
+                parts={[
+                  { label: "Cash on delivery", value: orders.filter((o) => o.paymentGateway === "COD").length, color: SERIES[0] },
+                  { label: "Paid online", value: orders.filter((o) => o.paymentGateway !== "COD").length, color: SERIES[2] },
+                ]}
+              />
+            </ChartCard>
+            <ChartCard title="Order values">
+              <BarList
+                rows={orders.map((o) => ({
+                  label: `${o.orderNumber} · ${(o.shippingAddress as any)?.name ?? ""}`,
+                  value: decimalToPaise(o.totalAmount),
+                  display: formatINR(decimalToPaise(o.totalAmount)),
+                  color: SERIES[1],
+                }))}
+              />
+            </ChartCard>
+          </div>
         </div>
-      )}
-
-      {pages > 1 && (
-        <nav aria-label="Pages" className="flex items-center gap-4 text-small">
-          {page > 1 && (
-            <Link href={orderFiltersHref({ ...filters, page: page - 1 })} className="underline">
-              Newer
-            </Link>
-          )}
-          <span className="tabular text-ink-faint">
-            Page {page} of {pages}
-          </span>
-          {page < pages && (
-            <Link href={orderFiltersHref({ ...filters, page: page + 1 })} className="underline">
-              Older
-            </Link>
-          )}
-        </nav>
       )}
     </div>
   );

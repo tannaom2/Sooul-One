@@ -37,7 +37,14 @@ export interface OrderAnalyticsSummary {
   readonly topProducts: readonly { productId: string; name: string; quantity: number; revenuePaise: number }[];
   readonly topBrands: readonly { brandId: string; name: string; revenuePaise: number }[];
   readonly revenueByState: readonly { state: string; revenuePaise: number; orderCount: number }[];
+  /** Revenue per India day ("2026-09-28"), oldest first, including days with none. */
+  readonly revenueByDay: readonly { day: string; revenuePaise: number; orderCount: number }[];
+  /** Orders by weekday (0 = Monday) and hour, India time: when people buy. */
+  readonly ordersByWeekdayHour: readonly (readonly number[])[];
 }
+
+const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+const istDay = (d: Date) => new Date(d.getTime() + IST_OFFSET).toISOString().slice(0, 10);
 
 /**
  * `firstOrderByEmail` must be each email's earliest paid-like order across
@@ -111,7 +118,30 @@ export function computeOrderAnalytics(
     .map(([state, v]) => ({ state, ...v }))
     .sort((a, b) => b.revenuePaise - a.revenuePaise);
 
+  // --- Revenue per day and when orders come in (India time) -----------------
+  const dayTotals = new Map<string, { revenuePaise: number; orderCount: number }>();
+  const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+  for (const order of orders) {
+    const key = istDay(order.placedAt);
+    const d = dayTotals.get(key) ?? { revenuePaise: 0, orderCount: 0 };
+    d.revenuePaise += order.totalAmountPaise;
+    d.orderCount += 1;
+    dayTotals.set(key, d);
+    const ist = new Date(order.placedAt.getTime() + IST_OFFSET);
+    grid[(ist.getUTCDay() + 6) % 7][ist.getUTCHours()] += 1;
+  }
+  const keys = [...dayTotals.keys()].sort();
+  const revenueByDay: { day: string; revenuePaise: number; orderCount: number }[] = [];
+  if (keys.length) {
+    for (let t = Date.parse(keys[0]); t <= Date.parse(keys[keys.length - 1]); t += 24 * 60 * 60 * 1000) {
+      const day = new Date(t).toISOString().slice(0, 10);
+      revenueByDay.push({ day, ...(dayTotals.get(day) ?? { revenuePaise: 0, orderCount: 0 }) });
+    }
+  }
+
   return {
+    revenueByDay,
+    ordersByWeekdayHour: grid,
     orderCount: orders.length,
     revenuePaise,
     averageOrderValuePaise,

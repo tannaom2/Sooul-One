@@ -58,16 +58,51 @@ export interface WebhookPayment {
   readonly amountPaise: number | null;
   readonly method: string | null;
   readonly errorReason: string | null;
+  /** customer, bank, gateway, business or internal: who caused a failure. */
+  readonly errorSource: string | null;
+  readonly errorCode: string | null;
+}
+
+/** A payment-method outage Razorpay announced (payment.downtime.*). */
+export interface WebhookDowntime {
+  readonly id: string;
+  readonly method: string;
+  readonly instrument: Record<string, unknown> | null;
+  readonly severity: string;
+  readonly status: string;
+  readonly beginAt: Date;
+  readonly endAt: Date | null;
 }
 
 export interface ParsedWebhook {
   readonly event: string;
   readonly payment: WebhookPayment | null;
   readonly refund: { readonly id: string | null; readonly amountPaise: number | null } | null;
+  readonly downtime: WebhookDowntime | null;
 }
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/** Razorpay sends times as Unix seconds. */
+const seconds = (v: unknown) => (typeof v === "number" && v > 0 ? new Date(v * 1000) : null);
+
+function parseDowntime(event: string, entity: Record<string, unknown> | undefined): WebhookDowntime | null {
+  if (!event.startsWith("payment.downtime.") || !entity) return null;
+  const id = str(entity.id);
+  const method = str(entity.method);
+  const beginAt = seconds(entity.begin);
+  if (!id || !method || !beginAt) return null;
+  const instrument = entity.instrument && typeof entity.instrument === "object" ? (entity.instrument as Record<string, unknown>) : null;
+  return {
+    id: id.slice(0, 64),
+    method: method.slice(0, 20),
+    instrument,
+    severity: (str(entity.severity) ?? "low").slice(0, 10),
+    status: event.slice("payment.downtime.".length).slice(0, 10) || (str(entity.status) ?? "started"),
+    beginAt,
+    endAt: seconds(entity.end),
+  };
+}
 
 /** The fields the route uses, read defensively from a verified body. Null if it isn't JSON. */
 export function parseRazorpayWebhook(rawBody: string): ParsedWebhook | null {
@@ -77,12 +112,20 @@ export function parseRazorpayWebhook(rawBody: string): ParsedWebhook | null {
   } catch {
     return null;
   }
-  const b = body as { event?: unknown; payload?: { payment?: { entity?: Record<string, unknown> }; refund?: { entity?: Record<string, unknown> } } };
+  const b = body as {
+    event?: unknown;
+    payload?: {
+      payment?: { entity?: Record<string, unknown> };
+      refund?: { entity?: Record<string, unknown> };
+      "payment.downtime"?: { entity?: Record<string, unknown> };
+    };
+  };
+  const event = str(b?.event) ?? "";
   const p = b?.payload?.payment?.entity;
   const r = b?.payload?.refund?.entity;
   const razorpayOrderId = str(p?.order_id);
   return {
-    event: str(b?.event) ?? "",
+    event,
     payment: razorpayOrderId
       ? {
           id: str(p?.id),
@@ -90,8 +133,11 @@ export function parseRazorpayWebhook(rawBody: string): ParsedWebhook | null {
           amountPaise: num(p?.amount),
           method: str(p?.method),
           errorReason: str(p?.error_description) ?? str(p?.error_reason),
+          errorSource: str(p?.error_source),
+          errorCode: str(p?.error_code),
         }
       : null,
     refund: r ? { id: str(r.id), amountPaise: num(r.amount) } : null,
+    downtime: parseDowntime(event, b?.payload?.["payment.downtime"]?.entity),
   };
 }

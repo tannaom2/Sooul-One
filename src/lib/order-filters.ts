@@ -18,7 +18,8 @@ export type OrderView = keyof typeof ORDER_VIEWS;
 
 export type OrderFilters = { view: OrderView; q: string; page: number };
 
-export const ORDERS_PAGE_SIZE = 25;
+/** The 10-item rule (src/lib/intel/paging.ts): ten orders per page, charts of those ten beside them. */
+export const ORDERS_PAGE_SIZE = 10;
 
 export function parseOrderFilters(params: { view?: string; q?: string; page?: string }): OrderFilters {
   const view = params.view && Object.hasOwn(ORDER_VIEWS, params.view) ? (params.view as OrderView) : "all";

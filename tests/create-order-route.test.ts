@@ -40,6 +40,8 @@ const h = vi.hoisted(() => {
     razorpayCreate: vi.fn(),
     getCustomer: vi.fn(),
     codRequiresCode: vi.fn(),
+    codForCheckout: vi.fn(),
+    verifyTurnstile: vi.fn(),
     afterCallbacks: [] as (() => Promise<unknown>)[],
   };
 });
@@ -69,6 +71,9 @@ vi.mock("@/server/referrals", () => ({
   onOrderPlaced: vi.fn(async () => undefined),
   CreditChanged: class CreditChanged extends Error {},
 }));
+// The intelligence engine's COD rules and risk scoring, and the human check: tested on their own.
+vi.mock("@/server/intel", () => ({ codForCheckout: h.codForCheckout, recordOrderRisk: vi.fn(async () => null) }));
+vi.mock("@/lib/turnstile", () => ({ verifyTurnstile: h.verifyTurnstile }));
 vi.mock("razorpay", () => ({
   default: class {
     orders = { create: h.razorpayCreate };
@@ -163,6 +168,9 @@ beforeEach(() => {
   // Codes can't be sent (no SMS provider): cash on delivery works as before.
   h.getCustomer.mockResolvedValue(null);
   h.codRequiresCode.mockReturnValue(false);
+  // The owner's COD rules allow it, and the human check is off or passed.
+  h.codForCheckout.mockResolvedValue({ allowed: true });
+  h.verifyTurnstile.mockResolvedValue({ ok: true });
 });
 
 describe("one order per checkout attempt (double clicks and retries)", () => {
@@ -203,6 +211,11 @@ describe("one order per checkout attempt (double clicks and retries)", () => {
   it("stores the key on the order it places", async () => {
     await post(INPUT, { "Idempotency-Key": KEY });
     expect(h.tx.order.create.mock.calls[0][0].data.idempotencyKey).toBe(KEY);
+  });
+
+  it("stores the pincode in its own column, for pincode reports and COD rules", async () => {
+    await post(INPUT, { "Idempotency-Key": KEY });
+    expect(h.tx.order.create.mock.calls[0][0].data.postalCode).toBe(INPUT.postalCode);
   });
 
   it("ignores a malformed key rather than trusting it", async () => {
@@ -291,6 +304,33 @@ describe("refusals before anything is reserved", () => {
     const res = await post(INPUT);
     expect(res.status).toBe(400);
     expect((await res.json()).message).toMatch(/Cash on delivery isn't available/);
+  });
+
+  it("refuses when the human check fails, before reading the basket", async () => {
+    h.verifyTurnstile.mockResolvedValue({ ok: false, reason: "rejected" });
+    const res = await post(INPUT, { "X-Turnstile-Token": "bad" });
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("HUMAN_CHECK");
+    expect(h.verifyTurnstile.mock.calls[0][0]).toBe("bad");
+    expect(h.quoteCart).not.toHaveBeenCalled();
+    expect(h.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses cash on delivery the owner's rules rule out, with their message, and reserves nothing", async () => {
+    h.codForCheckout.mockResolvedValue({ allowed: false, reason: "PINCODE_BLOCKED", message: "Cash on delivery isn't available for this pincode." });
+    const res = await post(INPUT);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "COD_UNAVAILABLE", message: "Cash on delivery isn't available for this pincode." });
+    // Asked with the pincode and the server's total. A typed-in number is
+    // nobody's proof, so the buyer's own history isn't consulted for a guest.
+    expect(h.codForCheckout).toHaveBeenCalledWith(INPUT.postalCode, 45700, {});
+    expect(h.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("checks the buyer's own history only for a number proven by code", async () => {
+    h.getCustomer.mockResolvedValue({ id: "cust-1", phone: INPUT.phone, name: "Asha", email: null });
+    await post(INPUT);
+    expect(h.codForCheckout).toHaveBeenCalledWith(INPUT.postalCode, 45700, { customerId: "cust-1", phone: INPUT.phone });
   });
 
   it("refuses an address outside Gujarat, by India Post's state not the typed one", async () => {

@@ -105,6 +105,16 @@
   --color-alert: var(--feedback-alert);
   --color-caution: var(--feedback-caution);
 
+  /* --- Charts (admin analytics): categorical series, good/bad, and the empty track --- */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-good: var(--chart-good);
+  --color-chart-bad: var(--chart-bad);
+  --color-chart-track: var(--chart-track);
+
   /* --- Elevation: shadows by day, lighter surfaces by night --- */
   --shadow-card: var(--elevation-card);
   --shadow-elevated: var(--elevation-raised);
@@ -185,6 +195,17 @@
   --feedback-alert: #b03a2e;
   --feedback-caution: #9c5a05;
 
+  /* Chart marks: each at least 3:1 on the surface (WCAG 1.4.11), and told apart
+     by hue and by a label, never by colour alone. The veg green stays reserved. */
+  --chart-1: #8a5e00;
+  --chart-2: #256ca3;
+  --chart-3: #1f5c4d;
+  --chart-4: #a53f72;
+  --chart-5: #72665a;
+  --chart-good: #2c6e49;
+  --chart-bad: #b03a2e;
+  --chart-track: #efe8dd;
+
   --elevation-card: 0 1px 2px rgb(36 28 21 / 0.06), 0 4px 12px rgb(36 28 21 / 0.07);
   --elevation-raised: 0 2px 6px rgb(36 28 21 / 0.08), 0 16px 40px rgb(36 28 21 / 0.16);
 }
@@ -224,6 +245,15 @@
 
     --feedback-alert: #ef8a7d;
     --feedback-caution: #e6a857;
+
+    --chart-1: #e9b75a;
+    --chart-2: #7cb8e6;
+    --chart-3: #6fc2a8;
+    --chart-4: #e592bb;
+    --chart-5: #a09385;
+    --chart-good: #7dc49b;
+    --chart-bad: #ef8a7d;
+    --chart-track: #2d241d;
 
     /* Shadows don't read on dark: a hairline separates, the lighter surface lifts. */
     --elevation-card: 0 0 0 1px rgb(255 255 255 / 0.04);
@@ -455,3 +485,16 @@
   60% { transform: scale(1.15); }
   100% { transform: scale(1); }
 }
+
+/* Copilot (console) and the storefront assistant slide in from the side;
+   reduced-motion users get them at once (the rule near the top). */
+@keyframes drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes sheet-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.copilot-panel { animation: drawer-in 180ms ease-out; }
+.assistant-panel { animation: sheet-up 180ms ease-out; }

@@ -4,15 +4,27 @@ import { useActionState, useState } from "react";
 import { keepFormValues } from "@/components/keep-form-values";
 import { DEFAULT_PAUSE_MESSAGE, type StoreControls } from "@/lib/store-controls";
 import { THEME_LABEL, type ThemeSettings } from "@/lib/theme";
+import type { CheckoutCodSettings } from "@/server/intel";
 import { saveStoreControls, type ControlsResult } from "./actions";
 
 const INITIAL: ControlsResult = { ok: false };
 
-export function ControlsForm({ controls, theme, onlinePayments }: { controls: StoreControls; theme: ThemeSettings; onlinePayments: boolean }) {
+export function ControlsForm({
+  controls,
+  theme,
+  codRules,
+  onlinePayments,
+}: {
+  controls: StoreControls;
+  theme: ThemeSettings;
+  codRules: CheckoutCodSettings;
+  onlinePayments: boolean;
+}) {
   const [state, submit, pending] = useActionState(saveStoreControls, INITIAL);
   const [paused, setPaused] = useState(controls.ordersPaused);
   const [cod, setCod] = useState(controls.codEnabled);
   const [toggleVisible, setToggleVisible] = useState(theme.toggleVisible);
+  const [autoBlock, setAutoBlock] = useState(codRules.codAutoBlock);
 
   return (
     <form onSubmit={keepFormValues(submit)} className="grid gap-4">
@@ -66,6 +78,81 @@ export function ControlsForm({ controls, theme, onlinePayments }: { controls: St
             <span className="block text-ink-soft">Off stops every bundle discount in baskets and checkout at once.</span>
           </span>
         </label>
+      </fieldset>
+
+      <fieldset className="panel grid gap-3 p-4" disabled={!cod}>
+        <legend className="label px-1">Cash on delivery rules</legend>
+        {!cod && <p className="text-small text-ink-soft">Cash on delivery is off, so these rules don&apos;t apply right now.</p>}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="label" htmlFor="codMinOrderValue">
+              Cash on delivery from (₹, incl. GST)
+            </label>
+            <input
+              id="codMinOrderValue"
+              name="codMinOrderValue"
+              type="number"
+              min={1}
+              max={100000}
+              step={1}
+              className="field"
+              defaultValue={codRules.codMinOrderValue ?? ""}
+              placeholder="No minimum"
+            />
+            <p className="mt-1 text-micro text-ink-faint">On a small order, one refused parcel costs more than several delivered ones earn.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="codMaxOrderValue">
+              Cash on delivery up to (₹, incl. GST)
+            </label>
+            <input
+              id="codMaxOrderValue"
+              name="codMaxOrderValue"
+              type="number"
+              min={1}
+              max={100000}
+              step={1}
+              className="field"
+              defaultValue={codRules.codMaxOrderValue ?? ""}
+              placeholder="No limit"
+            />
+            <p className="mt-1 text-micro text-ink-faint">Larger orders are asked to pay online: a refused big parcel costs the most.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="preferredPayment">
+              Checkout selects first
+            </label>
+            <select id="preferredPayment" name="preferredPayment" className="field" defaultValue={codRules.preferredPayment}>
+              <option value="ONLINE">UPI (pay online)</option>
+              <option value="COD">Cash on delivery</option>
+            </select>
+            <p className="mt-1 text-micro text-ink-faint">Shoppers can still choose any option offered.</p>
+          </div>
+        </div>
+        <label className="flex items-start gap-3 text-small">
+          <input type="checkbox" name="codAutoBlock" className="mt-1" checked={autoBlock} onChange={(e) => setAutoBlock(e.target.checked)} />
+          <span>
+            <span className="font-semibold">Switch off cash on delivery by itself for pincodes whose parcels keep coming back</span>
+            <span className="block text-ink-soft">
+              Worked out from every finished COD parcel to that pincode. Your own rule for a pincode (Analytics → Pincodes) always
+              wins, either way.
+            </span>
+          </span>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="codAutoBlockRtoPercent">
+              When at least this share came back (%)
+            </label>
+            <input id="codAutoBlockRtoPercent" name="codAutoBlockRtoPercent" type="number" min={5} max={100} className="field" defaultValue={codRules.codAutoBlockRtoPercent} disabled={!autoBlock} required />
+          </div>
+          <div>
+            <label className="label" htmlFor="codAutoBlockMinShipped">
+              Out of at least this many COD parcels
+            </label>
+            <input id="codAutoBlockMinShipped" name="codAutoBlockMinShipped" type="number" min={1} max={100} className="field" defaultValue={codRules.codAutoBlockMinShipped} disabled={!autoBlock} required />
+          </div>
+        </div>
       </fieldset>
 
       <fieldset className="panel grid gap-3 p-4">

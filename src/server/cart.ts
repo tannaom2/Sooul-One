@@ -22,6 +22,7 @@ import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
 import { getStoreControls } from "@/server/store-settings";
+import { extraDeliveryDays } from "@/server/intel";
 import { couponValidity, minimumOrderMessage } from "@/lib/checkout/coupons";
 import { productAvailability } from "@/lib/checkout/availability";
 
@@ -355,7 +356,9 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   const cart = { items };
 
   const zone = context.pincode ? zoneForPincode(context.pincode) : SLOWEST_SERVED_ZONE;
-  const estimatedDeliveryDate = estimateDeliveryDate(new Date(), zone);
+  // Plus any days the owner added for this pincode (a slow lane, a flood): cached, so no extra round trip.
+  const extraDays = await extraDeliveryDays(context.pincode);
+  const estimatedDeliveryDate = new Date(estimateDeliveryDate(new Date(), zone).getTime() + extraDays * 24 * 60 * 60 * 1000);
 
   const gstTreatment = gstTreatmentFor(context.state, SELLER_STATE);
 

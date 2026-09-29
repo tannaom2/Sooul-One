@@ -12,6 +12,7 @@ import { STEPS, normalise, stepSummary, validateStep, type CheckoutForm as FormV
 import { maskMobile } from "@/lib/mobile";
 import { requestSignInCode } from "@/app/account/actions";
 import { PhoneCodeForm, type CodeSent } from "@/components/account/phone-code-form";
+import { Turnstile } from "@/components/turnstile";
 import { useCheckout } from "./use-checkout";
 import { useQuote } from "./use-quote";
 import { usePincode } from "./use-pincode";
@@ -59,7 +60,22 @@ export interface CheckoutAccount {
  * The form restores a draft from sessionStorage, which only exists in the
  * browser, so it renders after hydration; the server sends the page frame.
  */
-export function CheckoutClient({ state, account }: { state: CheckoutState; account: CheckoutAccount }) {
+export function CheckoutClient({
+  state,
+  account,
+  preferredPayment = "ONLINE",
+  turnstileSiteKey = null,
+  downMethods = [],
+}: {
+  state: CheckoutState;
+  account: CheckoutAccount;
+  /** Which way to pay is selected first (Store controls). */
+  preferredPayment?: "ONLINE" | "COD";
+  /** Set when Cloudflare Turnstile is on (src/lib/turnstile.ts). */
+  turnstileSiteKey?: string | null;
+  /** Payment methods Razorpay reports an outage for right now. */
+  downMethods?: readonly string[];
+}) {
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
   // Closed before launch, or paused by the owner (src/lib/store-controls.ts).
   if (!state.open) {
@@ -81,10 +97,22 @@ export function CheckoutClient({ state, account }: { state: CheckoutState; accou
       </div>
     );
   }
-  return <CheckoutForm methods={state.methods} account={account} />;
+  return <CheckoutForm methods={state.methods} account={account} preferredPayment={preferredPayment} turnstileSiteKey={turnstileSiteKey} downMethods={downMethods} />;
 }
 
-function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[]; account: CheckoutAccount }) {
+function CheckoutForm({
+  methods,
+  account,
+  preferredPayment,
+  turnstileSiteKey,
+  downMethods,
+}: {
+  methods: readonly PaymentMethod[];
+  account: CheckoutAccount;
+  preferredPayment: "ONLINE" | "COD";
+  turnstileSiteKey: string | null;
+  downMethods: readonly string[];
+}) {
   const router = useRouter();
   const { form, step, errors, setErrors, set, setForm, next, edit, clearDraft } = useCheckout(account.prefill);
   // The number proven by code in this browser: the signed-in one, or the one
@@ -94,13 +122,27 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
   // One id per checkout visit, sent with every Place order: a double click or
   // a retry after a dropped connection gets the same order back, never two.
   const [attemptKey] = useState(() => crypto.randomUUID());
-  const { quote, couponRejected, empty, creditNote, referralWaiting } = useQuote(form.postalCode, form.state, form.couponCode);
+  const { quote, couponRejected, empty, creditNote, referralWaiting, cod } = useQuote(form.postalCode, form.state, form.couponCode);
   const place = usePincode(form.postalCode);
   // Only what this deployment can take right now: UPI and card once Razorpay
   // is set up, cash on delivery unless the owner has switched it off.
   const onlinePayments = methods.includes("ONLINE");
   const payOptions = PAY_OPTIONS.filter((o) => (o.value === "COD" ? methods.includes("COD") : onlinePayments));
-  const [pay, setPay] = useState<PayChoice>(payOptions[0]?.value ?? "COD");
+  const [pay, setPay] = useState<PayChoice>(
+    preferredPayment === "COD" && methods.includes("COD")
+      ? "COD"
+      : // UPI having trouble (Razorpay's notice or the owner's): start on card instead.
+        downMethods.includes("upi") && onlinePayments
+        ? "CARD"
+        : (payOptions[0]?.value ?? "COD"),
+  );
+  // The owner's COD rules can rule it out for this pincode, number or total:
+  // move to paying online, and show why on the cash on delivery option.
+  const codOff = !cod.allowed;
+  const payNow: PayChoice = codOff && pay === "COD" && onlinePayments ? "UPI" : pay;
+  // Human check before an order is placed, when Turnstile is on.
+  const [humanToken, setHumanToken] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [blocked, setBlocked] = useState<{ name: string; reason?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +201,9 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
 
   /** Text a code to the order's number; the payment step then asks for it. */
   async function askForCode(phone: string) {
-    const sent = await requestSignInCode(phone);
+    const sent = await requestSignInCode(phone, humanToken);
+    // That token is spent: the widget fetches a fresh one for placing the order.
+    if (turnstileSiteKey) setHumanReset((n) => n + 1);
     if (sent.ok) {
       setCodeSent({ phone, sentTo: sent.sentTo, resendIn: sent.resendIn, demoCode: sent.demoCode });
     } else if (sent.resendIn) {
@@ -188,22 +232,28 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
 
     try {
       const clean = normalise(form);
-      if (pay === "COD" && account.codNeedsCode && clean.phone !== (justProven ?? provenPhone)) {
+      if (payNow === "COD" && account.codNeedsCode && clean.phone !== (justProven ?? provenPhone)) {
         await askForCode(clean.phone);
         return;
       }
       const response = await fetch("/api/checkout/create-order", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": attemptKey },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": attemptKey,
+          ...(humanToken ? { "X-Turnstile-Token": humanToken } : {}),
+        },
         body: JSON.stringify({
           ...clean,
           line2: clean.line2 || undefined,
           couponCode: clean.couponCode || undefined,
-          paymentMethod: pay === "COD" ? "COD" : "RAZORPAY",
+          paymentMethod: payNow === "COD" ? "COD" : "RAZORPAY",
           marketingConsent,
         }),
       });
       const body = await response.json();
+      // A human-check token works once: any answer from the server used it up.
+      if (turnstileSiteKey) setHumanReset((n) => n + 1);
 
       if (response.status === 409) {
         setBlocked(body.blocked ?? []);
@@ -249,12 +299,17 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
         currency: "INR",
         name: "SooulOne",
         order_id: body.razorpayOrderId,
-        prefill: { name: clean.name, email: clean.email, contact: clean.phone, ...(pay === "UPI" && { method: "upi" }) },
+        prefill: { name: clean.name, email: clean.email, contact: clean.phone, ...(payNow === "UPI" && { method: "upi" }) },
         handler: () => {
           clearDraft();
           router.replace(`/order/${body.orderNumber}?t=${body.accessToken}`);
         },
-        modal: { ondismiss: () => setBusy(false) },
+        modal: {
+          ondismiss: () => {
+            setBusy(false);
+            track({ type: "PAYMENT_DISMISSED", method: payNow === "UPI" ? "UPI" : "CARD" });
+          },
+        },
       }).open();
     } catch {
       setError("No connection. Check your network and try again.");
@@ -282,8 +337,9 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
   const stepIndex = STEPS.indexOf(step);
   const codNeedsCodeNow = account.codNeedsCode && normalise(form).phone !== provenPhone;
   // Only for the number still on the form, and only while paying on delivery.
-  const showCode = codeSent !== null && pay === "COD" && codeSent.phone === normalise(form).phone;
-  const payLabel = !total ? "Place order" : pay === "COD" ? `Place order · pay ${total} on delivery` : `Pay ${total}${pay === "UPI" ? " with UPI" : ""}`;
+  const showCode = codeSent !== null && payNow === "COD" && codeSent.phone === normalise(form).phone;
+  const payLabel = !total ? "Place order" : payNow === "COD" ? `Place order · pay ${total} on delivery` : `Pay ${total}${payNow === "UPI" ? " with UPI" : ""}`;
+  const humanPending = Boolean(turnstileSiteKey) && !humanToken;
 
   const field = (
     id: keyof typeof form,
@@ -459,22 +515,42 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
                       <fieldset>
                         <legend className="sr-only">How would you like to pay?</legend>
                         <div className="grid gap-2">
-                          {payOptions.map((o) => (
-                            <label
-                              key={o.value}
-                              className={`flex cursor-pointer items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${pay === o.value ? "border-strong bg-shelf" : "border-rule"}`}
-                              style={{ borderRadius: "var(--radius-panel)" }}
-                            >
-                              <input type="radio" name="pay" className="mt-1" checked={pay === o.value} onChange={() => choosePay(o.value)} />
-                              <span>
-                                <span className="block text-small font-semibold">{o.title}</span>
-                                <span className="block text-micro text-ink-soft">
-                                  {o.detail}
-                                  {o.value === "COD" && codNeedsCodeNow && " We'll text you a code to confirm your number."}
+                          {payOptions.map((o) => {
+                            const unavailable = o.value === "COD" && codOff;
+                            // Razorpay reports an outage for this way to pay: say so, don't hide it.
+                            const troubled = o.value === "UPI" ? downMethods.includes("upi") : o.value === "CARD" && ["card", "netbanking"].some((m) => downMethods.includes(m));
+                            return (
+                              <label
+                                key={o.value}
+                                className={`flex items-start gap-3 border p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${unavailable ? "cursor-not-allowed border-rule" : "cursor-pointer"} ${payNow === o.value ? "border-strong bg-shelf" : "border-rule"}`}
+                                style={{ borderRadius: "var(--radius-panel)" }}
+                              >
+                                <input
+                                  type="radio"
+                                  name="pay"
+                                  className="mt-1"
+                                  checked={payNow === o.value}
+                                  disabled={unavailable}
+                                  aria-describedby={unavailable ? "cod-unavailable" : undefined}
+                                  onChange={() => choosePay(o.value)}
+                                />
+                                <span>
+                                  <span className="block text-small font-semibold">{o.title}</span>
+                                  {unavailable ? (
+                                    <span id="cod-unavailable" className="block text-micro text-ink-soft">
+                                      {onlinePayments ? cod.message : "Cash on delivery isn't available for this order, and online payment isn't set up yet, so it can't be placed right now."}
+                                    </span>
+                                  ) : (
+                                    <span className="block text-micro text-ink-soft">
+                                      {o.detail}
+                                      {o.value === "COD" && codNeedsCodeNow && " We'll text you a code to confirm your number."}
+                                      {troubled && <span className="block font-semibold text-caution">Having trouble right now: another way to pay may be quicker.</span>}
+                                    </span>
+                                  )}
                                 </span>
-                              </span>
-                            </label>
-                          ))}
+                              </label>
+                            );
+                          })}
                         </div>
                       </fieldset>
 
@@ -496,6 +572,7 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
                           <p className="mb-3 text-small font-semibold">Confirm your number to place this cash on delivery order</p>
                           <PhoneCodeForm
                             key={codeSent.phone}
+                            turnstileSiteKey={turnstileSiteKey}
                             sent={codeSent}
                             submitLabel={total ? `Confirm and place order · pay ${total} on delivery` : "Confirm and place order"}
                             onChangeNumber={() => {
@@ -514,9 +591,12 @@ function CheckoutForm({ methods, account }: { methods: readonly PaymentMethod[];
                           </p>
                         </div>
                       ) : (
-                        <button onClick={() => submit()} disabled={busy || !quote?.canProceed} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">
-                          {busy ? "Working…" : payLabel}
-                        </button>
+                        <>
+                          <Turnstile siteKey={turnstileSiteKey} action="checkout" onToken={setHumanToken} resetKey={humanReset} />
+                          <button onClick={() => submit()} disabled={busy || !quote?.canProceed || humanPending || (codOff && payNow === "COD")} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">
+                            {busy ? "Working…" : payLabel}
+                          </button>
+                        </>
                       )}
                       {quote && !quote.canProceed && (
                         <p className="text-small text-alert">Some items can&rsquo;t ship right now. <Link href="/cart" className="underline">Review your basket</Link>.</p>

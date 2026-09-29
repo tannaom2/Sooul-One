@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(join(__dirname, "..", "src", "app", "globals.css"), "utf8");
 
 function tokens(block: string): Record<string, string> {
-  return Object.fromEntries([...block.matchAll(/--([a-z-]+):\s*(#[0-9a-f]{6})\b/gi)].map((m) => [m[1], m[2].toLowerCase()]));
+  return Object.fromEntries([...block.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\b/gi)].map((m) => [m[1], m[2].toLowerCase()]));
 }
 
 const day = tokens(/:root \{([\s\S]*?)\n\}/.exec(css)![1]);
@@ -57,6 +57,12 @@ describe.each([
   it("gives controls a visible edge (3:1)", () => {
     for (const bg of ["bg-base", "bg-surface", "bg-elevated"]) expect(contrast(t["border-input"], t[bg])).toBeGreaterThanOrEqual(3);
     expect(contrast(t["primary"], t["bg-base"])).toBeGreaterThanOrEqual(3);
+  });
+
+  it("draws chart marks at 3:1 on the surfaces charts sit on (WCAG 1.4.11)", () => {
+    for (const mark of ["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "chart-good", "chart-bad"]) {
+      for (const bg of ["bg-surface", "bg-elevated"]) expect(contrast(t[mark], t[bg]), `${mark} on ${bg}`).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 

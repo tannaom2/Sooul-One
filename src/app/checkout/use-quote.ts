@@ -18,6 +18,8 @@ export function useQuote(pincode: string, state: string, couponCode: string) {
   // Referral money: whose offer or how much credit, and whether a guest has a friend's code waiting.
   const [creditNote, setCreditNote] = useState<string | null>(null);
   const [referralWaiting, setReferralWaiting] = useState(false);
+  // Whether cash on delivery is offered for this pincode, number and total.
+  const [cod, setCod] = useState<{ allowed: boolean; message?: string }>({ allowed: true });
   const firstQuote = useRef(true);
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function useQuote(pincode: string, state: string, couponCode: string) {
           setEmpty(false);
           setCreditNote(body.creditNote ?? null);
           setReferralWaiting(Boolean(body.referralWaiting));
+          setCod(body.cod ?? { allowed: true });
         } else if (/basket is empty/i.test(body.message ?? "")) {
           setEmpty(true);
         }
@@ -56,5 +59,5 @@ export function useQuote(pincode: string, state: string, couponCode: string) {
     };
   }, [pincode, state, couponCode]);
 
-  return { quote, couponRejected, empty, creditNote, referralWaiting };
+  return { quote, couponRejected, empty, creditNote, referralWaiting, cod };
 }

@@ -21,6 +21,9 @@ import { reportError } from "@/lib/observability";
 import { limitPublic } from "@/server/rate-limit";
 import { codRequiresCode, getCustomer } from "@/server/customer-auth";
 import { CreditChanged, checkoutCredit, onOrderPlaced } from "@/server/referrals";
+import { codForCheckout, recordOrderRisk } from "@/server/intel";
+import { verifyTurnstile } from "@/lib/turnstile";
+import { clientIp } from "@/lib/rate-limit-rules";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -98,6 +101,21 @@ export async function POST(request: Request) {
     if (earlier && earlier.sessionId === sessionId) return replay(earlier);
   }
 
+  // Human check (Cloudflare Turnstile), when it's switched on: each order holds
+  // stock, so a script placing orders could empty the shelves. A replay of an
+  // attempt that already went through (above) doesn't need a second token.
+  const human = await verifyTurnstile(request.headers.get("x-turnstile-token"), {
+    ip: clientIp(request.headers),
+    expectedAction: "checkout",
+    failOpen: true,
+  });
+  if (!human.ok) {
+    return NextResponse.json(
+      { code: "HUMAN_CHECK", message: "We couldn't confirm you're not a bot. Tick the check above the button and try again." },
+      { status: 403 },
+    );
+  }
+
   const parsed = checkoutInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -169,6 +187,16 @@ export async function POST(request: Request) {
   if (!result) return NextResponse.json({ message: "Your basket is empty." }, { status: 400 });
 
   const { quote } = result;
+
+  // The owner's cash on delivery rules for this pincode, buyer and total
+  // (Store controls, Analytics → Pincodes). Checkout hides COD already; this
+  // is the rule itself, for a page that was open while the rules changed.
+  if (input.paymentMethod === "COD") {
+    // A buyer's refusals count only for a number proven by code: a typed number
+    // could be anyone's, and the answer mustn't reveal a stranger's history.
+    const cod = await codForCheckout(input.postalCode, quote.totalPaise, phoneProven ? { customerId: customer?.id, phone: input.phone } : {});
+    if (!cod.allowed) return NextResponse.json({ code: "COD_UNAVAILABLE", message: cod.message }, { status: 400 });
+  }
 
   if (!quote.canProceed) {
     const blocked = quote.lines.filter((l) => l.status !== "OK");
@@ -285,6 +313,8 @@ export async function POST(request: Request) {
             paymentGateway: isCod ? "COD" : "RAZORPAY",
             // What the shopper was shown, for measuring on-time delivery later.
             promisedDeliveryDate: result.estimatedDeliveryDate,
+            // Copied out of the address so pincode reports and COD rules can use an index.
+            postalCode: input.postalCode,
             shippingTaxAmount: fromPaise(shippingTaxPaise),
             gstTreatment: result.gstTreatment,
           },
@@ -379,6 +409,8 @@ export async function POST(request: Request) {
   // Analytics and the confirmation email run after the response is sent: the
   // order is already safely stored, and the shopper shouldn't wait on them.
   after(async () => {
+    // RTO risk for the dispatch queue (Analytics → RTO risk). Never throws.
+    await recordOrderRisk(order.id);
     await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email }, {
       method: input.paymentMethod,
       totalPaise: quote.totalPaise,

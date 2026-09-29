@@ -17,11 +17,15 @@ export const STORES_TAG = "stores";
 export const BUSINESS_TAG = "business";
 /** The owner's store controls: orders paused, cash on delivery, bundles. */
 export const SETTINGS_TAG = "settings";
+/** The owner's pincode rules (cash on delivery, extra days) and pincode records. */
+export const PINCODE_TAG = "pincodes";
 
 /**
  * Expire a tag immediately, from a Server Action or a route handler, so the
  * next shopper sees the change, not the one after.
  */
-export function expireTag(tag: typeof CATALOG_TAG | typeof STORES_TAG | typeof BUSINESS_TAG | typeof SETTINGS_TAG): void {
+export function expireTag(
+  tag: typeof CATALOG_TAG | typeof STORES_TAG | typeof BUSINESS_TAG | typeof SETTINGS_TAG | typeof PINCODE_TAG,
+): void {
   revalidateTag(tag, { expire: 0 });
 }

@@ -31,6 +31,8 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     .strict(),
   z.object({ type: z.literal("CHECKOUT_STEP"), step: z.enum(["contact", "address", "payment"]) }).strict(),
   z.object({ type: z.literal("PAYMENT_METHOD_SELECTED"), method: z.enum(["UPI", "CARD", "COD", "RAZORPAY"]) }).strict(),
+  /** The payment window was closed without paying: a drop-off at the last step. */
+  z.object({ type: z.literal("PAYMENT_DISMISSED"), method: z.enum(["UPI", "CARD"]) }).strict(),
 ]);
 
 export type ClientEvent = z.infer<typeof clientEventSchema>;

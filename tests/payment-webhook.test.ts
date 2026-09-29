@@ -73,12 +73,41 @@ describe("paymentTransition", () => {
 
 describe("parseRazorpayWebhook", () => {
   it("reads the payment fields the route uses", () => {
-    const parsed = parseRazorpayWebhook(paymentEvent("payment.failed", { error_description: "Payment declined by bank" }));
+    const parsed = parseRazorpayWebhook(
+      paymentEvent("payment.failed", { error_description: "Payment declined by bank", error_source: "bank", error_code: "BAD_REQUEST_ERROR" }),
+    );
     expect(parsed).toEqual({
       event: "payment.failed",
-      payment: { id: "pay_1", razorpayOrderId: "order_1", amountPaise: 49900, method: "upi", errorReason: "Payment declined by bank" },
+      payment: {
+        id: "pay_1",
+        razorpayOrderId: "order_1",
+        amountPaise: 49900,
+        method: "upi",
+        errorReason: "Payment declined by bank",
+        errorSource: "bank",
+        errorCode: "BAD_REQUEST_ERROR",
+      },
       refund: null,
+      downtime: null,
     });
+  });
+
+  it("reads a payment-method outage Razorpay announces", () => {
+    const body = JSON.stringify({
+      event: "payment.downtime.started",
+      payload: { "payment.downtime": { entity: { id: "down_1", method: "upi", begin: 1790000000, end: null, severity: "high", instrument: { psp: "phonepe" } } } },
+    });
+    expect(parseRazorpayWebhook(body)?.downtime).toEqual({
+      id: "down_1",
+      method: "upi",
+      instrument: { psp: "phonepe" },
+      severity: "high",
+      status: "started",
+      beginAt: new Date(1790000000 * 1000),
+      endAt: null,
+    });
+    // Not a downtime event, or missing what makes it one: nothing.
+    expect(parseRazorpayWebhook(JSON.stringify({ event: "payment.downtime.resolved", payload: {} }))?.downtime).toBeNull();
   });
 
   it("returns no payment when there's no order id, and null for non-JSON", () => {

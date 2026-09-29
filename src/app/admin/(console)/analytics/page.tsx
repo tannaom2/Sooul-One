@@ -3,8 +3,15 @@ import { requirePermission } from "@/lib/auth";
 import { buildOrderAnalytics } from "@/lib/order-analytics";
 import { formatINR } from "@/lib/money";
 import { Empty, NoAccess } from "@/components/ui";
+import { BarList, ChartCard, Columns, HeatGrid, Stat, TrendLine, SERIES } from "@/components/charts";
 
 export const dynamic = "force-dynamic";
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** Hours shown in the heat grid, in blocks of three. */
+const BLOCKS = [0, 3, 6, 9, 12, 15, 18, 21];
+
+const dayLabel = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export default async function AnalyticsPage({
   searchParams,
@@ -20,7 +27,7 @@ export default async function AnalyticsPage({
   const report = await buildOrderAnalytics(days);
 
   return (
-    <div className="grid gap-10">
+    <div className="grid gap-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-h2 font-extrabold">Order analytics</h1>
         <div className="flex items-center gap-3 text-small">
@@ -41,60 +48,56 @@ export default async function AnalyticsPage({
         <Empty title="No orders in this window" detail="Numbers appear here once orders start clearing." />
       ) : (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Revenue", formatINR(report.revenuePaise), `${report.orderCount} orders`],
-              ["Average order value", formatINR(report.averageOrderValuePaise), null],
-              ["New customers", String(report.newCustomerOrders), `of ${report.distinctCustomers} distinct emails`],
-              ["Repeat customers", String(report.repeatCustomerOrders), null],
-            ].map(([label, value, sub]) => (
-              <div key={label} className="panel p-4">
-                <p className="text-micro text-ink-faint">{label}</p>
-                <p className="tabular text-lead font-bold">{value}</p>
-                {sub && <p className="mt-1 text-micro text-ink-faint">{sub}</p>}
-              </div>
-            ))}
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Revenue" value={formatINR(report.revenuePaise)} sub={`${report.orderCount} orders`} />
+            <Stat label="Average order value" value={formatINR(report.averageOrderValuePaise)} />
+            <Stat label="New customers" value={String(report.newCustomerOrders)} sub={`of ${report.distinctCustomers} distinct emails`} />
+            <Stat label="Repeat customers" value={String(report.repeatCustomerOrders)} />
           </section>
 
-          <section>
-            <h2 className="mb-3 text-h3 font-bold">Best-selling products</h2>
-            <div className="grid gap-2">
-              {report.topProducts.map((p) => (
-                <div key={p.productId} className="panel flex flex-wrap items-center justify-between gap-2 p-3">
-                  <p className="text-small font-medium">{p.name}</p>
-                  <p className="tabular text-small text-ink-faint">
-                    {p.quantity} sold · {formatINR(p.revenuePaise)}
-                  </p>
-                </div>
-              ))}
-            </div>
+          <section className="grid gap-4 lg:grid-cols-2">
+            <ChartCard title="Revenue per day" note="Paid, packing, shipped and delivered orders">
+              <TrendLine
+                points={report.revenueByDay.map((d) => ({ label: dayLabel(d.day), value: d.revenuePaise }))}
+                format={(v) => formatINR(v)}
+                color={SERIES[0]}
+              />
+            </ChartCard>
+            <ChartCard title="Orders per day">
+              <Columns points={report.revenueByDay.map((d) => ({ label: dayLabel(d.day), value: d.orderCount }))} color={SERIES[1]} />
+            </ChartCard>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-h3 font-bold">Best-selling brands</h2>
-            <div className="grid gap-2">
-              {report.topBrands.map((b) => (
-                <div key={b.brandId} className="panel flex flex-wrap items-center justify-between gap-2 p-3">
-                  <p className="text-small font-medium">{b.name}</p>
-                  <p className="tabular text-small text-ink-faint">{formatINR(b.revenuePaise)}</p>
-                </div>
-              ))}
-            </div>
+          <ChartCard title="When orders come in" note="Orders by weekday and time of day, India time, in three-hour blocks">
+            <HeatGrid
+              caption="Orders by weekday and three-hour block"
+              columns={BLOCKS.map((h) => `${String(h).padStart(2, "0")}–${String(h + 3).padStart(2, "0")}`)}
+              format={(v) => String(v)}
+              rows={WEEKDAYS.map((w, i) => ({
+                label: w,
+                cells: BLOCKS.map((h) => report.ordersByWeekdayHour[i].slice(h, h + 3).reduce((a, b) => a + b, 0)),
+              }))}
+            />
+          </ChartCard>
+
+          <section className="grid gap-4 lg:grid-cols-3">
+            <ChartCard title="Best-selling products" note="By revenue">
+              <BarList rows={report.topProducts.map((p) => ({ label: `${p.name} (${p.quantity})`, value: p.revenuePaise, display: formatINR(p.revenuePaise) }))} />
+            </ChartCard>
+            <ChartCard title="Best-selling brands">
+              <BarList rows={report.topBrands.map((b, i) => ({ label: b.name, value: b.revenuePaise, display: formatINR(b.revenuePaise), color: SERIES[(i + 1) % SERIES.length] }))} />
+            </ChartCard>
+            <ChartCard title="Revenue by state">
+              <BarList rows={report.revenueByState.map((s) => ({ label: `${s.state} (${s.orderCount})`, value: s.revenuePaise, display: formatINR(s.revenuePaise), color: SERIES[2] }))} />
+            </ChartCard>
           </section>
 
-          <section>
-            <h2 className="mb-3 text-h3 font-bold">Revenue by state</h2>
-            <div className="grid gap-2">
-              {report.revenueByState.map((s) => (
-                <div key={s.state} className="panel flex flex-wrap items-center justify-between gap-2 p-3">
-                  <p className="text-small font-medium">{s.state}</p>
-                  <p className="tabular text-small text-ink-faint">
-                    {s.orderCount} orders · {formatINR(s.revenuePaise)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <p className="text-small text-ink-soft">
+            Deeper reports: <Link href="/admin/analytics/pincodes" className="underline">pincodes</Link>,{" "}
+            <Link href="/admin/analytics/payments" className="underline">payment health</Link>,{" "}
+            <Link href="/admin/analytics/customers" className="underline">customers</Link> and{" "}
+            <Link href="/admin/analytics/risk" className="underline">RTO risk</Link>.
+          </p>
         </>
       )}
     </div>

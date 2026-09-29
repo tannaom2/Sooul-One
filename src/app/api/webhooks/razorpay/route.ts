@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
@@ -40,11 +41,47 @@ export async function POST(request: Request) {
   const webhook = parseRazorpayWebhook(raw);
   if (!webhook) return NextResponse.json({ message: "Malformed payload." }, { status: 400 });
 
+  // Razorpay's own outage notices: the fastest outage signal at low volume
+  // (Analytics → Payments, and a note at checkout while one lasts).
+  if (webhook.downtime) {
+    const d = webhook.downtime;
+    const data = { method: d.method, instrument: (d.instrument ?? undefined) as Prisma.InputJsonValue | undefined, severity: d.severity, status: d.status, beginAt: d.beginAt, endAt: d.endAt };
+    // Deliveries can arrive out of order: a late "started" never reopens a resolved outage.
+    const existing = await db.paymentDowntime.findUnique({ where: { id: d.id }, select: { status: true } });
+    if (!existing) await db.paymentDowntime.create({ data: { id: d.id, ...data } }).catch(() => undefined);
+    else if (existing.status !== "resolved") await db.paymentDowntime.update({ where: { id: d.id }, data });
+    return NextResponse.json({ received: true });
+  }
+
   const transition = paymentTransition(webhook.event);
   const payment = webhook.payment;
   if (!transition || !payment) return NextResponse.json({ received: true });
 
   const order = await db.order.findFirst({ where: { paymentId: payment.razorpayOrderId }, select: { id: true, sessionId: true } });
+
+  // Every attempt, captured or failed, for payment health per method, even
+  // a second failure on an order that already failed (which moves nothing
+  // below). A redelivered webhook hits the unique key and records nothing new.
+  if (webhook.event === "payment.captured" || webhook.event === "payment.failed") {
+    await db.paymentAttempt
+      .create({
+        data: {
+          orderId: order?.id ?? null,
+          razorpayOrderId: payment.razorpayOrderId,
+          razorpayPaymentId: payment.id,
+          method: payment.method,
+          status: webhook.event === "payment.captured" ? "CAPTURED" : "FAILED",
+          errorSource: payment.errorSource,
+          errorCode: payment.errorCode,
+          errorReason: payment.errorReason?.slice(0, 300) ?? null,
+          amountPaise: payment.amountPaise,
+        },
+      })
+      .catch((error: unknown) => {
+        if ((error as { code?: string } | null)?.code !== "P2002") reportError("webhook/payment-attempt", error, { orderId: order?.id });
+      });
+  }
+
   if (!order) {
     console.warn("[razorpay] no local order for", payment.razorpayOrderId);
     return NextResponse.json({ received: true });
@@ -101,6 +138,8 @@ export async function POST(request: Request) {
       await recordOrderEvent(order.id, "PAYMENT_FAILED", { type: "SYSTEM" }, {
         razorpayPaymentId: payment.id,
         reason: payment.errorReason,
+        method: payment.method,
+        source: payment.errorSource,
       });
       break;
 

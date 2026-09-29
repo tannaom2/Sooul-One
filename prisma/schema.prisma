@@ -456,10 +456,18 @@ model Order {
   /// or IGST (INTER_STATE), as charged at checkout.
   shippingTaxAmount     Decimal?     @db.Decimal(10, 2)
   gstTreatment          String?
+  /// The delivery pincode, copied out of shippingAddress so pincode reports
+  /// and the checkout's COD rules can use an index (src/lib/intel/pincodes.ts).
+  postalCode            String?
+  /// Return-to-origin risk, 0–100, worked out when the order was placed
+  /// (src/lib/intel/rto-risk.ts), and the reasons behind it.
+  riskScore             Int?
+  riskReasons           Json?
   placedAt              DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
   @@index([status, placedAt])
+  @@index([postalCode, placedAt])
   /// The Razorpay webhook and reconciliation find orders by payment id.
   @@index([paymentId])
   /// Repeat-customer analytics and support look-ups by email.
@@ -694,6 +702,13 @@ enum AnalyticsEventType {
   OFFER_APPLIED
   CHECKOUT_STEP
   PAYMENT_METHOD_SELECTED
+  /// A pincode typed at checkout: { pincode, serviceable }. Recorded by the
+  /// server (/api/pincode), so demand from outside the delivery area shows.
+  PINCODE_CHECKED
+  /// The shopper closed the payment window without paying (browser event).
+  PAYMENT_DISMISSED
+  /// A storefront assistant question, by intent only: { intent } (no free text kept).
+  ASSISTANT_INTENT
 }
 
 /// Funnel and abandonment tracking (Section: analytics). Write-heavy,
@@ -780,7 +795,113 @@ model StoreSettings {
   themeToggleVisible Boolean    @default(true)
   /// The storefront's theme while the switch is hidden.
   forcedTheme        StoreTheme @default(LIGHT)
+  /// Cash on delivery only from this order total (₹, incl. GST): on a small
+  /// order, one refused parcel costs more than several delivered ones earn. Null: no floor.
+  codMinOrderValue   Int?
+  /// Cash on delivery only up to this order total (₹, incl. GST). Null: no cap.
+  codMaxOrderValue   Int?
+  /// Which way to pay checkout selects first.
+  preferredPayment   PaymentPreference @default(ONLINE)
+  /// Turn cash on delivery off by itself for pincodes whose parcels keep
+  /// coming back (src/lib/intel/pincodes.ts). Off until the owner opts in.
+  codAutoBlock       Boolean    @default(false)
+  /// ...when at least this share of shipped COD parcels came back (percent)...
+  codAutoBlockRtoPercent Int    @default(35)
+  /// ...out of at least this many shipped COD parcels, so one refusal can't block a pincode.
+  codAutoBlockMinShipped Int    @default(4)
+  /// The storefront assistant (src/components/storefront-bot.tsx) is shown.
+  assistantEnabled   Boolean    @default(true)
+  /// Days after delivery a return can be asked for, as the business has
+  /// decided it. Null until set: the assistant then never states a window and
+  /// hands the shopper to a person instead.
+  returnWindowDays   Int?
+  /// The business's own words on what can be returned (shown by the assistant).
+  returnConditions   String?
+  /// WhatsApp number for support hand-offs, 10 digits. Null: email only.
+  supportWhatsapp    String?
+  /// The owner's local AI copilot, reached through a tunnel (docs/COPILOT.md):
+  /// its https address and the shared token it requires. Owner only.
+  copilotUrl         String?
+  copilotToken       String?
   updatedAt          DateTime   @updatedAt
+}
+
+enum PaymentPreference {
+  ONLINE
+  COD
+}
+
+/// The owner's rule for one pincode, set from Analytics → Pincodes. Every
+/// change is in the activity log.
+model PincodeRule {
+  pincode       String   @id
+  /// No cash on delivery to this pincode, whatever the automatic rule says.
+  codBlocked    Boolean  @default(false)
+  /// Allow cash on delivery here even if the automatic rule would block it.
+  codAllowed    Boolean  @default(false)
+  /// Days added to the delivery promise (a slow courier lane, a flood).
+  extraDays     Int      @default(0)
+  note          String?
+  updatedAt     DateTime @updatedAt
+  updatedBy     String?
+}
+
+/// Every online payment attempt Razorpay reports, captured or failed,
+/// including retries on the same order, so payment health can be measured per
+/// method (src/lib/intel/payment-health.ts). Written by the webhook.
+model PaymentAttempt {
+  id                String   @id @default(cuid())
+  orderId           String?
+  razorpayOrderId   String
+  razorpayPaymentId String?
+  /// upi, card, netbanking, wallet, emi, paylater (Razorpay's names).
+  method            String?
+  /// CAPTURED or FAILED.
+  status            String
+  /// Who Razorpay says caused a failure: customer, bank, gateway, business or
+  /// internal. Customer-caused failures (a cancelled UPI request, a wrong OTP)
+  /// are left out of payment health, so they can't look like an outage.
+  errorSource       String?
+  errorCode         String?
+  errorReason       String?
+  amountPaise       Int?
+  createdAt         DateTime @default(now())
+
+  /// A redelivered webhook records nothing new.
+  @@unique([razorpayPaymentId, status])
+  @@index([createdAt])
+  @@index([method, createdAt])
+}
+
+/// A payment-method outage Razorpay announced (payment.downtime.* webhooks):
+/// the fastest outage signal at low volume. Shown on Analytics → Payments and
+/// as a note at checkout while it lasts.
+model PaymentDowntime {
+  /// Razorpay's downtime id.
+  id         String    @id
+  /// card, netbanking, upi, wallet...
+  method     String
+  /// Which bank, UPI app or card network, as Razorpay describes it.
+  instrument Json?
+  /// high: the whole method; medium: more declines than usual; low: minor.
+  severity   String
+  /// started, updated, resolved
+  status     String
+  beginAt    DateTime
+  endAt      DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  @@index([status, beginAt])
+}
+
+/// What was spent on marketing in a month (ads, influencers), entered by the
+/// owner, so acquisition cost and LTV:CAC can be worked out.
+model MarketingSpend {
+  /// "2026-09"
+  month     String   @id
+  amount    Decimal  @db.Decimal(12, 2)
+  note      String?
+  updatedAt DateTime @updatedAt
 }
 
 enum StoreTheme {
