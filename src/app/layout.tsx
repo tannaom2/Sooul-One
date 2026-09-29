@@ -16,6 +16,8 @@ import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { getBusinessProfile } from "@/server/business";
 import { getThemeSettings } from "@/server/store-settings";
+import { getAssistantSettings } from "@/server/assistant-settings";
+import { StorefrontBot } from "@/components/storefront-bot";
 import { CONSOLE_THEME_SETTINGS, CONSOLE_THEME_STORAGE_KEY, THEME_STORAGE_KEY, themeBootScript } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
@@ -277,6 +279,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <main>{children}</main>
             <Footer />
             <BasketDrawer />
+            {/* The Help assistant, unless the owner has switched it off (Settings → Assistants). */}
+            {(await getAssistantSettings()).enabled && <StorefrontBot />}
           </CartProvider>
         )}
       </body>

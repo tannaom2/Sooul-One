@@ -5,6 +5,7 @@ import { can, type Permission } from "@/lib/permissions";
 import { AdminNav } from "./admin-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CONSOLE_THEME_STORAGE_KEY } from "@/lib/theme";
+import { CopilotDrawer } from "./copilot-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     group: "Sell",
     items: [
       { href: "/admin/orders", label: "Orders", permission: "orders:view" },
+      { href: "/admin/analytics/risk", label: "RTO risk", permission: "orders:view" },
       { href: "/admin/products", label: "Products", permission: "products:view" },
       { href: "/admin/categories", label: "Categories", permission: "products:write" },
       { href: "/admin/bundles", label: "Bundles", permission: "bundles:write" },
@@ -47,6 +49,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     items: [
       { href: "/admin/launch", label: "Launch checklist", permission: "settings:manage" },
       { href: "/admin/controls", label: "Store controls", permission: "settings:manage" },
+      { href: "/admin/assistants", label: "Assistants", permission: "settings:manage" },
       { href: "/admin/business", label: "Business details", permission: "settings:manage" },
       { href: "/admin/stores", label: "Stores", permission: "stores:write" },
       { href: "/admin/team", label: "Team", permission: "team:manage" },
@@ -80,6 +83,12 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
             SooulOne
           </Link>
           <p className="text-micro text-ink-faint">Owner console</p>
+          {/* The owner's AI copilot (docs/COPILOT.md): for people who can see the store's figures. */}
+          {can(session.role, "finance:view") && (
+            <div className="mt-3">
+              <CopilotDrawer canAct={can(session.role, "settings:manage")} canConfigure={can(session.role, "settings:manage")} />
+            </div>
+          )}
         </div>
 
         <AdminNav groups={groups} />

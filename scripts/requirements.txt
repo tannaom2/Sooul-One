@@ -1,0 +1,5 @@
+# The owner's local admin copilot (scripts/admin_llm_copilot.py). Not used by the web app.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+httpx>=0.27,<1
+pydantic>=2.7,<3

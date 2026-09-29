@@ -12,6 +12,8 @@ import { getReadiness } from "@/server/launch-readiness";
 import { getStoreControls } from "@/server/store-settings";
 import { recoveryCodeStatus } from "@/server/recovery-codes";
 import { stockView } from "@/lib/stock-view";
+import { Suspense } from "react";
+import { DashboardInsights, DashboardInsightsLoading } from "./dashboard-insights";
 
 export const dynamic = "force-dynamic";
 
@@ -199,6 +201,22 @@ export default async function Dashboard() {
           </ul>
         )}
       </section>
+
+      {canSeeFinance && (
+        <section aria-labelledby="insights-heading">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+            <h2 id="insights-heading" className="text-h3 font-bold">
+              Insights
+            </h2>
+            <Link href="/admin/analytics" className="text-small underline">
+              All reports
+            </Link>
+          </div>
+          <Suspense fallback={<DashboardInsightsLoading />}>
+            <DashboardInsights canAct={can(session.role, "settings:manage")} />
+          </Suspense>
+        </section>
+      )}
 
       <section className="grid gap-4 sm:grid-cols-3">
         {tiles.map((t) => (
