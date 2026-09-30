@@ -97,7 +97,7 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
             <div className="border border-rule p-5">
               <h2 className="text-lead font-bold">{text["contact.collabTitle"]}</h2>
               <p className="mt-1 text-small text-ink-soft">{text["contact.collabBody"]}</p>
-              <Link href="/contact?topic=collaboration#enquiry" className="mt-3 inline-block text-small font-semibold underline underline-offset-2">
+              <Link href="/contact?topic=collaboration#enquiry" replace className="mt-3 inline-block text-small font-semibold underline underline-offset-2">
                 Tell us about it
               </Link>
             </div>
@@ -106,7 +106,7 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
             <div className="border border-rule p-5">
               <h2 className="text-lead font-bold">{text["contact.internationalTitle"]}</h2>
               <p className="mt-1 text-small text-ink-soft">{text["contact.internationalBody"]}</p>
-              <Link href="/contact?topic=international#enquiry" className="mt-3 inline-block text-small font-semibold underline underline-offset-2">
+              <Link href="/contact?topic=international#enquiry" replace className="mt-3 inline-block text-small font-semibold underline underline-offset-2">
                 Fill this in
               </Link>
             </div>

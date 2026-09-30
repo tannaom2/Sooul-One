@@ -61,6 +61,7 @@ export default async function Enquiries({ searchParams }: { searchParams: Promis
           <Link
             key={t}
             href={`/admin/enquiries?status=${t}`}
+            replace
             aria-current={t === status ? "page" : undefined}
             className={`inline-flex min-h-10 items-center border px-3 text-small ${t === status ? "border-ink font-semibold" : "border-rule text-ink-soft"}`}
           >

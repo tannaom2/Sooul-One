@@ -72,7 +72,7 @@ export default async function SiteReport({ searchParams }: { searchParams: Promi
         </div>
         <nav aria-label="Window" className="flex gap-1 text-small">
           {[7, 30, 90].map((d) => (
-            <Link key={d} href={reportHref("/admin/analytics/site", { days: d === 30 ? undefined : d })} aria-current={d === windowDays ? "page" : undefined} className={`border px-2 py-1 ${d === windowDays ? "border-ink font-semibold" : "border-rule text-ink-soft"}`}>
+            <Link key={d} replace href={reportHref("/admin/analytics/site", { days: d === 30 ? undefined : d })} aria-current={d === windowDays ? "page" : undefined} className={`border px-2 py-1 ${d === windowDays ? "border-ink font-semibold" : "border-rule text-ink-soft"}`}>
               {d} days
             </Link>
           ))}

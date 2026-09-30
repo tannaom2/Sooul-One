@@ -22,6 +22,7 @@ import { ageLabel, allergenLabel, allergenSentence, sugarLabel } from "@/lib/lab
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
 import { getBusinessProfile } from "@/server/business";
 import { canonicalFor } from "@/server/brand-family";
+import { JumpLink } from "@/components/jump-link";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 
@@ -162,9 +163,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </span>
           </div>
           {product.rating && (
-            <a href="#reviews" className="mt-2 inline-block hover:underline">
+            <JumpLink href="#reviews" className="mt-2 inline-block hover:underline">
               <Rating avg={product.rating.avg} count={product.rating.count} />
-            </a>
+            </JumpLink>
           )}
           <p className="mt-3 text-lead text-ink-soft">{product.shortDescription}</p>
 

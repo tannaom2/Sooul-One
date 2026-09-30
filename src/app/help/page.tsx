@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
+import { JumpLink } from "@/components/jump-link";
 import { getFaqs } from "@/server/site-content";
 import { getBrandFamily } from "@/server/brand-family";
 import { groupFaqs, storeFacts } from "@/lib/site-content";
@@ -29,9 +30,9 @@ export default async function Help() {
         <aside className="lg:sticky lg:top-28 lg:self-start">
           <nav aria-label="Topics" className="grid gap-1 text-small">
             {groups.map((g) => (
-              <a key={g.topic} href={`#${g.topic.toLowerCase()}`} className="py-1 text-ink-soft hover:text-ink hover:underline">
+              <JumpLink key={g.topic} href={`#${g.topic.toLowerCase()}`} className="py-1 text-ink-soft hover:text-ink hover:underline">
                 {g.label}
-              </a>
+              </JumpLink>
             ))}
           </nav>
           <div className="mt-6 grid gap-2 border-t border-rule pt-4 text-small">

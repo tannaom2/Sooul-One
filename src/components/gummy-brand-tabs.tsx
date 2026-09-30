@@ -14,14 +14,16 @@ export function GummyBrandTabs({
   active: string | null;
   /** Where each tab goes; the box page filters itself instead of changing page. */
   hrefFor?: (brandSlug: string | null) => string;
-  /** Tabs that refine one view: Back leaves it rather than stepping through tabs. */
+  /** Tabs that filter in place (the box page): no scroll to the top. */
   refine?: boolean;
 }) {
   const tab = (href: string, text: string, isActive: boolean, accent?: string) => (
     <Link
       key={href}
       href={href}
-      replace={refine}
+      // Switching brand tab is choosing within Gummies, not a new page, so
+      // Back leaves Gummies instead of stepping through every tab tapped.
+      replace
       scroll={!refine}
       aria-current={isActive ? "page" : undefined}
       className={`shrink-0 border-b-2 px-1 py-3 text-small whitespace-nowrap ${isActive ? "font-semibold text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}

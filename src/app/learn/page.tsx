@@ -31,11 +31,11 @@ export default async function Learn({ searchParams }: { searchParams: Promise<{ 
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10">
         {brandsWithArticles.length > 0 && (
           <nav aria-label="Filter by brand" className="flex flex-wrap gap-2">
-            <Link href="/learn" className={pill(!brand)} aria-current={!brand ? "page" : undefined}>
+            <Link href="/learn" replace className={pill(!brand)} aria-current={!brand ? "page" : undefined}>
               Everything
             </Link>
             {brandsWithArticles.map((b) => (
-              <Link key={b.slug} href={`/learn?brand=${b.slug}`} className={pill(brand === b.slug)} aria-current={brand === b.slug ? "page" : undefined}>
+              <Link key={b.slug} href={`/learn?brand=${b.slug}`} replace className={pill(brand === b.slug)} aria-current={brand === b.slug ? "page" : undefined}>
                 {b.name}
               </Link>
             ))}
