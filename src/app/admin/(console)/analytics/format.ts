@@ -8,6 +8,11 @@ export const ist = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeS
 
 export const istDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
+/** The moment this many days ago (a request-time read, kept out of render). */
+export function daysAgo(n: number): Date {
+  return new Date(Date.now() - n * 86_400_000);
+}
+
 /** A window from the URL: 7, 30, 90 or 365 days. */
 export function parseDays(raw: string | undefined, fallback = 90): number {
   const n = Number(raw);

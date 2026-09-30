@@ -19,7 +19,9 @@ export default async function BusinessDetails() {
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
   const values = Object.fromEntries(BUSINESS_FIELDS.map(({ name }) => [name, (row?.[name] as string | null) ?? null]));
-  const missing = BUSINESS_FIELDS.filter(({ name }) => name !== "tradeName" && !values[name]);
+  // Optional extras don't count as missing for launch.
+  const OPTIONAL = new Set(["tradeName", "cin", "mailingAddress", "instagramUrl", "facebookUrl", "xUrl", "youtubeUrl"]);
+  const missing = BUSINESS_FIELDS.filter(({ name }) => !OPTIONAL.has(name) && !values[name]);
 
   return (
     <div className="grid gap-8">

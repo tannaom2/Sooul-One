@@ -33,7 +33,19 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     group: "Engage",
     items: [
       { href: "/admin/reviews", label: "Reviews", permission: "reviews:moderate" },
+      { href: "/admin/enquiries", label: "Enquiries", permission: "enquiries:manage" },
       { href: "/admin/referrals", label: "Referrals", permission: "settings:manage" },
+    ],
+  },
+  {
+    group: "Storefront",
+    items: [
+      { href: "/admin/brands", label: "Brands", permission: "settings:manage" },
+      { href: "/admin/top-bar", label: "Top bar", permission: "settings:manage" },
+      { href: "/admin/site-text", label: "Site text", permission: "settings:manage" },
+      { href: "/admin/faqs", label: "FAQs", permission: "content:write" },
+      { href: "/admin/articles", label: "Articles", permission: "content:write" },
+      { href: "/admin/careers", label: "Careers", permission: "content:write" },
     ],
   },
   {

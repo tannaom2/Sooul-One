@@ -7,6 +7,7 @@ import { saveBusinessProfile, type BusinessResult } from "./actions";
 
 const INITIAL: BusinessResult = { ok: false };
 const GROUPS = [...new Set(BUSINESS_FIELDS.map((f) => f.group))];
+const MULTILINE = new Set(["registeredAddress", "mailingAddress"]);
 
 export function BusinessForm({ values }: { values: Record<string, string | null> }) {
   const [state, submit, pending] = useActionState(saveBusinessProfile, INITIAL);
@@ -17,11 +18,11 @@ export function BusinessForm({ values }: { values: Record<string, string | null>
         <fieldset key={group} className="panel grid gap-4 p-4 sm:grid-cols-2">
           <legend className="label px-1">{group}</legend>
           {BUSINESS_FIELDS.filter((f) => f.group === group).map((f) => (
-            <div key={f.name} className={f.name === "registeredAddress" ? "sm:col-span-2" : undefined}>
+            <div key={f.name} className={MULTILINE.has(f.name) ? "sm:col-span-2" : undefined}>
               <label className="label" htmlFor={f.name}>
                 {f.label}
               </label>
-              {f.name === "registeredAddress" ? (
+              {MULTILINE.has(f.name) ? (
                 <textarea id={f.name} name={f.name} rows={2} className="field" defaultValue={values[f.name] ?? ""} />
               ) : (
                 <input id={f.name} name={f.name} className="field" defaultValue={values[f.name] ?? ""} />

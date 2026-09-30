@@ -4,6 +4,8 @@ import { Empty, NoAccess } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { requiredRemainingDays, wholeDaysBetween } from "@/lib/compliance/shelf-life";
 import { BatchForm } from "./batch-form";
+import { RecallControl } from "./recall-control";
+import { normalizeBatch } from "@/lib/batch-verify";
 import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +17,14 @@ export default async function Batches() {
   if (!session) return <NoAccess />;
 
   let products: any[] = [];
+  // How often shoppers checked each batch on /verify in the last 90 days, by normalised code.
+  let checks = new Map<string, number>();
   try {
+    const counted = await db.$queryRaw<{ batch: string; n: bigint }[]>`
+      SELECT metadata->>'batch' AS batch, count(*) AS n FROM "AnalyticsEvent"
+      WHERE type = 'BATCH_CHECKED' AND "createdAt" > now() - interval '90 days' AND (metadata->>'found')::boolean
+      GROUP BY 1`;
+    checks = new Map(counted.map((c) => [c.batch, Number(c.n)]));
     products = await db.product.findMany({
       where: { isActive: true },
       include: { batches: { orderBy: { expiresOn: "asc" } } },
@@ -59,9 +68,15 @@ export default async function Batches() {
                   const headroom = daysLeft - required;
 
                   return (
-                    <div key={b.id} className="panel-row">
-                      <span>
-                        {p.name} <span className="text-ink-faint">{b.batchNumber}</span>
+                    <div key={b.id} className="panel-row flex-wrap">
+                      <span className="grid gap-1">
+                        <span>
+                          {p.name} <span className="text-ink-faint">{b.batchNumber}</span>
+                          {checks.get(normalizeBatch(b.batchNumber)) ? (
+                            <span className="ml-2 text-micro text-ink-soft">checked {checks.get(normalizeBatch(b.batchNumber))}× on /verify</span>
+                          ) : null}
+                        </span>
+                        <RecallControl batchId={b.id} batchNumber={b.batchNumber} recalled={Boolean(b.recalledAt)} note={b.recallNote} />
                       </span>
                       <span className="tabular">
                         {b.quantityRemaining}

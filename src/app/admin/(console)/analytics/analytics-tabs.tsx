@@ -9,6 +9,7 @@ const TABS = [
   { href: "/admin/analytics/payments", label: "Payments" },
   { href: "/admin/analytics/customers", label: "Customers" },
   { href: "/admin/analytics/risk", label: "RTO risk" },
+  { href: "/admin/analytics/site", label: "Search and batches" },
 ] as const;
 
 /** The report tabs. Worked out in the browser, like the console nav, so the highlight follows every click. */

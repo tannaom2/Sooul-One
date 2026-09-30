@@ -74,3 +74,15 @@ curl -X POST http://127.0.0.1:8000/analyze -H "Authorization: Bearer $COPILOT_TO
 ```
 
 On the demo, `http://localhost:8000` is accepted as the address, because demo:start sets `COPILOT_ALLOW_LOCALHOST=1`.
+
+## Brand family, trust and support
+
+Full reference: docs/BRANDS.md.
+
+- Never type a store fact into copy. Use `{freeDelivery}`, `{deliveryFee}` and `{area}` (`src/lib/site-content.ts`); they fill from the same constants checkout uses.
+- Brand domains (`src/lib/brand-domains.ts`, applied in `src/proxy.ts`) are OFF, REDIRECT or STANDALONE per brand.
+  - Brand and product pages set their canonical through `canonicalFor()`.
+  - Keep `/admin` on the main site.
+- The batch check (`/verify`) says "this batch is ours", never that a pack is genuine, and never calls a miss a fake.
+- Articles for the gummies brands go through `lintSupplementCopy` plus a person's sign-off before publishing.
+- Owner-written storefront content is cached under `CONTENT_TAG`. Expire it in every action that changes it.
