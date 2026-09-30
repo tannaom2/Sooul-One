@@ -87,6 +87,12 @@ export const PUBLIC_LIMITS = {
   assistant: { max: 120, windowSeconds: 10 * 60 },
   /** Assistant order lookups (number + mobile or email): slow enough that guessing is pointless. */
   assistantLookup: { max: 15, windowSeconds: 10 * 60 },
+  /** Contact-form messages: each lands in the owner's inbox (and email). */
+  enquiry: { max: 5, windowSeconds: 60 * 60 },
+  /** Batch checks on /verify: a shopper checks a pack or two; a script guessing codes checks hundreds. */
+  batchCheck: { max: 30, windowSeconds: 10 * 60 },
+  /** Storefront searches (typing a new query each time). */
+  search: { max: 120, windowSeconds: 10 * 60 },
 } as const satisfies Record<string, Limit>;
 
 export type PublicScope = keyof typeof PUBLIC_LIMITS;

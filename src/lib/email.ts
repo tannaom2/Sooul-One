@@ -92,7 +92,9 @@ async function send(to: string, subject: string, html: string, text: string): Pr
  * which is both an accessibility and a deliverability matter: HTML-only mail
  * scores worse with spam filters.
  */
-function wrap(heading: string, bodyHtml: string): string {
+const ORDER_FOOTER = "You're receiving this because you placed an order with us. This is a service message about that order, not marketing.";
+
+function wrap(heading: string, bodyHtml: string, footer: string = ORDER_FOOTER): string {
   return `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#f2ede4;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#241c15">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #ddd3c5">
@@ -104,7 +106,7 @@ function wrap(heading: string, bodyHtml: string): string {
       ${bodyHtml}
     </td></tr>
     <tr><td style="padding:16px 24px 24px;border-top:1px solid #ddd3c5;font-size:12px;color:#8c7f73">
-      <p style="margin:0">You're receiving this because you placed an order with us. This is a service message about that order, not marketing.</p>
+      <p style="margin:0">${footer}</p>
     </td></tr>
   </table>
 </body></html>`;
@@ -217,4 +219,32 @@ export async function sendNearExpiryAlert(
   ].join("\n");
 
   return send(to, `SooulOne: ${batches.length} batch(es) approaching unsellable`, html, text);
+}
+
+/**
+ * A new contact-form message, to the owner (OWNER_ALERT_EMAIL, else the
+ * customer care address). Everything the sender typed is escaped. Reply-to is
+ * not set to the sender: the inbox under Settings → Enquiries is the record.
+ */
+export async function sendEnquiryNotice(
+  to: string | null,
+  enquiry: { kind: string; name: string; email: string; phone: string | null; organisation: string | null; country: string | null; message: string },
+): Promise<Sent> {
+  if (!to) return { delivered: false, reason: "not_configured" };
+  const rows = [
+    ["From", `${enquiry.name} <${enquiry.email}>`],
+    ["Phone", enquiry.phone],
+    ["Organisation", enquiry.organisation],
+    ["Country", enquiry.country],
+  ].filter((r): r is [string, string] => Boolean(r[1]));
+  const html = wrap(
+    `New enquiry: ${esc(enquiry.kind)}`,
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="font-size:14px;margin:0 0 16px">${rows
+      .map(([k, v]) => `<tr><td style="padding:2px 12px 2px 0;color:#8c7f73">${k}</td><td style="padding:2px 0">${esc(v)}</td></tr>`)
+      .join("")}</table>
+     <p style="margin:0;font-size:15px;line-height:1.5;white-space:pre-line">${esc(enquiry.message)}</p>`,
+    "Sent from the contact form on the SooulOne website. Answer it from the console under Enquiries.",
+  );
+  const text = [`New enquiry: ${enquiry.kind}`, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", enquiry.message].join("\n");
+  return send(to, `New enquiry: ${enquiry.kind} from ${enquiry.name}`, html, text);
 }

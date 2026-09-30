@@ -30,7 +30,11 @@ export type Permission =
   /** Add people, change roles, deactivate, reset access. */
   | "team:manage"
   /** The company's legal and contact details: GSTIN, grievance officer, customer care. */
-  | "settings:manage";
+  | "settings:manage"
+  /** FAQs, /learn articles and open roles: storefront words, not settings. */
+  | "content:write"
+  /** Messages from the contact forms: people's names, emails and phone numbers. */
+  | "enquiries:manage";
 
 const MATRIX: Record<AdminRole, readonly Permission[]> = {
   OWNER: [
@@ -48,6 +52,8 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "audit:view",
     "team:manage",
     "settings:manage",
+    "content:write",
+    "enquiries:manage",
   ],
   MANAGER: [
     "dashboard:view",
@@ -60,9 +66,11 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "bundles:write",
     "reviews:moderate",
     "stores:write",
+    "content:write",
+    "enquiries:manage",
   ],
   FULFILMENT: ["dashboard:view", "orders:view", "orders:write", "products:view", "batches:write"],
-  CONTENT: ["dashboard:view", "products:view", "products:write", "reviews:moderate"],
+  CONTENT: ["dashboard:view", "products:view", "products:write", "reviews:moderate", "content:write"],
   STAFF: ["dashboard:view"],
 };
 
@@ -75,7 +83,7 @@ export const ROLES: readonly { role: AdminRole; label: string; description: stri
   { role: "OWNER", label: "Owner", description: "Everything, including revenue, the activity log and the team." },
   { role: "MANAGER", label: "Manager", description: "Runs the store day to day. No revenue figures, activity log or team." },
   { role: "FULFILMENT", label: "Fulfilment", description: "Orders, shipping and stock batches." },
-  { role: "CONTENT", label: "Content", description: "Product copy and images, and review moderation. Can't change prices." },
+  { role: "CONTENT", label: "Content", description: "Product copy and images, FAQs and articles, and review moderation. Can't change prices." },
   { role: "STAFF", label: "View only", description: "Sees the overview and nothing else." },
 ];
 

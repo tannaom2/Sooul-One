@@ -218,6 +218,21 @@ export const getGummiesProducts = unstable_cache(
   CATALOG,
 );
 
+/**
+ * Every sellable product with the words search looks at (src/lib/search.ts):
+ * the card data, plus the description and ingredients, which cards don't carry.
+ */
+export const getSearchCatalog = unstable_cache(
+  async (): Promise<{ product: ProductSummary; text: string }[]> => {
+    const rows = await db.product.findMany({ where: SELLABLE_PRODUCT_WHERE, include: LIST_INCLUDE, orderBy: { name: "asc" } });
+    const summaries = await withRatings(rows);
+    const extra = new Map(rows.map((r: any) => [r.id, [r.shortDescription, r.ingredients, r.metaDescription].filter(Boolean).join(" ")]));
+    return summaries.map((product) => ({ product, text: extra.get(product.id) ?? product.shortDescription }));
+  },
+  ["search-catalog"],
+  CATALOG,
+);
+
 /** Standard card data for these products (the box page's pool), in no particular order. */
 export async function getProductSummaries(ids: readonly string[]): Promise<ProductSummary[]> {
   if (ids.length === 0) return [];

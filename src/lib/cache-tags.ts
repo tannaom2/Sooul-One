@@ -19,13 +19,15 @@ export const BUSINESS_TAG = "business";
 export const SETTINGS_TAG = "settings";
 /** The owner's pincode rules (cash on delivery, extra days) and pincode records. */
 export const PINCODE_TAG = "pincodes";
+/** Owner-written storefront content: top bar, site text, FAQs, articles, careers. */
+export const CONTENT_TAG = "content";
 
 /**
  * Expire a tag immediately, from a Server Action or a route handler, so the
  * next shopper sees the change, not the one after.
  */
 export function expireTag(
-  tag: typeof CATALOG_TAG | typeof STORES_TAG | typeof BUSINESS_TAG | typeof SETTINGS_TAG | typeof PINCODE_TAG,
+  tag: typeof CATALOG_TAG | typeof STORES_TAG | typeof BUSINESS_TAG | typeof SETTINGS_TAG | typeof PINCODE_TAG | typeof CONTENT_TAG,
 ): void {
   revalidateTag(tag, { expire: 0 });
 }

@@ -80,6 +80,17 @@ model Brand {
   /// True for The True Store — the only brand operating physical superstores.
   isRetailBrand Boolean        @default(false)
   isActive      Boolean        @default(true)
+  /// The brand's own web address, e.g. "womanaxis.in" (no https, no www).
+  /// What it does is domainMode (src/lib/brand-domains.ts). Null: none.
+  domain        String?        @unique
+  domainMode    BrandDomainMode @default(OFF)
+  /// Social profiles, full https links. Null: not shown.
+  instagramUrl  String?
+  facebookUrl   String?
+  xUrl          String?
+  youtubeUrl    String?
+  articles      Article[]
+  faqs          FaqEntry[]
   categories    Category[]
   products      Product[]
   bundles       Bundle[] // [FIX] back-relation for Bundle.brand
@@ -209,6 +220,7 @@ model Product {
   orderItems        OrderItem[]
   cartItems         CartItem[]
   bundleEligibility BundleEligibleProduct[]
+  articles          Article[]
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
 
@@ -227,6 +239,10 @@ model ProductBatch {
   expiresOn         DateTime
   quantityReceived  Int
   quantityRemaining Int
+  /// Set when the batch is recalled: the public batch check (/verify) then
+  /// says so, with recallNote, instead of "within its best-before".
+  recalledAt        DateTime?
+  recallNote        String?
   orderItems        OrderItem[] // [FIX] back-relation — OrderItem.batchId is the recall-traceability link
   createdAt         DateTime    @default(now())
 
@@ -709,6 +725,10 @@ enum AnalyticsEventType {
   PAYMENT_DISMISSED
   /// A storefront assistant question, by intent only: { intent } (no free text kept).
   ASSISTANT_INTENT
+  /// A batch number checked on /verify: { batch, found } (normalised code only).
+  BATCH_CHECKED
+  /// A storefront search: { q, results } (digit runs stripped, so no phone numbers).
+  SEARCHED
 }
 
 /// Funnel and abandonment tracking (Section: analytics). Write-heavy,
@@ -756,6 +776,15 @@ model BusinessProfile {
   grievanceOfficerDesignation String?
   grievanceOfficerPhone       String?
   grievanceOfficerEmail       String?
+  /// Corporate Identity Number, shown in the footer and on the contact page.
+  cin                         String?
+  /// Where post should go, if not the registered address.
+  mailingAddress              String?
+  /// SooulOne's own social profiles (each brand has its own on Brand).
+  instagramUrl                String?
+  facebookUrl                 String?
+  xUrl                        String?
+  youtubeUrl                  String?
   updatedAt                   DateTime @updatedAt
 }
 
@@ -1166,4 +1195,129 @@ model WalletEntry {
   @@unique([kind, referralId])
   @@unique([kind, orderId])
   @@index([customerId, createdAt])
+}
+
+/// What a brand's own domain does (src/lib/brand-domains.ts).
+enum BrandDomainMode {
+  /// Not in use: the brand lives at sooulone.in/<brand> only.
+  OFF
+  /// Every visit is sent on to the brand's page on the main site.
+  REDIRECT
+  /// The domain is the brand's own site, on the same catalogue, basket and
+  /// checkout. Its pages name the brand domain as the canonical copy.
+  STANDALONE
+}
+
+/// The storefront's top bar, one message per row, in sortOrder. Text may use
+/// {freeDelivery}, {area}, {deliveryFee} (src/lib/site-content.ts), filled in
+/// from the live settings so the bar can't disagree with checkout.
+model Announcement {
+  id        String   @id @default(cuid())
+  text      String
+  /// Optional link, a path on this site ("/policies/shipping").
+  href      String?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Storefront words the owner can change (Settings → Site text). Each key has
+/// a default in src/lib/site-content.ts; a row here overrides it, and an empty
+/// value hides that line.
+model SiteText {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/// A question on /help. Topic is one of FAQ_TOPICS (src/lib/site-content.ts).
+/// The storefront assistant answers from published entries too.
+model FaqEntry {
+  id        String   @id @default(cuid())
+  question  String
+  /// Plain text; may use the same {tokens} as the top bar.
+  answer    String
+  topic     String
+  /// Only about this brand; null: everyone.
+  brandId   String?
+  brand     Brand?   @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  sortOrder Int      @default(0)
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([published, topic])
+}
+
+/// A /learn article. Body is the small Markdown subset in src/lib/mini-markdown.ts.
+model Article {
+  id                   String    @id @default(cuid())
+  slug                 String    @unique
+  title                String
+  excerpt              String
+  body                 String
+  /// A content pillar (ARTICLE_PILLARS in src/lib/site-content.ts).
+  pillar               String
+  brandId              String?
+  brand                Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  coverImageUrl        String?
+  products             Product[]
+  published            Boolean   @default(false)
+  publishedAt          DateTime?
+  /// Supplement-brand articles pass the same claims check as product copy
+  /// (src/lib/compliance/claims.ts) and need a person's sign-off, cleared
+  /// whenever the body changes.
+  complianceReviewedAt DateTime?
+  complianceReviewedBy String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([published, publishedAt])
+}
+
+enum EnquiryKind {
+  COLLABORATION
+  INTERNATIONAL
+  GENERAL
+}
+
+enum EnquiryStatus {
+  NEW
+  HANDLED
+}
+
+/// A message from the /contact forms. Personal data: owner and manager only,
+/// kept for ENQUIRY_RETENTION_DAYS.
+model Enquiry {
+  id           String        @id @default(cuid())
+  kind         EnquiryKind
+  name         String
+  email        String
+  phone        String?
+  organisation String?
+  country      String?
+  message      String
+  status       EnquiryStatus @default(NEW)
+  handledBy    String?
+  handledAt    DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@index([status, createdAt])
+}
+
+/// An open role on /careers. None published: the careers block is hidden.
+model JobOpening {
+  id             String   @id @default(cuid())
+  title          String
+  team           String?
+  location       String
+  employmentType String
+  summary        String
+  /// Where to apply: a link, or an email address (one of the two).
+  applyUrl       String?
+  applyEmail     String?
+  published      Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

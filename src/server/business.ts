@@ -16,6 +16,12 @@ export interface BusinessProfile {
   grievanceOfficerDesignation: string | null;
   grievanceOfficerPhone: string | null;
   grievanceOfficerEmail: string | null;
+  cin: string | null;
+  mailingAddress: string | null;
+  instagramUrl: string | null;
+  facebookUrl: string | null;
+  xUrl: string | null;
+  youtubeUrl: string | null;
 }
 
 const EMPTY: BusinessProfile = {
@@ -30,6 +36,12 @@ const EMPTY: BusinessProfile = {
   grievanceOfficerDesignation: null,
   grievanceOfficerPhone: null,
   grievanceOfficerEmail: null,
+  cin: null,
+  mailingAddress: null,
+  instagramUrl: null,
+  facebookUrl: null,
+  xUrl: null,
+  youtubeUrl: null,
 };
 
 /**
