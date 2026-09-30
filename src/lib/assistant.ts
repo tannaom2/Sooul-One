@@ -9,9 +9,11 @@
  * the store doesn't know, it hands over to a person.
  */
 
+import { tokenize, withinOneEdit } from "@/lib/search";
+
 /* ---------------------------------------------------------------- shapes */
 
-export type Intent = "menu" | "track" | "pincode" | "returns" | "shipping" | "payment" | "cod" | "area" | "contact" | "human" | "unknown";
+export type Intent = "menu" | "track" | "pincode" | "returns" | "shipping" | "payment" | "cod" | "area" | "contact" | "human" | "verify" | "faq" | "unknown";
 
 export interface QuickReply {
   readonly label: string;
@@ -68,6 +70,7 @@ export const MENU: readonly QuickReply[] = [
   { label: "Returns and refunds", intent: "returns" },
   { label: "Delivery charges", intent: "shipping" },
   { label: "Ways to pay", intent: "payment" },
+  { label: "Is my product genuine?", intent: "verify" },
   { label: "Talk to a person", intent: "human" },
 ];
 
@@ -98,17 +101,47 @@ export function classifyMessage(text: string): Intent {
   const t = text.toLowerCase();
   if (!t.trim()) return "menu";
   if (findOrderNumber(text) || /\b(track|where is|where's|status|order status|not (yet )?(arrived|delivered|received)|dispatch|shipped)\b/.test(t)) return "track";
+  if (/\b(genuine|authentic|fake|duplicate|original|counterfeit|batch|lot (no|number)|verify)\b/.test(t)) return "verify";
   if (/\b(return|refund|exchange|replace|damaged|broken|wrong item|expired)\b/.test(t)) return "returns";
   if (/\b(cod|cash on delivery|pay on delivery|cash)\b/.test(t)) return "cod";
   if (/\b(deliver|delivery|pincode|pin code|ship to|serviceable|reach)\b/.test(t) && findPincode(text)) return "pincode";
   if (/\b(pincode|pin code|serviceable|do you deliver)\b/.test(t)) return "pincode";
-  if (/\b(shipping|delivery (charge|fee|cost)|free delivery|how long|how many days)\b/.test(t)) return "shipping";
+  if (/\b(shipping|delivery (charge|fee|cost)|free delivery|how long (does|will|to) (it|delivery|shipping|my order|the order|an order) (take|arrive)|how many days)\b/.test(t)) return "shipping";
   if (/\b(pay|payment|upi|card|net ?banking|wallet|razorpay)\b/.test(t)) return "payment";
   if (/\b(which (city|cities|state)|gujarat|outside|mumbai|delhi|bangalore|bengaluru|pune)\b/.test(t)) return "area";
   if (/\b(human|person|agent|someone|call|whatsapp|email|contact|support|help ?desk|complain)\b/.test(t)) return "human";
   if (/^(hi|hello|hey|namaste|menu|help|start)\b/.test(t)) return "menu";
   if (findPincode(text)) return "pincode";
   return "unknown";
+}
+
+/* ------------------------------------------------------------------- FAQs */
+
+/**
+ * The owner's published FAQ (Settings → FAQs) that best answers a question
+ * the rules didn't recognise, or null. Only a confident match counts: at
+ * least half the meaningful words typed must appear in the question or
+ * answer, with the question weighted higher, so "where do your ingredients
+ * come from" finds that FAQ and "hello there" finds nothing.
+ */
+export function matchFaq<T extends { question: string; answer: string }>(text: string, faqs: readonly T[]): T | null {
+  const tokens = tokenize(text);
+  if (tokens.length === 0) return null;
+  let best: { faq: T; score: number; share: number } | null = null;
+  for (const faq of faqs) {
+    const q = tokenize(faq.question);
+    const a = tokenize(faq.answer);
+    const hit = (words: string[], t: string) => words.some((w) => w === t || (t.length >= 4 && w.startsWith(t)) || (t.length >= 5 && withinOneEdit(t, w)));
+    let score = 0;
+    let matched = 0;
+    for (const t of tokens) {
+      const s = hit(q, t) ? 3 : hit(a, t) ? 1 : 0;
+      if (s) matched++;
+      score += s;
+    }
+    if (!best || score > best.score) best = { faq, score, share: matched / tokens.length };
+  }
+  return best && best.score >= 4 && best.share >= 0.5 ? best.faq : null;
 }
 
 /* ---------------------------------------------------------------- returns */

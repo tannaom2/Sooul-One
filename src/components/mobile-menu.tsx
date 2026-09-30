@@ -74,6 +74,20 @@ export function MobileMenu({ showAccount = false, showBox = false }: { showAccou
             <Link href="/stores" className={link}>
               Find a store
             </Link>
+            <Link href="/learn" className={link}>
+              Learn
+            </Link>
+            <div className="flex flex-wrap gap-x-5 py-2 text-small text-ink-soft">
+              <Link href="/help" className="py-1.5">
+                Questions and answers
+              </Link>
+              <Link href="/verify" className="py-1.5">
+                Check your batch
+              </Link>
+              <Link href="/contact" className="py-1.5">
+                Contact us
+              </Link>
+            </div>
             {showAccount && (
               <Link href="/account" className={link}>
                 Your account

@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
   getBusinessProfile: vi.fn(async () => ({ customerCareEmail: "care@example.in", customerCarePhone: "+91 79 0000 0000" })),
   getAssistantSettings: vi.fn(async () => ({ enabled: true, returnWindowDays: null as number | null, returnConditions: null as string | null, supportWhatsapp: "9876543210" as string | null })),
   codRequiresCode: vi.fn(() => false),
+  getFaqs: vi.fn(async () => [] as { id: string; question: string; answer: string; topic: string; brandSlug: string | null; sortOrder: number }[]),
   afterCallbacks: [] as (() => unknown)[],
 }));
 
@@ -45,6 +46,7 @@ vi.mock("@/server/store-settings", () => ({ getCheckoutState: h.getCheckoutState
 vi.mock("@/server/business", () => ({ getBusinessProfile: h.getBusinessProfile }));
 vi.mock("@/server/assistant-settings", () => ({ getAssistantSettings: h.getAssistantSettings }));
 vi.mock("@/server/customer-auth", () => ({ codRequiresCode: h.codRequiresCode }));
+vi.mock("@/server/site-content", () => ({ getFaqs: h.getFaqs }));
 
 const { POST } = await import("@/app/api/chatbot/message/route");
 
@@ -177,5 +179,27 @@ describe("telemetry", () => {
     for (const fn of h.afterCallbacks) await fn();
     expect(h.recordEvent).toHaveBeenCalledWith("session-1", "ASSISTANT_INTENT", { metadata: { intent: "track" } });
     expect(JSON.stringify(h.recordEvent.mock.calls)).not.toMatch(/9725003344/);
+  });
+});
+
+describe("the owner's FAQs and the batch check", () => {
+  it("answers an unrecognised question from a published FAQ, with its tokens filled in", async () => {
+    h.getFaqs.mockResolvedValue([
+      { id: "faq_sourcing", question: "Where do your ingredients come from?", answer: "From farms we visit, delivered across {area}.", topic: "PRODUCTS", brandSlug: null, sortOrder: 0 },
+    ]);
+    const { body } = await send({ text: "where do the ingredients come from" });
+    expect(texts(body)).toBe("From farms we visit, delivered across Gujarat.");
+    expect(body.blocks.find((b: { type: string }) => b.type === "links").links[0].href).toBe("/help#faq-faq_sourcing");
+  });
+
+  it("still says it didn't understand when no FAQ is a confident match", async () => {
+    h.getFaqs.mockResolvedValue([{ id: "x", question: "How long will my product last?", answer: "See the date.", topic: "PRODUCTS", brandSlug: null, sortOrder: 0 }]);
+    const { body } = await send({ text: "tell me a joke" });
+    expect(texts(body)).toMatch(/didn't catch that/);
+  });
+
+  it("points questions about genuine products to the batch check", async () => {
+    const { body } = await send({ text: "how do I know this is not fake" });
+    expect(body.blocks.find((b: { type: string }) => b.type === "links").links[0].href).toBe("/verify");
   });
 });

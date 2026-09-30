@@ -21,6 +21,7 @@ import { ReviewForm } from "@/components/review-form";
 import { ageLabel, allergenLabel, allergenSentence, sugarLabel } from "@/lib/label-facts";
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
 import { getBusinessProfile } from "@/server/business";
+import { canonicalFor } from "@/server/brand-family";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 
@@ -39,6 +40,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title,
     description,
+    // On its brand's own domain when that runs standalone, else here.
+    alternates: { canonical: await canonicalFor(`/product/${product.slug}`, product.brand?.slug ?? null) },
     // A product without a photo shares with the store's card rather than no image.
     openGraph: { type: "website", siteName: "SooulOne", title, description, images: [product.images?.[0]?.url ?? "/og-default.png"] },
   };
@@ -223,7 +226,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   is a fact the system enforces, not a slogan. */}
               {buyable && (
                 <ul className="mt-4 grid gap-1.5 border-t border-rule pt-3 text-micro text-ink-soft">
-                  <li>Shipped by SooulOne itself, not a marketplace seller</li>
+                  <li>
+                    Shipped by SooulOne itself, not a marketplace seller ·{" "}
+                    <Link href="/verify" className="underline">Check your pack&rsquo;s batch</Link>
+                  </li>
                   {soonestBestBefore && <li>Best before {formatBestBefore(soonestBestBefore)} on the pack we&rsquo;d send you</li>}
                   <li>Delivering across {SERVICE_AREA.label}: arrives by {formatDate(arrivesBy)} at the latest · cash on delivery available</li>
                   <li>

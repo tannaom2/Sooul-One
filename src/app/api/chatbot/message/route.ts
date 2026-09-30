@@ -14,11 +14,14 @@ import { codForCheckout, extraDeliveryDays, getCodSettings } from "@/server/inte
 import { getCheckoutState, getStoreControls } from "@/server/store-settings";
 import { getBusinessProfile } from "@/server/business";
 import { getAssistantSettings } from "@/server/assistant-settings";
+import { getFaqs } from "@/server/site-content";
+import { fillTokens, storeFacts } from "@/lib/site-content";
 import { codRequiresCode } from "@/server/customer-auth";
 import {
   MENU,
   classifyMessage,
   findOrderNumber,
+  matchFaq,
   findPincode,
   parseContact,
   reply,
@@ -44,7 +47,7 @@ export const runtime = "nodejs";
  * per order number, so guessing is slow and tells nothing.
  */
 
-const INTENTS = ["menu", "track", "pincode", "returns", "shipping", "payment", "cod", "area", "contact", "human", "unknown"] as const;
+const INTENTS = ["menu", "track", "pincode", "returns", "shipping", "payment", "cod", "area", "contact", "human", "verify", "unknown"] as const;
 
 const schema = z.object({
   intent: z.enum(INTENTS).optional(),
@@ -267,13 +270,35 @@ async function answer(body: z.infer<typeof schema>, ip: () => Promise<boolean>):
     case "human":
     case "contact":
       return { intent, reply: reply([{ type: "text", text: "Here's how to reach us. A person will reply." }, await handoff("help")]) };
+    case "verify":
+      return {
+        intent,
+        reply: reply([
+          { type: "text", text: "Every batch we make is listed. Enter the batch number printed on your pack (usually next to the best-before date) and you'll see the product, when it was made and its best-before date." },
+          { type: "links", links: [{ label: "Check your batch", href: "/verify" }] },
+        ]),
+      };
     case "menu":
       return { intent, reply: reply([{ type: "text", text: "Hi! I can track an order, check delivery to your pincode, explain returns, delivery charges and ways to pay, or put you in touch with us." }]) };
-    default:
+    default: {
+      // The owner's own FAQ answers, before giving up.
+      const facts = storeFacts();
+      const faqs = (await getFaqs()).map((f) => ({ ...f, question: fillTokens(f.question, facts), answer: fillTokens(f.answer, facts) }));
+      const faq = text ? matchFaq(text, faqs) : null;
+      if (faq) {
+        return {
+          intent: "faq",
+          reply: reply([
+            { type: "text", text: faq.answer },
+            { type: "links", links: [{ label: "More answers", href: `/help#faq-${faq.id}` }] },
+          ]),
+        };
+      }
       return {
         intent: "unknown",
         reply: reply([{ type: "text", text: "I'm a simple helper and didn't catch that. Pick one of these, or talk to a person." }]),
       };
+    }
   }
 }
 

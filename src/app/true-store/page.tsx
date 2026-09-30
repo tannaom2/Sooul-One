@@ -3,13 +3,18 @@ import { ConcernChips } from "@/components/concern-chips";
 import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
 import { reportError } from "@/lib/observability";
+import { canonicalFor } from "@/server/brand-family";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "The True Store — SooulOne",
-  description: "Healthy namkeen, sweets and munchies, with the full nutrition panel on every page.",
-};
+export async function generateMetadata() {
+  return {
+    title: "The True Store — SooulOne",
+    description: "Healthy namkeen, sweets and munchies, with the full nutrition panel on every page.",
+    // The brand's own domain when it runs standalone, else this page.
+    alternates: { canonical: await canonicalFor("/true-store", "the-true-store") },
+  };
+}
 
 export default async function TrueStore({ searchParams }: { searchParams: Promise<{ concern?: string }> }) {
   const { concern } = await searchParams;

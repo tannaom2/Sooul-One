@@ -11,6 +11,8 @@ import { PAGE_LIMITS, decide, guardMode, requestKind, suspicious, type Verdict }
 import { MemoryLimiter } from "@/lib/memory-rate-limit";
 import { clientIp } from "@/lib/rate-limit-rules";
 import { verifyCrawler } from "@/server/crawler-verify";
+import { decideHost, normalizeHost } from "@/lib/brand-domains";
+import { brandDomainsForProxy } from "@/server/brand-family";
 
 /**
  * Runs before every page request. Four jobs:
@@ -38,13 +40,20 @@ import { verifyCrawler } from "@/server/crawler-verify";
  *    role) happens server-side in the admin layout and on every page and
  *    action. This layer bounces anonymous traffic cheaply; it isn't the lock.
  *
- * `x-invoke-path` and `x-new-session` are always overwritten here, never
+ * 3. Brand domains (src/lib/brand-domains.ts): a brand's own domain either
+ *    redirects to its page on the main site, or is served as the brand's
+ *    own site (its home page rewritten to the brand page). Looked up only
+ *    when the request isn't for the main site's own host.
+ *
+ * `x-invoke-path`, `x-new-session` and `x-brand-host` are always overwritten here, never
  * trusted from the client, since layouts make decisions based on them.
  */
 
 const BOT = /bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|lighthouse/i;
 
 const limiter = new MemoryLimiter();
+const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
+const MAIN_HOST = normalizeHost(URL.canParse(SITE_URL) ? new URL(SITE_URL).host : "localhost");
 const MODE = guardMode(process.env.BOT_GUARD, process.env.NODE_ENV === "production");
 // QA suites and the demo drive a headless browser on purpose.
 const ALLOW_HEADLESS = process.env.BOT_GUARD_ALLOW_HEADLESS === "1";
@@ -100,6 +109,19 @@ export async function proxy(request: NextRequest) {
   const blocked = await guard(request, pathname);
   if (blocked) return blocked;
 
+  // A brand's own domain: sent on to the main site, or served as the brand's site.
+  let brandHost: string | null = null;
+  let rewrite: string | null = null;
+  const host = request.headers.get("host") ?? "";
+  if (normalizeHost(host) !== MAIN_HOST) {
+    const decision = decideHost(host, pathname, request.nextUrl.search, await brandDomainsForProxy(), SITE_URL);
+    if (decision.kind === "redirect") return NextResponse.redirect(decision.location, decision.status);
+    if (decision.kind === "standalone") {
+      brandHost = decision.brand;
+      rewrite = decision.rewrite;
+    }
+  }
+
   // Bots would otherwise each count as a new "visitor" in the funnel.
   const newSessionId =
     !isAdmin && !isApi && !request.cookies.get(SESSION_COOKIE) && !BOT.test(request.headers.get("user-agent") ?? "")
@@ -112,6 +134,8 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set("content-security-policy", csp);
   requestHeaders.set("x-invoke-path", pathname);
   requestHeaders.delete("x-new-session");
+  requestHeaders.delete("x-brand-host");
+  if (brandHost) requestHeaders.set("x-brand-host", brandHost);
   if (newSessionId) requestHeaders.set("x-new-session", "1");
 
   if (isAdmin && !pathname.startsWith("/admin/login") && !request.cookies.get("soulone_admin")) {
@@ -121,7 +145,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  const response = rewrite
+    ? NextResponse.rewrite(new URL(`${rewrite}${request.nextUrl.search}`, request.url), { request: { headers: requestHeaders } })
+    : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
   if (newSessionId) response.cookies.set(SESSION_COOKIE, newSessionId, SESSION_COOKIE_OPTIONS);
 

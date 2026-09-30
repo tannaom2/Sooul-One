@@ -3,6 +3,7 @@ import { getBrandBySlug, getProductsByBrand } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
 import { ConcernTiles } from "@/components/concern-tiles";
 import { GummyBrandTabs } from "@/components/gummy-brand-tabs";
+import { canonicalFor } from "@/server/brand-family";
 import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,13 @@ export async function generateMetadata({ params }: { params: Promise<{ brand: st
   const name = brand?.name ?? slug.replace(/-/g, " ");
   const description = brand?.description ?? `Daily gummies from ${name}, with full supplement facts and dosage guidance.`;
 
-  return { title: `${name} — SooulOne Gummies`, description, openGraph: { title: name, description } };
+  return {
+    title: `${name} — SooulOne Gummies`,
+    description,
+    openGraph: { title: name, description },
+    // The brand's own domain when it runs standalone, else this page.
+    alternates: { canonical: await canonicalFor(`/gummies/${slug}`, slug) },
+  };
 }
 
 export default async function BrandPage({

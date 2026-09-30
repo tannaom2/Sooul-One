@@ -4,9 +4,6 @@ import { cookies, headers } from "next/headers";
 import { after } from "next/server";
 import { BASKET_COUNT_COOKIE } from "@/lib/session-cookie";
 import { CartProvider } from "@/components/basket/cart-provider";
-import { SERVICE_AREA } from "@/lib/checkout/service-area";
-import { DEFAULT_SHIPPING_POLICY } from "@/lib/checkout/quote";
-import { formatPriceTag } from "@/lib/money";
 import { BasketButton } from "@/components/basket/basket-button";
 import { BasketDrawer } from "@/components/basket/basket-drawer";
 import { MobileMenu } from "@/components/mobile-menu";
@@ -20,6 +17,11 @@ import { getAssistantSettings } from "@/server/assistant-settings";
 import { StorefrontBot } from "@/components/storefront-bot";
 import { CONSOLE_THEME_SETTINGS, CONSOLE_THEME_STORAGE_KEY, THEME_STORAGE_KEY, themeBootScript } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { TopBar } from "@/components/top-bar";
+import { BrandFamilyStrip, SocialLinks } from "@/components/brand-family";
+import { getOpenRoles, getSiteText, getTopBar } from "@/server/site-content";
+import { brandHost, getBrandFamily, siteUrl } from "@/server/brand-family";
+import { brandForPath, brandHref } from "@/lib/brand-domains";
 import "./globals.css";
 
 /**
@@ -72,54 +74,90 @@ export const viewport: Viewport = {
   themeColor: "#241c15",
 };
 
-async function Nav({ showThemeToggle }: { showThemeToggle: boolean }) {
+async function Nav({ showThemeToggle, path }: { showThemeToggle: boolean; path: string }) {
   // Accounts need codes to be sendable (src/lib/otp.ts); until then there's
   // nothing to sign in to, so no link.
   const accounts = codeDelivery(process.env) !== "off";
   // "Make your box" only while a box is live (cached with the catalogue).
-  const hasBox = (await activeBoxes().catch(() => [])).length > 0;
+  const [boxes, messages, family, host] = await Promise.all([activeBoxes().catch(() => []), getTopBar(), getBrandFamily(), brandHost()]);
+  const hasBox = boxes.length > 0;
+  const hostBrand = host ? family.find((b) => b.slug === host) : undefined;
+  const current = brandForPath(path, family.map((b) => b.slug));
   return (
-    <header className="sticky top-0 z-50 border-b border-rule bg-paper/95 backdrop-blur print:hidden">
-      {/* Said up front, so shoppers outside the area learn it before they fill a basket. */}
-      <p className="bg-inverse px-5 py-1.5 text-center text-micro font-semibold text-on-inverse">
-        Delivering across {SERVICE_AREA.label} · Free delivery over {formatPriceTag(DEFAULT_SHIPPING_POLICY.freeAbovePaise)}
-      </p>
-      <nav className="relative mx-auto flex max-w-6xl items-center gap-6 px-5 py-3">
-        <MobileMenu showAccount={accounts} showBox={hasBox} />
-        <Link href="/" className="font-display text-lead font-extrabold tracking-tight">
-          SooulOne
-        </Link>
-        <div className="hidden gap-5 text-small font-medium sm:flex">
-          <Link href="/true-store" className="hover:underline">
-            The True Store
-          </Link>
-          <Link href="/gummies" className="hover:underline">
-            Gummies
-          </Link>
-          {hasBox && (
-            <Link href="/box" className="font-semibold text-veg hover:underline">
-              Make your box
+    <>
+      {/* The family strip scrolls away; the announcements and the menu stay. */}
+      <BrandFamilyStrip brands={family} current={current} brandHost={host} siteUrl={siteUrl()} />
+      <header className="sticky top-0 z-50 border-b border-rule bg-paper/95 backdrop-blur print:hidden">
+        {/* Said up front, so shoppers outside the area learn it before they fill a basket (Settings → Top bar). */}
+        <TopBar messages={messages} />
+        <nav className="relative mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-5">
+          <MobileMenu showAccount={accounts} showBox={hasBox} />
+          {hostBrand ? (
+            // On a brand's own domain the brand leads, endorsed by SooulOne.
+            <Link href="/" className="flex flex-col leading-none">
+              <span className="font-display text-lead font-extrabold tracking-tight">{hostBrand.name}</span>
+              <span className="mt-0.5 text-micro text-ink-soft">a SooulOne brand</span>
+            </Link>
+          ) : (
+            <Link href="/" className="font-display text-lead font-extrabold tracking-tight">
+              SooulOne
             </Link>
           )}
-          <Link href="/stores" className="hover:underline">
-            Find a store
-          </Link>
-        </div>
-        <div className="ml-auto flex items-center gap-1 sm:gap-3">
-          {showThemeToggle && <ThemeToggle />}
-          {accounts && (
-            <Link href="/account" className="flex h-11 items-center gap-1.5 px-2 text-small font-medium hover:underline" aria-label="Your account">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
-              </svg>
-              <span className="hidden sm:inline">Account</span>
+          <div className="hidden gap-5 text-small font-medium sm:flex">
+            <Link href="/true-store" className="hover:underline">
+              The True Store
             </Link>
-          )}
-          <BasketButton />
-        </div>
-      </nav>
-    </header>
+            <Link href="/gummies" className="hover:underline">
+              Gummies
+            </Link>
+            {hasBox && (
+              <Link href="/box" className="font-semibold text-veg hover:underline">
+                Make your box
+              </Link>
+            )}
+            <Link href="/stores" className="hidden hover:underline lg:inline">
+              Find a store
+            </Link>
+          </div>
+          <div className="ml-auto flex items-center gap-1 sm:gap-3">
+            <SiteSearch from={current ?? host} />
+            {showThemeToggle && <ThemeToggle />}
+            {accounts && (
+              <Link href="/account" className="flex h-11 items-center gap-1.5 px-2 text-small font-medium hover:underline" aria-label="Your account">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+                </svg>
+                <span className="hidden sm:inline">Account</span>
+              </Link>
+            )}
+            <BasketButton />
+          </div>
+        </nav>
+      </header>
+    </>
+  );
+}
+
+/** Search every brand at once (/search). A plain form, so it works before any script loads. */
+function SiteSearch({ from }: { from: string | null }) {
+  return (
+    <>
+      <form action="/search" role="search" className="hidden md:block">
+        <label htmlFor="site-search" className="sr-only">
+          Search all SooulOne brands
+        </label>
+        <input id="site-search" name="q" type="search" placeholder="Search all brands" maxLength={80} className="field h-9 w-44 py-1 text-small lg:w-56" />
+        {/* The brand you're browsing comes first in the results. */}
+        {from && <input type="hidden" name="from" value={from} />}
+      </form>
+      <Link href={from ? `/search?from=${from}` : "/search"} className="flex h-11 w-11 items-center justify-center md:hidden" aria-label="Search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M20 20l-4-4" />
+        </svg>
+      </Link>
+    </>
   );
 }
 
@@ -127,6 +165,8 @@ async function Nav({ showThemeToggle }: { showThemeToggle: boolean }) {
  * Site-wide legal displays: the FSSAI licence, the seller's legal identity,
  * customer care, and the grievance officer the Consumer Protection
  * (E-Commerce) Rules require. All come from Settings → Business details.
+ * The words around them (tagline, hours, response time) are Settings → Site
+ * text; the brands and their social links are Settings → Brands.
  *
  * When the licence is absent the footer says so plainly rather than rendering
  * a placeholder. A fabricated licence number is a considerably worse problem
@@ -134,42 +174,78 @@ async function Nav({ showThemeToggle }: { showThemeToggle: boolean }) {
  * missing details are simply left out; the launch-readiness check lists them.
  */
 async function Footer() {
-  const business = await getBusinessProfile();
+  const [business, text, family, host, roles] = await Promise.all([getBusinessProfile(), getSiteText(), getBrandFamily(), brandHost(), getOpenRoles()]);
   const licence = business.fssaiLicence;
-  const identity = [business.legalName, business.registeredAddress, business.gstin && `GSTIN ${business.gstin}`].filter(Boolean);
+  const identity = [business.legalName, business.registeredAddress, business.gstin && `GSTIN ${business.gstin}`, business.cin && `CIN ${business.cin}`].filter(Boolean);
   const officer = [business.grievanceOfficerName, business.grievanceOfficerDesignation].filter(Boolean).join(", ");
+  const link = "hover:text-ink";
 
   return (
     <footer className="mt-24 border-t border-rule bg-shelf print:hidden">
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="lg:col-span-1">
           <p className="font-display text-h3 font-extrabold">SooulOne</p>
-          <p className="mt-2 max-w-[38ch] text-small text-ink-soft">
-            Snacks and supplements with the whole label on the page, not just on the pack.
-          </p>
+          {text["footer.tagline"] && <p className="mt-2 max-w-[38ch] text-small text-ink-soft">{text["footer.tagline"]}</p>}
+          <div className="mt-3 -ml-2">
+            <SocialLinks owner="SooulOne" links={business} />
+          </div>
         </div>
 
         <div className="text-small">
-          <p className="mb-2 font-semibold">Shop</p>
+          <p className="mb-2 font-semibold">Our brands</p>
+          <ul className="grid gap-1.5 text-ink-soft">
+            {family.map((b) => {
+              const href = brandHref(b.slug, family, host, siteUrl());
+              return (
+                <li key={b.slug} className="flex items-center gap-1">
+                  {href.startsWith("/") ? (
+                    <Link href={href} className={link}>
+                      {b.name}
+                    </Link>
+                  ) : (
+                    <a href={href} className={link}>
+                      {b.name}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="text-small">
+          <p className="mb-2 font-semibold">Help</p>
           <ul className="grid gap-1.5 text-ink-soft">
             <li>
-              <Link href="/true-store" className="hover:text-ink">
-                The True Store
+              <Link href="/help" className={link}>
+                Questions and answers
               </Link>
             </li>
             <li>
-              <Link href="/gummies/woman-axis" className="hover:text-ink">
-                Woman Axis
+              <Link href="/verify" className={link}>
+                Check your batch
               </Link>
             </li>
             <li>
-              <Link href="/gummies/kids-vault" className="hover:text-ink">
-                Kids Vault
+              <Link href="/contact" className={link}>
+                Contact us
               </Link>
             </li>
             <li>
-              <Link href="/gummies/man-rituals" className="hover:text-ink">
-                Man Rituals
+              <Link href="/learn" className={link}>
+                Learn
+              </Link>
+            </li>
+            {roles.length > 0 && (
+              <li>
+                <Link href="/careers" className={link}>
+                  Careers
+                </Link>
+              </li>
+            )}
+            <li>
+              <Link href="/stores" className={link}>
+                Find a store
               </Link>
             </li>
           </ul>
@@ -179,22 +255,22 @@ async function Footer() {
           <p className="mb-2 font-semibold">Policies</p>
           <ul className="grid gap-1.5 text-ink-soft">
             <li>
-              <Link href="/policies/privacy" className="hover:text-ink">
+              <Link href="/policies/privacy" className={link}>
                 Privacy
               </Link>
             </li>
             <li>
-              <Link href="/policies/terms" className="hover:text-ink">
+              <Link href="/policies/terms" className={link}>
                 Terms
               </Link>
             </li>
             <li>
-              <Link href="/policies/refunds" className="hover:text-ink">
+              <Link href="/policies/refunds" className={link}>
                 Refunds
               </Link>
             </li>
             <li>
-              <Link href="/policies/shipping" className="hover:text-ink">
+              <Link href="/policies/shipping" className={link}>
                 Shipping
               </Link>
             </li>
@@ -202,10 +278,18 @@ async function Footer() {
         </div>
 
         <div className="text-small">
-          <p className="mb-2 font-semibold">Help</p>
+          <p className="mb-2 font-semibold">Talk to us</p>
           <ul className="grid gap-1.5 text-ink-soft">
             {business.customerCarePhone && <li className="tabular">Customer care {business.customerCarePhone}</li>}
-            {business.customerCareEmail && <li className="break-all">{business.customerCareEmail}</li>}
+            {business.customerCareEmail && (
+              <li className="break-all">
+                <a href={`mailto:${business.customerCareEmail}`} className={link}>
+                  {business.customerCareEmail}
+                </a>
+              </li>
+            )}
+            {text["contact.hours"] && <li>{text["contact.hours"]}</li>}
+            {text["contact.responseTime"] && <li className="text-ink">{text["contact.responseTime"]}</li>}
           </ul>
           {officer && (
             <div className="mt-3 text-ink-soft">
@@ -221,6 +305,7 @@ async function Footer() {
       <div className="border-t border-rule">
         <div className="mx-auto grid max-w-6xl gap-2 px-5 py-6 text-micro text-ink-faint">
           {identity.length > 0 && <p>{identity.join(" · ")}</p>}
+          {business.mailingAddress && <p>Mailing address: {business.mailingAddress}</p>}
           {licence ? (
             <p className="tabular">FSSAI licence {licence}</p>
           ) : (
@@ -275,7 +360,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           // The badge count comes from a cookie the basket actions keep current,
           // so showing it costs no database call on every page.
           <CartProvider initialCount={Math.max(0, Number((await cookies()).get(BASKET_COUNT_COOKIE)?.value) || 0)}>
-            <Nav showThemeToggle={theme.toggleVisible} />
+            <Nav showThemeToggle={theme.toggleVisible} path={path} />
             <main>{children}</main>
             <Footer />
             <BasketDrawer />
