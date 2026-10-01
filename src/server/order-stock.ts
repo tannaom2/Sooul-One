@@ -20,7 +20,8 @@ export interface BatchTake {
 
 /**
  * Take an order's stock in one statement, however many lines and batches it
- * has. Every decrement applies only where enough remains; returns the name of
+ * has. Every decrement applies only where enough remains and the batch isn't
+ * recalled (so a quote made before a recall can't sell it); returns the name of
  * the first item that fell short, or null. The caller throws on a shortfall,
  * which rolls the whole order back, including any decrements this made.
  */
@@ -30,7 +31,7 @@ export async function takeStock(tx: Tx, batches: readonly BatchTake[]): Promise<
   const taken = await tx.$queryRaw<{ id: string }[]>`
     WITH bt(id, qty) AS (VALUES ${values})
     UPDATE "ProductBatch" pb SET "quantityRemaining" = pb."quantityRemaining" - bt.qty
-    FROM bt WHERE pb.id = bt.id AND pb."quantityRemaining" >= bt.qty
+    FROM bt WHERE pb.id = bt.id AND pb."quantityRemaining" >= bt.qty AND pb."recalledAt" IS NULL
     RETURNING pb.id`;
   const took = new Set(taken.map((t) => t.id));
   return batches.find((b) => !took.has(b.id))?.name ?? null;

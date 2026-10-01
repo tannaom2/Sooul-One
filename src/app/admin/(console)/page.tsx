@@ -12,6 +12,7 @@ import { getReadiness } from "@/server/launch-readiness";
 import { getStoreControls } from "@/server/store-settings";
 import { recoveryCodeStatus } from "@/server/recovery-codes";
 import { stockView } from "@/lib/stock-view";
+import { SELLABLE_BATCH_WHERE } from "@/lib/basket-rules";
 import { Suspense } from "react";
 import { DashboardInsights, DashboardInsightsLoading } from "./dashboard-insights";
 
@@ -48,7 +49,8 @@ export default async function Dashboard() {
   try {
     const [recent, live, ship, reviews, failed, cur, prev] = await Promise.all([
       db.order.findMany({ orderBy: { placedAt: "desc" }, take: 8 }),
-      db.product.findMany({ where: { isActive: true }, include: { batches: true } }),
+      // Recalled batches are off sale: not stock, and not worth an expiry warning.
+      db.product.findMany({ where: { isActive: true }, include: { batches: { where: SELLABLE_BATCH_WHERE } } }),
       canSeeOrders ? db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }) : 0,
       can(session.role, "reviews:moderate") ? db.review.count({ where: { isApproved: false } }) : 0,
       can(session.role, "audit:view")

@@ -7,6 +7,7 @@ import { can } from "@/lib/permissions";
 import { Empty, NoAccess, VegMark } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { stockView } from "@/lib/stock-view";
+import { IN_STOCK_BATCH_WHERE } from "@/lib/basket-rules";
 import { decimalToPaise } from "@/lib/format";
 import {
   PRODUCT_VIEWS,
@@ -75,7 +76,7 @@ export default async function AdminProducts({
     [products, total, counts, hasAny] = await Promise.all([
       db.product.findMany({
         where,
-        include: { brand: true, category: true, batches: { where: { quantityRemaining: { gt: 0 } } } },
+        include: { brand: true, category: true, batches: { where: IN_STOCK_BATCH_WHERE } },
         orderBy: { createdAt: "desc" },
         take: PRODUCTS_PAGE_SIZE,
         skip: (filters.page - 1) * PRODUCTS_PAGE_SIZE,

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { CATALOG_TAG } from "@/lib/cache-tags";
 import { decimalToPaise } from "@/lib/format";
 import { resolveUnitPrice } from "@/lib/pricing";
-import { SELLABLE_PRODUCT_WHERE, isSellable } from "@/lib/basket-rules";
+import { IN_STOCK_BATCH_WHERE, SELLABLE_PRODUCT_WHERE, isSellable } from "@/lib/basket-rules";
 import { productAvailability } from "@/lib/checkout/availability";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { EXPIRY_ONLY_POLICY, FSSAI_ECOMMERCE_POLICY, requiredRemainingDays, wholeDaysBetween } from "@/lib/compliance/shelf-life";
@@ -80,7 +80,7 @@ export async function refreshBoxPool(boxId: string): Promise<{ inPool: number; b
   const [products, sales] = await Promise.all([
     db.product.findMany({
       where: { ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
-      include: { brand: { select: { slug: true } }, batches: { where: { quantityRemaining: { gt: 0 } } } },
+      include: { brand: { select: { slug: true } }, batches: { where: IN_STOCK_BATCH_WHERE } },
     }),
     db.orderItem.groupBy({
       by: ["productId"],
@@ -213,7 +213,7 @@ export async function saveCartBox(
 
   const products = await db.product.findMany({
     where: { id: { in: picks.map((p) => p.productId) } },
-    include: { brand: { select: { isActive: true, slug: true } }, category: { select: { isActive: true } }, batches: { where: { quantityRemaining: { gt: 0 } } } },
+    include: { brand: { select: { isActive: true, slug: true } }, category: { select: { isActive: true } }, batches: { where: IN_STOCK_BATCH_WHERE } },
   });
   const byId = new Map(products.map((p) => [p.id, p]));
   // Never a snack in a gummies box or a gummy in a True Store box, whatever the page sent.

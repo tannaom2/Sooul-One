@@ -15,6 +15,18 @@ export const SELLABLE_PRODUCT_WHERE = {
   category: { isActive: true },
 } as const;
 
+/**
+ * Batches that may be sold: not recalled (Stock batches → Recall). Every read
+ * that feeds availability, the basket, the checkout quote or a box pool uses
+ * this, the database's stock total leaves recalled batches out, and the
+ * order's stock take refuses them (src/server/order-stock.ts), so a recall
+ * stops sales everywhere at once.
+ */
+export const SELLABLE_BATCH_WHERE = { recalledAt: null } as const;
+
+/** In stock and sellable: what availability and allocation draw from. */
+export const IN_STOCK_BATCH_WHERE = { quantityRemaining: { gt: 0 }, recalledAt: null } as const;
+
 /** The same rule for a product already loaded with its brand and category. */
 export function isSellable(product: {
   isActive: boolean;

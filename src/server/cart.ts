@@ -16,7 +16,7 @@ import { groupKits } from "@/lib/checkout/kits";
 import { freeDeliveryProgress, growKitOptions, rankOfferNudges, settleNudge, type OfferNudge } from "@/lib/checkout/basket-nudges";
 import { MAX_LINE_QUANTITY, type BasketBox, type BasketKit, type BasketSnapshot } from "@/lib/basket-types";
 import { formatINR, formatPriceTag } from "@/lib/money";
-import { SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
+import { IN_STOCK_BATCH_WHERE, SELLABLE_BATCH_WHERE, SELLABLE_PRODUCT_WHERE, isSellable, priceChangeNote, unavailableFixes } from "@/lib/basket-rules";
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
 import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
@@ -64,7 +64,7 @@ const CART_ITEM_INCLUDE = {
     include: {
       brand: true,
       category: { select: { isActive: true } },
-      batches: { orderBy: { expiresOn: "asc" as const } },
+      batches: { where: SELLABLE_BATCH_WHERE, orderBy: { expiresOn: "asc" as const } },
       images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
     },
   },
@@ -121,7 +121,7 @@ export async function addToCart(sessionId: string, productId: string, quantity: 
     include: {
       brand: { select: { isActive: true } },
       category: { select: { isActive: true } },
-      batches: { where: { quantityRemaining: { gt: 0 } } },
+      batches: { where: IN_STOCK_BATCH_WHERE },
     },
   });
   if (!product || !isSellable(product)) throw new Error("That product isn't available.");
@@ -219,7 +219,7 @@ export async function loadBasketKits(result: CartQuote): Promise<BasketKit[]> {
     ids.length > 0
       ? await db.product.findMany({
           where: { id: { in: ids }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
-          include: { batches: { where: { quantityRemaining: { gt: 0 } } } },
+          include: { batches: { where: IN_STOCK_BATCH_WHERE } },
         })
       : [];
   const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
@@ -528,7 +528,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
     settled.length > 0
       ? await db.product.findMany({
           where: { id: { in: [...new Set(settled.flatMap((n) => n.suggestProductIds))] }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
-          include: { batches: { where: { quantityRemaining: { gt: 0 } } } },
+          include: { batches: { where: IN_STOCK_BATCH_WHERE } },
         })
       : [];
   const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);

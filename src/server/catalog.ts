@@ -8,7 +8,7 @@ import { productAvailability, type AvailabilityState } from "@/lib/checkout/avai
 import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delivery";
 import { ageLabel, sugarLabel, unitPriceLabel } from "@/lib/label-facts";
 import { formatINR } from "@/lib/money";
-import { SELLABLE_PRODUCT_WHERE } from "@/lib/basket-rules";
+import { IN_STOCK_BATCH_WHERE, SELLABLE_BATCH_WHERE, SELLABLE_PRODUCT_WHERE } from "@/lib/basket-rules";
 import { comboPrice, type BundleRule } from "@/lib/checkout/bundles";
 import { getStoreControls } from "@/server/store-settings";
 
@@ -152,7 +152,7 @@ const LIST_INCLUDE = {
   category: true,
   images: { orderBy: { sortOrder: "asc" as const } },
   batches: {
-    where: { quantityRemaining: { gt: 0 } },
+    where: IN_STOCK_BATCH_WHERE,
     select: { id: true, batchNumber: true, expiresOn: true, quantityRemaining: true },
   },
   bundleEligibility: { where: { bundle: { isActive: true } }, select: { bundleId: true }, take: 1 },
@@ -268,7 +268,7 @@ export const getProductBySlug = unstable_cache(
         category: true,
         images: { orderBy: { sortOrder: "asc" } },
         variants: true,
-        batches: { orderBy: { expiresOn: "asc" } },
+        batches: { where: SELLABLE_BATCH_WHERE, orderBy: { expiresOn: "asc" } },
         reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" }, take: 10 },
       },
     });

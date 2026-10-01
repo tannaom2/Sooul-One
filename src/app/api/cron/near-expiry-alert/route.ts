@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { findNearExpiryBatches } from "@/lib/compliance/fefo";
 import { sendNearExpiryAlert } from "@/lib/email";
 import { cronAuthorized } from "@/lib/cron-auth";
+import { SELLABLE_BATCH_WHERE } from "@/lib/basket-rules";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   const products = await db.product.findMany({
     where: { isActive: true },
-    include: { batches: true },
+    include: { batches: { where: SELLABLE_BATCH_WHERE } }, // recalled batches are off sale already
   });
 
   const now = new Date();
