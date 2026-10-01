@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   storeSettings: { findUnique: vi.fn() },
   businessProfile: { findUnique: vi.fn() },
   pincodeRule: { findUnique: vi.fn() },
+  announcement: { findMany: vi.fn() },
+  brand: { findMany: vi.fn() },
   order: { count: vi.fn(async () => 0), groupBy: vi.fn(async () => []) },
 }));
 
@@ -97,5 +99,21 @@ describe("business details", () => {
     const { getBusinessProfile } = await import("@/server/business");
     await getBusinessProfile();
     expect((await getBusinessProfile()).gstin).toBe("24AAKCS4821M1ZX");
+  });
+});
+
+describe("storefront content", () => {
+  it("a database blip doesn't hide the top bar until the cache expires", async () => {
+    h.announcement.findMany.mockImplementationOnce(down).mockResolvedValue([{ id: "a", text: "We only deliver in {area}", href: null, enabled: true, sortOrder: 0 }]);
+    const { getTopBar } = await import("@/server/site-content");
+    expect(await getTopBar()).toEqual([]); // nothing read yet: shown without it, this request only
+    expect(await getTopBar()).toEqual([{ id: "a", text: "We only deliver in Gujarat", href: null }]);
+  });
+
+  it("keeps the brand list (footer, search) through an error", async () => {
+    h.brand.findMany.mockResolvedValueOnce([{ slug: "woman-axis", name: "Woman Axis", tagline: null, domain: null, domainMode: "OFF", instagramUrl: null, facebookUrl: null, xUrl: null, youtubeUrl: null }]).mockImplementation(down);
+    const { getBrandFamily } = await import("@/server/brand-family");
+    await getBrandFamily();
+    expect((await getBrandFamily()).map((b) => b.slug)).toEqual(["woman-axis"]);
   });
 });

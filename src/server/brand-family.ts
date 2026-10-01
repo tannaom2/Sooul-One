@@ -4,12 +4,13 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { CATALOG_TAG } from "@/lib/cache-tags";
 import { reportError } from "@/lib/observability";
+import { withLastGood } from "@/server/last-good";
 import { canonicalUrl, type BrandDomain, type DomainMode } from "@/lib/brand-domains";
 
 /**
  * The brand family: every active brand with its domain setting and social
- * links, in the order the storefront lists them. Read by the family strip,
- * the footer, canonical links and the proxy (src/lib/brand-domains.ts).
+ * links, in the order the storefront lists them. Read by the footer,
+ * search, canonical links and the proxy (src/lib/brand-domains.ts).
  */
 
 export interface FamilyBrand extends BrandDomain {
@@ -24,20 +25,15 @@ export interface FamilyBrand extends BrandDomain {
 /** The True Store first (the retail brand), then the gummies brands in their usual order. */
 const ORDER = ["the-true-store", "woman-axis", "kids-vault", "man-rituals"];
 
-export const getBrandFamily = unstable_cache(
+const loadBrandFamily = unstable_cache(
   async (): Promise<FamilyBrand[]> => {
-    try {
-      const rows = await db.brand.findMany({
-        where: { isActive: true },
-        select: { slug: true, name: true, tagline: true, domain: true, domainMode: true, instagramUrl: true, facebookUrl: true, xUrl: true, youtubeUrl: true },
-      });
-      return rows
-        .map((r) => ({ ...r, domainMode: r.domainMode as DomainMode }))
-        .sort((a, b) => (ORDER.indexOf(a.slug) + 1 || 99) - (ORDER.indexOf(b.slug) + 1 || 99) || a.name.localeCompare(b.name));
-    } catch (error) {
-      reportError("brand-family", error);
-      return [];
-    }
+    const rows = await db.brand.findMany({
+      where: { isActive: true },
+      select: { slug: true, name: true, tagline: true, domain: true, domainMode: true, instagramUrl: true, facebookUrl: true, xUrl: true, youtubeUrl: true },
+    });
+    return rows
+      .map((r) => ({ ...r, domainMode: r.domainMode as DomainMode }))
+      .sort((a, b) => (ORDER.indexOf(a.slug) + 1 || 99) - (ORDER.indexOf(b.slug) + 1 || 99) || a.name.localeCompare(b.name));
   },
   ["brand-family"],
   { revalidate: 300, tags: [CATALOG_TAG] },
@@ -86,3 +82,11 @@ export async function canonicalFor(path: string, brandSlug: string | null): Prom
 export function siteUrl(): string {
   return process.env.SITE_URL ?? "http://localhost:3000";
 }
+
+/*
+ * Each loader above throws on a database error, which unstable_cache never
+ * stores, and the export answers from the last good read on this server
+ * (src/server/last-good.ts). A fallback used to be cached for up to ten
+ * minutes: one database blip hid the top bar until the cache expired.
+ */
+export const getBrandFamily = withLastGood("brand-family", loadBrandFamily, (): FamilyBrand[] => []);
