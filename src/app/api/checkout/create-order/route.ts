@@ -22,6 +22,7 @@ import { limitPublic } from "@/server/rate-limit";
 import { codRequiresCode, getCustomer } from "@/server/customer-auth";
 import { CreditChanged, checkoutCredit, onOrderPlaced } from "@/server/referrals";
 import { codForCheckout, recordOrderRisk } from "@/server/intel";
+import { alertOwnerNewOrder } from "@/server/order-alert";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { clientIp } from "@/lib/rate-limit-rules";
 
@@ -460,6 +461,8 @@ export async function POST(request: Request) {
       delivered: sent.delivered,
       reason: sent.reason ?? null,
     });
+    // The owner hears about a COD order now; an online one when it's paid (src/server/payments.ts).
+    await alertOwnerNewOrder(order.id);
   });
 
   // --- Cash on delivery needs no gateway -----------------------------------

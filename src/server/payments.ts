@@ -10,6 +10,7 @@ import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { lateCaptureAction } from "@/lib/payment-webhook";
 import { clearCart } from "@/server/cart";
 import { takeStock } from "@/server/order-stock";
+import { alertOwnerNewOrder } from "@/server/order-alert";
 
 /**
  * What happens once a payment is known to be captured, wherever that's
@@ -65,6 +66,8 @@ export async function afterPaymentCaptured(order: { id: string; sessionId: strin
   const paid = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
   const sent = await sendOrderConfirmation(paid);
   await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, { email: "order_confirmation", delivered: sent.delivered, reason: sent.reason ?? null });
+  // The owner hears about an online order once it's paid (M9).
+  await alertOwnerNewOrder(order.id);
   if (order.sessionId) {
     const sessionId = order.sessionId;
     after(() => recordEvent(sessionId, "ORDER_PAID", { orderId: order.id, metadata: { totalPaise: payment.amountPaise, method: "RAZORPAY" } }));

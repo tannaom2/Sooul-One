@@ -36,6 +36,7 @@ vi.mock("@/lib/order-events", () => ({ recordOrderEvent: h.recordOrderEvent }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
 vi.mock("@/server/referrals", () => ({ onOrderStatusChanged: vi.fn() }));
 vi.mock("@/server/order-stock", () => ({ releaseStock: h.releaseStock, takeStock: h.takeStock }));
+vi.mock("@/server/order-alert", () => ({ alertOwnerNewOrder: vi.fn(async () => undefined) }));
 
 describe("the rules", () => {
   it("closes the payment window well before the sweep closes the order", () => {

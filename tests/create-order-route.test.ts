@@ -79,6 +79,7 @@ vi.mock("razorpay", () => ({
     orders = { create: h.razorpayCreate };
   },
 }));
+vi.mock("@/server/order-alert", () => ({ alertOwnerNewOrder: vi.fn(async () => undefined) }));
 
 import { POST } from "../src/app/api/checkout/create-order/route";
 

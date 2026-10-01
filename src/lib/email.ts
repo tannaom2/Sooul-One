@@ -248,3 +248,31 @@ export async function sendEnquiryNotice(
   const text = [`New enquiry: ${enquiry.kind}`, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", enquiry.message].join("\n");
   return send(to, `New enquiry: ${enquiry.kind} from ${enquiry.name}`, html, text);
 }
+
+/**
+ * A new order, to the owner (M9): COD orders when placed, online orders when
+ * the payment is captured. The order number, total, how it's paid, what's in
+ * it, the pincode and its RTO risk band, with a link to the console. No
+ * customer name, phone or address: those stay in the console.
+ */
+export async function sendNewOrderAlert(
+  to: string | null,
+  order: { orderNumber: string; totalPaise: number; method: "COD" | "ONLINE"; items: { name: string; quantity: number }[]; pincode: string | null; riskBand: string | null; consoleUrl: string },
+): Promise<Sent> {
+  if (!to) return { delivered: false, reason: "not_configured" };
+  const total = `₹${(order.totalPaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const method = order.method === "COD" ? "Cash on delivery" : "Paid online";
+  const rows = order.items
+    .map((i) => `<tr><td style="padding:4px 0;font-size:14px">${esc(i.name)}</td><td style="padding:4px 0;font-size:14px;text-align:right">× ${i.quantity}</td></tr>`)
+    .join("");
+  const facts = [method, order.pincode && `Pincode ${esc(order.pincode)}`, order.riskBand && `RTO risk: ${esc(order.riskBand)}`].filter(Boolean).join(" · ");
+  const html = wrap(
+    `New order ${esc(order.orderNumber)}: ${total}`,
+    `<p style="margin:0 0 12px;font-size:15px;line-height:1.5">${facts}</p>
+     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px">${rows}</table>
+     ${emailButton(order.consoleUrl, "Open in the console")}`,
+    "Sent because a new order was placed on your store. Customer details are in the console.",
+  );
+  const text = [`New order ${order.orderNumber}: ${total}`, facts.replace(/<[^>]+>/g, ""), "", ...order.items.map((i) => `  ${i.name} × ${i.quantity}`), "", order.consoleUrl].join("\n");
+  return send(to, `New order ${order.orderNumber} · ${total} · ${method}`, html, text);
+}
