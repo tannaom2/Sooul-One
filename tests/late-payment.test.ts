@@ -11,7 +11,7 @@ import { CHECKOUT_TIMEOUT_SECONDS, UNPAID_EXPIRY_MINUTES } from "@/lib/order-lif
 
 const h = vi.hoisted(() => ({
   db: {
-    order: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
+    order: { findMany: vi.fn(), findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
     walletEntry: { findFirst: vi.fn() },
     referral: { findUnique: vi.fn() },
     coupon: { updateMany: vi.fn() },
@@ -121,7 +121,7 @@ describe("a capture after the sweep closed the order", () => {
     process.env.RAZORPAY_KEY_ID = "rzp_test_x";
     process.env.RAZORPAY_KEY_SECRET = "secret";
     h.db.order.findUnique.mockResolvedValue(ORDER);
-    h.db.order.findUniqueOrThrow = vi.fn(async () => ({ ...ORDER, status: "PAID" }));
+    h.db.order.findUniqueOrThrow.mockResolvedValue({ ...ORDER, status: "PAID" });
     h.db.walletEntry.findFirst.mockResolvedValue(null);
     h.db.referral.findUnique.mockResolvedValue(null);
     h.db.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>

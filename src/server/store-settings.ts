@@ -7,27 +7,35 @@ import { onlinePaymentsEnabled } from "@/lib/payments-config";
 import { DEFAULT_CONTROLS, checkoutState, type CheckoutState, type StoreControls } from "@/lib/store-controls";
 import { ordersOpen } from "@/server/launch-readiness";
 import { DEFAULT_THEME_SETTINGS, type ThemeSettings } from "@/lib/theme";
+import { withLastGood } from "@/server/last-good";
 
-/**
- * The owner's store controls. Read on every checkout and quote, so cached and
- * expired when the owner saves. A database error falls back to the defaults
- * (everything on) rather than closing the shop over a blip.
- */
-export const getStoreControls = unstable_cache(
+/** Orders held while the store's own settings can't be read and none were read before. */
+export const UNREADABLE_CONTROLS: StoreControls = {
+  ordersPaused: true,
+  pauseMessage: "We can't take orders for a moment. Please try again in a few minutes.",
+  codEnabled: false,
+  bundlesEnabled: false,
+};
+
+const loadStoreControls = unstable_cache(
   async (): Promise<StoreControls> => {
-    try {
-      const row = await db.storeSettings.findUnique({ where: { id: "default" } });
-      return row
-        ? { ordersPaused: row.ordersPaused, pauseMessage: row.pauseMessage, codEnabled: row.codEnabled, bundlesEnabled: row.bundlesEnabled }
-        : DEFAULT_CONTROLS;
-    } catch (error) {
-      reportError("store-settings", error);
-      return DEFAULT_CONTROLS;
-    }
+    // Throws on a database error, so the error is never cached (src/server/last-good.ts).
+    const row = await db.storeSettings.findUnique({ where: { id: "default" } });
+    return row
+      ? { ordersPaused: row.ordersPaused, pauseMessage: row.pauseMessage, codEnabled: row.codEnabled, bundlesEnabled: row.bundlesEnabled }
+      : DEFAULT_CONTROLS;
   },
   ["store-controls"],
   { revalidate: 3600, tags: [SETTINGS_TAG] },
 );
+
+/**
+ * The owner's store controls. Read on every checkout and quote, so cached and
+ * expired when the owner saves. A database error never reopens a paused
+ * store (launch defect D4): the last settings read on this server are used,
+ * and with none, orders are held rather than taken on guessed settings.
+ */
+export const getStoreControls = withLastGood("store-settings", loadStoreControls, () => UNREADABLE_CONTROLS);
 
 /**
  * The storefront's Day/Night settings (src/lib/theme.ts). Read by the root

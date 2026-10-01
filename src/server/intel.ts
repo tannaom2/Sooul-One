@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { PINCODE_TAG, SETTINGS_TAG } from "@/lib/cache-tags";
 import { decimalToPaise } from "@/lib/format";
 import { reportError } from "@/lib/observability";
+import { withLastGood } from "@/server/last-good";
 import { codDecision, codRefusalMessage, type CodRefusal, type CodSettings, type PincodeRuleLike } from "@/lib/intel/pincodes";
 import { scoreRtoRisk, type RiskResult } from "@/lib/intel/rto-risk";
 
@@ -33,23 +34,30 @@ const DEFAULT_COD_SETTINGS: CheckoutCodSettings = {
   preferredPayment: "ONLINE",
 };
 
-/** The owner's COD settings. Cached and expired on save, like the other store controls. */
-export const getCodSettings = unstable_cache(
+const loadCodSettings = unstable_cache(
   async (): Promise<CheckoutCodSettings> => {
-    try {
-      const row = await db.storeSettings.findUnique({
-        where: { id: "default" },
-        select: { codAutoBlock: true, codAutoBlockRtoPercent: true, codAutoBlockMinShipped: true, codMinOrderValue: true, codMaxOrderValue: true, preferredPayment: true },
-      });
-      return row ?? DEFAULT_COD_SETTINGS;
-    } catch (error) {
-      reportError("cod-settings", error);
-      return DEFAULT_COD_SETTINGS;
-    }
+    // Throws on a database error, so the error is never cached (src/server/last-good.ts).
+    const row = await db.storeSettings.findUnique({
+      where: { id: "default" },
+      select: { codAutoBlock: true, codAutoBlockRtoPercent: true, codAutoBlockMinShipped: true, codMinOrderValue: true, codMaxOrderValue: true, preferredPayment: true },
+    });
+    return row ?? DEFAULT_COD_SETTINGS;
   },
   ["cod-settings"],
   { revalidate: 3600, tags: [SETTINGS_TAG] },
 );
+
+/**
+ * The owner's COD settings, for deciding: the last good read on a database
+ * error, else it throws, so codForCheckout refuses COD rather than dropping
+ * the owner's limits (launch defect D4).
+ */
+const getCodSettingsStrict = withLastGood("cod-settings", loadCodSettings, "throw");
+
+/** The owner's COD settings, for display (checkout's preferred method, the assistant's wording). */
+export async function getCodSettings(): Promise<CheckoutCodSettings> {
+  return getCodSettingsStrict().catch(() => DEFAULT_COD_SETTINGS);
+}
 
 /** The owner's rule for a pincode, if any. Expired when a rule is saved. */
 export const getPincodeRule = unstable_cache(
@@ -110,8 +118,9 @@ async function buyerReturned(buyer: { customerId?: string | null; phone?: string
 
 /**
  * Whether checkout offers cash on delivery for this pincode, buyer and total.
- * Fails open (COD allowed) if the rules can't be read: the global COD
- * switch still applies, and a database blip shouldn't change how people pay.
+ * Fails closed when the rules can't be read (launch defect D4): offering COD
+ * on a pincode the owner blocked costs a returned parcel, and a database
+ * that can't read the rules can't take the order either.
  */
 export async function codForCheckout(
   pincode: string | undefined,
@@ -119,7 +128,7 @@ export async function codForCheckout(
   buyer: { customerId?: string | null; phone?: string | null } = {},
 ): Promise<CheckoutCod> {
   try {
-    const settings = await getCodSettings();
+    const settings = await getCodSettingsStrict();
     const valid = pincode && /^\d{6}$/.test(pincode);
     const [rule, record, returned] = await Promise.all([
       valid ? getPincodeRule(pincode) : null,
@@ -130,7 +139,7 @@ export async function codForCheckout(
     return decision.allowed ? decision : { ...decision, message: codRefusalMessage(decision.reason, settings) };
   } catch (error) {
     reportError("cod-for-checkout", error, { pincode });
-    return { allowed: true };
+    return { allowed: false, reason: "UNAVAILABLE", message: "Cash on delivery can't be offered right now. Pay online, or try again in a few minutes." };
   }
 }
 

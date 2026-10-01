@@ -118,7 +118,8 @@ export interface CodSettings {
   readonly codMaxOrderValue: number | null;
 }
 
-export type CodRefusal = "PINCODE_BLOCKED" | "AUTO_BLOCKED" | "UNDER_MIN" | "OVER_CAP" | "BUYER_RTO";
+/** UNAVAILABLE: the rules could not be read, so COD is not offered (fails closed). */
+export type CodRefusal = "PINCODE_BLOCKED" | "AUTO_BLOCKED" | "UNDER_MIN" | "OVER_CAP" | "BUYER_RTO" | "UNAVAILABLE";
 
 /** Earlier parcels to one buyer that came back before COD stops being offered to them. */
 export const BUYER_RTO_LIMIT = 2;
@@ -166,6 +167,7 @@ export function codRefusalMessage(reason: CodRefusal, settings: Pick<CodSettings
     return "Cash on delivery is available on orders of " + rupees(settings.codMinOrderValue) + " or more. Pay online, or add a little more.";
   }
   if (reason === "BUYER_RTO") return "Cash on delivery isn't available for this order. Pay online with UPI or card instead.";
+  if (reason === "UNAVAILABLE") return "Cash on delivery can't be offered right now. Pay online, or try again in a few minutes.";
   return "Cash on delivery isn't available for this pincode. Pay online with UPI or card instead.";
 }
 
