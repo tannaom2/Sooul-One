@@ -220,14 +220,23 @@ export const getGummiesProducts = unstable_cache(
 
 /**
  * Every sellable product with the words search looks at (src/lib/search.ts):
- * the card data, plus the description and ingredients, which cards don't carry.
+ * the card data, plus the description and ingredients, which cards don't
+ * carry. The SKU and every photo are here too, for the product feed (F5).
  */
 export const getSearchCatalog = unstable_cache(
-  async (): Promise<{ product: ProductSummary; text: string }[]> => {
+  async (): Promise<{ product: ProductSummary; text: string; sku: string; images: string[] }[]> => {
     const rows = await db.product.findMany({ where: SELLABLE_PRODUCT_WHERE, include: LIST_INCLUDE, orderBy: { name: "asc" } });
     const summaries = await withRatings(rows);
-    const extra = new Map(rows.map((r: any) => [r.id, [r.shortDescription, r.ingredients, r.metaDescription].filter(Boolean).join(" ")]));
-    return summaries.map((product) => ({ product, text: extra.get(product.id) ?? product.shortDescription }));
+    const byId = new Map(rows.map((r: any) => [r.id, r]));
+    return summaries.map((product) => {
+      const r: any = byId.get(product.id);
+      return {
+        product,
+        text: [r?.shortDescription, r?.ingredients, r?.metaDescription].filter(Boolean).join(" ") || product.shortDescription,
+        sku: r?.sku ?? product.slug,
+        images: (r?.images ?? []).map((i: any) => i.url as string),
+      };
+    });
   },
   ["search-catalog"],
   CATALOG,

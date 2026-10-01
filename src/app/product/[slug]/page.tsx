@@ -25,6 +25,7 @@ import { canonicalFor } from "@/server/brand-family";
 import { JumpLink } from "@/components/jump-link";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
+import { absoluteUrl, jsonLdScript, productJsonLd } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
@@ -134,9 +135,29 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const facts = [sugarLabel(product), allergenLabel(product.allergens)].filter(Boolean) as string[];
   const isKids = product.brand?.slug === "kids-vault";
 
+  // What search engines read for rich results (F5): only what this page shows.
+  const site = process.env.SITE_URL ?? "http://localhost:3000";
+  const structured = productJsonLd(
+    {
+      name: product.name,
+      sku: product.sku,
+      description: product.shortDescription,
+      brand: product.brand?.name ?? "SooulOne",
+      category: product.category?.name ?? null,
+      url: await canonicalFor(`/product/${product.slug}`, product.brand?.slug ?? null),
+      images: (product.images ?? []).map((i: { url: string }) => absoluteUrl(i.url, site)),
+      pricePaise: price.pricePaise,
+      inStock: buyable,
+      rating: product.rating ?? null,
+    },
+    business.tradeName ?? business.legalName ?? "SooulOne",
+  );
+
   return (
     <BuyQuantityProvider max={availability.shippableUnits}>
     <article className="mx-auto max-w-6xl px-5 py-8 lg:py-10">
+      {/* A data block, never executed, so the CSP's script rules don't apply to it. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(structured) }} />
       <nav className="mb-5 text-small text-ink-faint">
         {product.brand?.name} / {product.category?.name}
       </nav>
