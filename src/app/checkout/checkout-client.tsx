@@ -16,6 +16,7 @@ import { Turnstile } from "@/components/turnstile";
 import { useCheckout } from "./use-checkout";
 import { useQuote } from "./use-quote";
 import { usePincode } from "./use-pincode";
+import { CHECKOUT_TIMEOUT_SECONDS } from "@/lib/order-lifecycle";
 import { OUTSIDE_AREA_MESSAGE, SERVICE_AREA, inServicePincode } from "@/lib/checkout/service-area";
 
 /**
@@ -299,6 +300,8 @@ function CheckoutForm({
         currency: "INR",
         name: "SooulOne",
         order_id: body.razorpayOrderId,
+        // Close the window well before the unpaid sweep closes the order (launch defect D2).
+        timeout: CHECKOUT_TIMEOUT_SECONDS,
         prefill: { name: clean.name, email: clean.email, contact: clean.phone, ...(payNow === "UPI" && { method: "upi" }) },
         handler: () => {
           clearDraft();

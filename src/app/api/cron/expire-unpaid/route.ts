@@ -6,6 +6,8 @@ import { cronAuthorized } from "@/lib/cron-auth";
 import { recordOrderEvent } from "@/lib/order-events";
 import { UNPAID_EXPIRY_MINUTES } from "@/lib/order-lifecycle";
 import { releaseStock } from "@/server/order-stock";
+import { sweepDecision } from "@/lib/payment-webhook";
+import { fetchOrderPayments, markPaidFromSweep, razorpayClient } from "@/server/payments";
 
 /**
  * Close online orders that were never paid, and return their stock.
@@ -17,6 +19,13 @@ import { releaseStock } from "@/server/order-stock";
  *
  * Each order is claimed with a conditional update, so a payment that lands
  * mid-sweep wins: the webhook moves the order to PAID first and this skips it.
+ *
+ * Before closing an online order it asks Razorpay (launch defect D2): a
+ * webhook can be late or lost, and cancelling a paid order resells its stock
+ * while the shopper's money is taken. Captured there: marked paid here.
+ * Authorized: left for the next run. Razorpay unreachable: left too, never
+ * read as "unpaid". Without Razorpay keys no online payment can exist, so
+ * those orders close as before.
  */
 export async function GET(request: Request) {
   if (!process.env.CRON_SECRET) {
@@ -29,13 +38,33 @@ export async function GET(request: Request) {
   const cutoff = new Date(Date.now() - UNPAID_EXPIRY_MINUTES * 60_000);
   const stale = await db.order.findMany({
     where: { status: { in: ["PENDING_PAYMENT", "FAILED"] }, placedAt: { lt: cutoff } },
-    select: { id: true, couponCode: true, status: true },
+    select: { id: true, couponCode: true, status: true, paymentGateway: true, paymentId: true, sessionId: true },
     orderBy: { placedAt: "asc" },
     take: 100,
   });
 
   let closed = 0;
+  let paid = 0;
+  let waiting = 0;
+  const askRazorpay = razorpayClient() !== null;
   for (const order of stale) {
+    if (askRazorpay && order.paymentGateway === "RAZORPAY" && order.paymentId) {
+      const payments = await fetchOrderPayments(order.paymentId);
+      if (payments === null) {
+        waiting++;
+        continue;
+      }
+      const decision = sweepDecision(payments);
+      if (decision === "paid") {
+        const captured = payments.find((p) => p.status === "captured")!;
+        if (await markPaidFromSweep(order, { id: captured.id, amountPaise: captured.amount, method: captured.method })) paid++;
+        continue;
+      }
+      if (decision === "wait") {
+        waiting++;
+        continue;
+      }
+    }
     const changed = await db.$transaction(async (tx) => {
       const { count } = await tx.order.updateMany({
         where: { id: order.id, status: { in: ["PENDING_PAYMENT", "FAILED"] } },
@@ -56,5 +85,5 @@ export async function GET(request: Request) {
   }
 
   if (closed > 0) expireTag(CATALOG_TAG);
-  return NextResponse.json({ status: "ok", checked: stale.length, closed });
+  return NextResponse.json({ status: "ok", checked: stale.length, closed, paid, waiting });
 }

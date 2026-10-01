@@ -141,3 +141,31 @@ export function parseRazorpayWebhook(rawBody: string): ParsedWebhook | null {
     downtime: parseDowntime(event, b?.payload?.["payment.downtime"]?.entity),
   };
 }
+
+/* ------------------------------------------------- unpaid orders and late payments */
+
+export type SweepDecision = "paid" | "wait" | "cancel";
+
+/**
+ * What the unpaid-order sweep does with an order, given Razorpay's own list
+ * of payments against it. Captured: it was paid and the webhook hasn't
+ * landed (or never will), so mark it paid. Authorized: money is held and
+ * capture is on its way, so wait. Otherwise nothing was paid: cancel.
+ */
+export function sweepDecision(payments: readonly { status: string }[]): SweepDecision {
+  if (payments.some((p) => p.status === "captured")) return "paid";
+  if (payments.some((p) => p.status === "authorized")) return "wait";
+  return "cancel";
+}
+
+/**
+ * A capture that arrives for an order the sweep already closed. The order is
+ * put back if nothing else moved when it closed: its stock can be taken
+ * again (checked in the transaction) and no wallet credit or referral was
+ * unwound. Otherwise the payment is refunded in full, so nobody pays for an
+ * order that no longer exists.
+ */
+export function lateCaptureAction(order: { status: string; closeReason: string | null; usedWallet: boolean; hasReferral: boolean }): "reinstate" | "refund" | "ignore" {
+  if (order.status !== "CANCELLED" || order.closeReason !== "PAYMENT_NOT_COMPLETED") return "ignore";
+  return order.usedWallet || order.hasReferral ? "refund" : "reinstate";
+}

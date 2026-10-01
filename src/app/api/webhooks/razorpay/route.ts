@@ -1,11 +1,9 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { sendOrderConfirmation } from "@/lib/email";
-import { recordEvent } from "@/lib/analytics";
 import { recordOrderEvent } from "@/lib/order-events";
-import { clearCart } from "@/server/cart";
 import { reportError } from "@/lib/observability";
+import { afterPaymentCaptured, handleLateCapture } from "@/server/payments";
 import { parseRazorpayWebhook, paymentTransition, verifyRazorpaySignature } from "@/lib/payment-webhook";
 
 /**
@@ -92,44 +90,23 @@ export async function POST(request: Request) {
     data: { status: transition.to, paymentStatus: transition.paymentStatus },
   });
   // Already moved by an earlier delivery, or not allowed from where the order
-  // is now (a late failure for a paid order): nothing more to do.
-  if (count === 0) return NextResponse.json({ received: true });
+  // is now (a late failure for a paid order): nothing more to do. Except a
+  // capture for an order the unpaid sweep already closed: the shopper paid,
+  // so the order is put back or the payment refunded (src/server/payments.ts).
+  if (count === 0) {
+    if (webhook.event === "payment.captured") {
+      const outcome = await handleLateCapture(order.id, payment);
+      if (outcome !== "ignored") console.warn(`[razorpay] late capture on ${order.id}: ${outcome}`);
+    }
+    return NextResponse.json({ received: true });
+  }
 
   switch (webhook.event) {
-    case "payment.captured": {
-      await recordOrderEvent(order.id, "PAYMENT_CAPTURED", { type: "SYSTEM" }, {
-        razorpayPaymentId: payment.id,
-        amountPaise: payment.amountPaise,
-        method: payment.method,
-      });
-
-      // Paid, so the basket it came from empties. Never fails the webhook:
-      // Razorpay would retry, and the order is already correctly PAID.
-      if (order.sessionId) {
-        await clearCart(order.sessionId).catch((error) => reportError("webhook/clear-cart", error, { orderId: order.id }));
-      }
-
-      // Sent here, not at checkout: this is the first moment the payment is
-      // known to have cleared.
-      const paid = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
-      const sent = await sendOrderConfirmation(paid);
-      await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
-        email: "order_confirmation",
-        delivered: sent.delivered,
-        reason: sent.reason ?? null,
-      });
-
-      if (order.sessionId) {
-        const sessionId = order.sessionId;
-        after(() =>
-          recordEvent(sessionId, "ORDER_PAID", {
-            orderId: order.id,
-            metadata: { totalPaise: payment.amountPaise, method: "RAZORPAY" },
-          }),
-        );
-      }
+    case "payment.captured":
+      // The timeline, basket, confirmation email and funnel event, shared with
+      // the sweep and late-payment paths so all three behave the same.
+      await afterPaymentCaptured(order, payment, "webhook");
       break;
-    }
 
     case "payment.failed":
       // The shopper may still retry in the same window; a later capture moves

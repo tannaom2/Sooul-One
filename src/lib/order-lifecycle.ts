@@ -117,6 +117,13 @@ export function releasesStock(to: string): boolean {
 /** Unpaid online orders are closed after this long, returning their stock. */
 export const UNPAID_EXPIRY_MINUTES = 30;
 
+/**
+ * How long the Razorpay payment window stays open, in seconds: well inside
+ * UNPAID_EXPIRY_MINUTES, so a shopper can't still be paying when the sweep
+ * closes the order (launch defect D2).
+ */
+export const CHECKOUT_TIMEOUT_SECONDS = 900;
+
 /** An online order that was never paid and is past the expiry window. */
 export function isAbandoned(order: { status: string; placedAt: Date }, now: Date): boolean {
   const waiting = order.status === "PENDING_PAYMENT" || order.status === "FAILED";
