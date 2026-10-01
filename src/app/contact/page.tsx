@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
-import { SocialLinks } from "@/components/brand-family";
+import { SocialLinks } from "@/components/social-links";
 import { getBusinessProfile } from "@/server/business";
 import { getOpenRoles, getSiteText } from "@/server/site-content";
 import { turnstileSiteKey } from "@/lib/turnstile";

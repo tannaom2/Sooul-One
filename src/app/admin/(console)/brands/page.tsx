@@ -12,7 +12,7 @@ const MODE_LABEL = { OFF: "Main site only", REDIRECT: "Domain sends visitors to 
 
 /**
  * The brand family: each brand's words, social links and own domain
- * (src/lib/brand-domains.ts). The family strip, footer, search and canonical
+ * (src/lib/brand-domains.ts). The footer, search and canonical
  * links all follow what's set here.
  */
 export default async function Brands() {
@@ -37,8 +37,8 @@ export default async function Brands() {
         <h1 className="text-h2 font-extrabold">Brands</h1>
         <p className="mt-2 max-w-[62ch] text-ink-soft">
           SooulOne is the parent store and each brand has its page on it. A brand can also have its own domain, either sending
-          visitors to that page or running as the brand&apos;s own site on the same products and checkout. The strip of
-          brand names above every page, the footer and search all follow these settings.
+          visitors to that page or running as the brand&apos;s own site on the same products and checkout. The footer,
+          search and the links between brands all follow these settings.
         </p>
       </div>
       {brands.map((b) => (

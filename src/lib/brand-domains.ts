@@ -110,7 +110,7 @@ export function canonicalUrl(path: string, pageBrand: string | null, brands: rea
  * Where a link to a sister brand should go. A standalone brand's link goes
  * to its own domain; others go to their page on the main site, as a plain
  * path when we're already on the main site, or in full from a brand domain
- * (so the family strip on womanaxis.in sends Kids Vault to sooulone.in).
+ * (so a footer link on womanaxis.in sends Kids Vault to sooulone.in).
  */
 export function brandHref(slug: string, brands: readonly BrandDomain[], currentBrandHost: string | null, siteUrl: string): string {
   const brand = brands.find((b) => b.slug === slug);

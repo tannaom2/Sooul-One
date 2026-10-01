@@ -18,7 +18,7 @@ import { StorefrontBot } from "@/components/storefront-bot";
 import { CONSOLE_THEME_SETTINGS, CONSOLE_THEME_STORAGE_KEY, THEME_STORAGE_KEY, themeBootScript } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBar } from "@/components/top-bar";
-import { BrandFamilyStrip, SocialLinks } from "@/components/brand-family";
+import { SocialLinks } from "@/components/social-links";
 import { getOpenRoles, getSiteText, getTopBar } from "@/server/site-content";
 import { brandHost, getBrandFamily, siteUrl } from "@/server/brand-family";
 import { brandForPath, brandHref } from "@/lib/brand-domains";
@@ -85,8 +85,6 @@ async function Nav({ showThemeToggle, path }: { showThemeToggle: boolean; path: 
   const current = brandForPath(path, family.map((b) => b.slug));
   return (
     <>
-      {/* The family strip scrolls away; the announcements and the menu stay. */}
-      <BrandFamilyStrip brands={family} current={current} brandHost={host} siteUrl={siteUrl()} />
       <header className="sticky top-0 z-50 border-b border-rule bg-paper/95 backdrop-blur print:hidden">
         {/* Said up front, so shoppers outside the area learn it before they fill a basket (Settings → Top bar). */}
         <TopBar messages={messages} />
