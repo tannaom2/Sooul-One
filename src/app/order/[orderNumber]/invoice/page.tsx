@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { orderTokenMatches } from "@/lib/order-access";
 import { getBusinessProfile } from "@/server/business";
+import { sellerForInvoice } from "@/lib/invoice";
 import { TaxInvoice } from "@/components/tax-invoice";
 
 export const dynamic = "force-dynamic";
@@ -36,5 +37,5 @@ export default async function OrderInvoice({
       </div>
     );
   }
-  return <TaxInvoice order={order} seller={await getBusinessProfile()} />;
+  return <TaxInvoice order={order} seller={sellerForInvoice(order.sellerSnapshot, await getBusinessProfile())} />;
 }

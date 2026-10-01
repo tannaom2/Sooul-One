@@ -218,3 +218,26 @@ export function buildInvoice(order: InvoiceOrderInput): Invoice {
     approximate: approximate || total !== order.totalPaise,
   };
 }
+
+/* ------------------------------------------------------------- seller snapshot */
+
+/** The seller details a tax invoice prints, frozen on the order when its number is issued. */
+export const SELLER_SNAPSHOT_FIELDS = ["legalName", "tradeName", "registeredAddress", "gstin", "fssaiLicence", "customerCareEmail", "customerCarePhone"] as const;
+
+export type SellerSnapshot = Record<(typeof SELLER_SNAPSHOT_FIELDS)[number], string | null>;
+
+/** The snapshot to store: just the printed fields, missing ones as null. */
+export function sellerSnapshot(profile: Partial<Record<string, unknown>>): SellerSnapshot {
+  return Object.fromEntries(SELLER_SNAPSHOT_FIELDS.map((f) => [f, typeof profile[f] === "string" && profile[f] ? profile[f] : null])) as SellerSnapshot;
+}
+
+/**
+ * The seller details for an invoice: the snapshot taken when it was issued
+ * (launch defect D3), so editing Business details never rewrites an issued
+ * invoice. Only an invoice without a snapshot (none should exist after the
+ * backfill) falls back to today's details.
+ */
+export function sellerForInvoice<T extends Partial<SellerSnapshot>>(snapshot: unknown, current: T): T {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return current;
+  return { ...current, ...sellerSnapshot(snapshot as Record<string, unknown>) };
+}

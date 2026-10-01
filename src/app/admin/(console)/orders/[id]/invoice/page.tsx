@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { NoAccess } from "@/components/ui";
 import { getBusinessProfile } from "@/server/business";
+import { sellerForInvoice } from "@/lib/invoice";
 import { TaxInvoice } from "@/components/tax-invoice";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +18,5 @@ export default async function AdminOrderInvoice({ params }: { params: Promise<{ 
     include: { items: { include: { product: { select: { hsnCode: true, taxRatePercent: true } } } } },
   });
   if (!order?.invoiceNumber) notFound();
-  return <TaxInvoice order={order} seller={await getBusinessProfile()} />;
+  return <TaxInvoice order={order} seller={sellerForInvoice(order.sellerSnapshot, await getBusinessProfile())} />;
 }

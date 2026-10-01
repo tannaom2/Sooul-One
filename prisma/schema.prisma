@@ -468,6 +468,10 @@ model Order {
   /// year, so orders cancelled before dispatch leave no gaps in the series.
   invoiceNumber         String?      @unique
   invoiceDate           DateTime?
+  /// The seller's details as they stood when the invoice was issued (name,
+  /// address, GSTIN, FSSAI, contact): an issued GST invoice never changes when
+  /// Business details do. See sellerSnapshot in src/lib/invoice.ts.
+  sellerSnapshot        Json?
   /// GST on the delivery charge, and whether tax was CGST+SGST (INTRA_STATE)
   /// or IGST (INTER_STATE), as charged at checkout.
   shippingTaxAmount     Decimal?     @db.Decimal(10, 2)
