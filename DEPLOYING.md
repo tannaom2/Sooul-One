@@ -179,6 +179,17 @@ Without a matching `CRON_SECRET` on both sides, the route returns 401 and the
 alert never sends — check the cron job's run logs if batches seem to be
 falling through unnoticed.
 
+`render.yaml` declares three more jobs the same way, each needing the same
+`CRON_SECRET` copied into its environment tab:
+
+| Job | Route | When | Without it |
+|---|---|---|---|
+| `soulone-expire-unpaid` | `/api/cron/expire-unpaid` | Every 10 minutes | Unpaid online orders hold stock forever. It asks Razorpay before cancelling, so a late payment is never lost. |
+| `soulone-referral-payouts` | `/api/cron/referrals` | 04:00 IST daily | Referral rewards are never paid. |
+| `soulone-box-pools` | `/api/cron/boxes` | 02:30 IST daily | Make Your Own Box clearance picks drift from real expiry. |
+
+`tests/cron-schedule.test.ts` fails if a route under `/api/cron` has no job.
+
 ### 7. Custom domain
 
 **Settings → Custom Domain** in Render, then add the CNAME record it gives you

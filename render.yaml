@@ -89,3 +89,39 @@ services:
         value: https://soulone-app.onrender.com/api/cron/expire-unpaid
       - key: CRON_SECRET
         sync: false
+
+  # Pays referral rewards whose return window has passed and expires sign-ups
+  # that never ordered (src/app/api/cron/referrals). Without it, rewards are
+  # never paid. Safe to run twice: each payout is guarded. Same CRON_SECRET.
+  - type: cron
+    name: soulone-referral-payouts
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "30 22 * * *" # 04:00 IST daily
+    buildCommand: "true"
+    startCommand: >-
+      node -e "fetch(process.env.TARGET_URL,{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(async r=>{console.log(r.status,await r.text());if(!r.ok)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+    envVars:
+      - key: TARGET_URL
+        value: https://soulone-app.onrender.com/api/cron/referrals
+      - key: CRON_SECRET
+        sync: false
+
+  # Refreshes Make Your Own Box pools (src/app/api/cron/boxes): clearance
+  # sections follow how close stock is to its shipping cut-off, which moves
+  # daily. Runs before the morning so shoppers see today's pool. Same CRON_SECRET.
+  - type: cron
+    name: soulone-box-pools
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "0 21 * * *" # 02:30 IST daily
+    buildCommand: "true"
+    startCommand: >-
+      node -e "fetch(process.env.TARGET_URL,{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(async r=>{console.log(r.status,await r.text());if(!r.ok)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+    envVars:
+      - key: TARGET_URL
+        value: https://soulone-app.onrender.com/api/cron/boxes
+      - key: CRON_SECRET
+        sync: false
