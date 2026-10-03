@@ -21,6 +21,13 @@ describe("validateStep", () => {
     );
   });
 
+  it("lets the email be left blank, but not mistyped (benchmark gap C5)", () => {
+    expect(validateStep("contact", { ...EMPTY_FORM, phone: "9876543210", email: "" })).toEqual({});
+    expect(validateStep("contact", { ...EMPTY_FORM, phone: "9876543210", email: "   " })).toEqual({});
+    expect(validateStep("contact", { ...EMPTY_FORM, phone: "9876543210", email: "asha@" }).email).toMatch(/leave it blank/);
+    expect(stepSummary("contact", { ...complete, email: "" })).toBe("9876543210");
+  });
+
   it("uses the server's own messages", () => {
     expect(validateStep("contact", { ...complete, phone: "12345" }).phone).toMatch(/10-digit Indian mobile/);
   });

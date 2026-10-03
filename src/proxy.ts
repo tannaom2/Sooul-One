@@ -13,9 +13,10 @@ import { clientIp } from "@/lib/rate-limit-rules";
 import { verifyCrawler } from "@/server/crawler-verify";
 import { decideHost, normalizeHost } from "@/lib/brand-domains";
 import { brandDomainsForProxy } from "@/server/brand-family";
+import { ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_OPTIONS, decodeAttribution, encodeAttribution, mergeTouch, touchFrom } from "@/lib/attribution";
 
 /**
- * Runs before every page request. Four jobs:
+ * Runs before every page request. Five jobs:
  *
  * -1. Bot guard (src/lib/bot-guard.ts): turn away scripts, headless browsers,
  *    bulk scrapers and fake search engines, and throttle floods, before any
@@ -44,6 +45,9 @@ import { brandDomainsForProxy } from "@/server/brand-family";
  *    redirects to its page on the main site, or is served as the brand's
  *    own site (its home page rewritten to the brand page). Looked up only
  *    when the request isn't for the main site's own host.
+ *
+ * 4. Attribution (src/lib/attribution.ts): note the campaign or site a
+ *    visit came from, in a first-party cookie checkout copies onto the order.
  *
  * `x-invoke-path`, `x-new-session` and `x-brand-host` are always overwritten here, never
  * trusted from the client, since layouts make decisions based on them.
@@ -99,6 +103,20 @@ async function guard(request: NextRequest, pathname: string): Promise<NextRespon
   console.warn(`[bot-guard] ${MODE === "block" ? "refused" : "would refuse"} ${request.method} ${pathname}: ${reason}`);
   if (MODE === "monitor") return null;
   return over ? refused(429, limiter.retryAfter(`${scope}:${ip}`, limit.windowSeconds)) : refused(403);
+}
+
+/** The attribution cookie's new value after this page visit, or null to leave it as it is. */
+async function nextAttribution(request: NextRequest, host: string): Promise<string | null> {
+  const referrer = request.headers.get("referer");
+  const own = [MAIN_HOST, normalizeHost(host)];
+  let touch = touchFrom(request.nextUrl, referrer, own, new Date());
+  // A link from one of our brand domains isn't a referral. Looked up only for outside referrers.
+  if (touch?.medium === "referral") {
+    const brands = (await brandDomainsForProxy()).flatMap((b) => (b.domain ? [b.domain] : []));
+    touch = touchFrom(request.nextUrl, referrer, [...own, ...brands], new Date());
+  }
+  const next = mergeTouch(decodeAttribution(request.cookies.get(ATTRIBUTION_COOKIE)?.value), touch);
+  return next ? encodeAttribution(next) : null;
 }
 
 export async function proxy(request: NextRequest) {
@@ -159,6 +177,10 @@ export async function proxy(request: NextRequest) {
     response.cookies.set(SESSION_COOKIE, existing, SESSION_COOKIE_OPTIONS);
     const count = request.cookies.get(BASKET_COUNT_COOKIE)?.value;
     if (count) response.cookies.set(BASKET_COUNT_COOKIE, count, BASKET_COUNT_COOKIE_OPTIONS);
+  }
+  if (!isAdmin && !isApi && request.method === "GET" && !BOT.test(request.headers.get("user-agent") ?? "") && requestKind(request.headers, request.nextUrl) === "page") {
+    const attribution = await nextAttribution(request, host);
+    if (attribution) response.cookies.set(ATTRIBUTION_COOKIE, attribution, ATTRIBUTION_COOKIE_OPTIONS);
   }
   // A signed-in shopper's cookie slides with each page visit, like the basket's;
   // the session itself decides whether it's still valid (src/lib/customer-session.ts).

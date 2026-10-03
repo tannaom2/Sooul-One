@@ -302,7 +302,7 @@ function CheckoutForm({
         order_id: body.razorpayOrderId,
         // Close the window well before the unpaid sweep closes the order (launch defect D2).
         timeout: CHECKOUT_TIMEOUT_SECONDS,
-        prefill: { name: clean.name, email: clean.email, contact: clean.phone, ...(payNow === "UPI" && { method: "upi" }) },
+        prefill: { name: clean.name, ...(clean.email && { email: clean.email }), contact: clean.phone, ...(payNow === "UPI" && { method: "upi" }) },
         handler: () => {
           clearDraft();
           router.replace(`/order/${body.orderNumber}?t=${body.accessToken}`);
@@ -481,7 +481,12 @@ function CheckoutForm({
                   {active && s === "contact" && (
                     <div className="grid gap-4 border-t border-rule p-4 sm:grid-cols-2">
                       {field("phone", "Mobile number", { type: "tel", inputMode: "tel", autoComplete: "tel", placeholder: "98765 43210", autoFocus: true })}
-                      {field("email", "Email, for your receipt", { type: "email", autoComplete: "email", spellCheck: false })}
+                      <div>
+                        {field("email", "Email (optional)", { type: "email", autoComplete: "email", spellCheck: false, "aria-describedby": "email-hint" })}
+                        <p id="email-hint" className="mt-1 text-micro text-ink-faint" hidden={Boolean(errors.email)}>
+                          For your receipt and delivery updates. Without it, track your order by signing in with your mobile number.
+                        </p>
+                      </div>
                       <button type="button" onClick={continueFrom} className="btn btn-solid sm:col-span-2 sm:justify-self-start">
                         Continue to address
                       </button>

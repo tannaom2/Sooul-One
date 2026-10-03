@@ -5,6 +5,7 @@ import {
   addManyToBasket,
   addToBasket,
   loadBasket,
+  reorderToBasket,
   removeBox as removeBoxAction,
   removeUnavailableItems,
   saveBox as saveBoxAction,
@@ -37,9 +38,11 @@ interface CartContextValue {
   openBasket: () => void;
   closeBasket: () => void;
   /** Resolves true when the server accepted the add. Opens the drawer unless `open` is false. */
-  add: (productId: string, quantity: number, options?: { open?: boolean }) => Promise<boolean>;
+  add: (productId: string, quantity: number, options?: { open?: boolean; via?: "card" }) => Promise<boolean>;
   /** One of each, for a combo. Resolves true when all went in. */
   addMany: (productIds: string[]) => Promise<boolean>;
+  /** A past order's products, back in the basket. Resolves true when all went in. */
+  reorder: (orderNumber: string, token: string | null) => Promise<boolean>;
   setQuantity: (itemId: string, quantity: number) => Promise<void>;
   /** Several lines at once: a kit's products move together. */
   setQuantities: (changes: { itemId: string; quantity: number }[]) => Promise<void>;
@@ -146,7 +149,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
   const closeBasket = useCallback(() => setOpen(false), []);
 
   const add = useCallback(
-    (productId: string, quantity: number, options?: { open?: boolean }) =>
+    (productId: string, quantity: number, options?: { open?: boolean; via?: "card" }) =>
       new Promise<boolean>((resolve) => {
         setError(null);
         // Open straight away: the tap should answer instantly, not after the
@@ -157,7 +160,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         }
         startTransition(async () => {
           addOptimistic({ type: "add", quantity });
-          const result = await addToBasket(productId, quantity);
+          const result = await addToBasket(productId, quantity, options?.via);
           if (result.ok) {
             accept(result.basket);
             announce();
@@ -190,6 +193,25 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         });
       }),
     [accept, addOptimistic, announce],
+  );
+
+  const reorder = useCallback(
+    (orderNumber: string, token: string | null) =>
+      new Promise<boolean>((resolve) => {
+        setError(null);
+        setOpen(true);
+        track({ type: "CART_OPENED" });
+        startTransition(async () => {
+          const result = await reorderToBasket(orderNumber, token);
+          if (result.ok) (accept(result.basket), announce());
+          else {
+            setError(result.message);
+            if (result.basket) (accept(result.basket), announce());
+          }
+          resolve(result.ok);
+        });
+      }),
+    [accept, announce],
   );
 
   const setQuantity = useCallback(
@@ -297,6 +319,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
         closeBasket,
         add,
         addMany,
+        reorder,
         setQuantity,
         setQuantities,
         removeUnavailable,

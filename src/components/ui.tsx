@@ -4,6 +4,7 @@ import { formatPriceTag } from "@/lib/money";
 import { formatPercent } from "@/lib/pricing";
 import { allergenSentence } from "@/lib/label-facts";
 import type { ProductSummary } from "@/server/catalog";
+import { QuickAdd } from "@/components/quick-add";
 
 /**
  * The statutory veg / non-veg mark.
@@ -96,7 +97,8 @@ export const BRAND_ACCENT: Record<string, string> = {
 /**
  * The one product card, used on every page that lists products: shop pages,
  * brand pages, the home page and the box page. Pages differ only in the
- * action below the card (the box page's "Add to box") and, in "box" mode, in
+ * action below the card (the box page's "Add to box"; elsewhere a quick
+ * "Add to basket" when the product can be bought online) and, in "box" mode, in
  * hiding the combo badge, since a combo doesn't apply inside a box. Stock
  * reads the same everywhere: "Only N left" when low, "Out of stock" when gone.
  */
@@ -115,6 +117,7 @@ export function ProductCard({
 }) {
   const accent = BRAND_ACCENT[product.brandSlug] ?? "var(--color-ink)";
   const inCombo = product.inCombo && mode === "shop";
+  const buyable = !product.retailOnly && product.availability.state !== "out";
 
   return (
     <div
@@ -197,7 +200,7 @@ export function ProductCard({
         )}
       </div>
     </Link>
-    {action}
+    {action ?? (mode === "shop" && buyable && <QuickAdd productId={product.id} productName={product.name} />)}
     </div>
   );
 }

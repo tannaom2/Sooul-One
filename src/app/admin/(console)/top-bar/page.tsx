@@ -2,7 +2,8 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
-import { TOKENS, storeFacts, topBarMessages, type TokenName } from "@/lib/site-content";
+import { TOKENS, topBarMessages, type TokenName } from "@/lib/site-content";
+import { getStoreFacts } from "@/server/store-settings";
 import { TopBar } from "@/components/top-bar";
 import { AnnouncementForm } from "./top-bar-editor";
 
@@ -24,7 +25,7 @@ export default async function TopBarSettings() {
     reportError("admin/top-bar", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
   }
-  const facts = storeFacts();
+  const facts = await getStoreFacts();
   const nextOrder = rows.length ? Math.max(...rows.map((r) => r.sortOrder)) + 1 : 0;
 
   return (

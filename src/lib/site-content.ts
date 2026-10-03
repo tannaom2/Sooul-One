@@ -7,11 +7,11 @@
  * One rule keeps the storefront and the owner console in step: a fact the
  * store already holds (the free-delivery amount, the delivery fee, the area)
  * is never typed into copy. Copy names it with a {token}, and the token is
- * filled from the same constant checkout uses, so the top bar, the FAQs and
+ * filled from the same settings checkout uses (Store controls), so the top bar, the FAQs and
  * checkout can't disagree.
  */
 
-import { DEFAULT_SHIPPING_POLICY } from "@/lib/checkout/quote";
+import { DEFAULT_SHIPPING_POLICY, type ShippingPolicy } from "@/lib/checkout/quote";
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
 import { formatPriceTag } from "@/lib/money";
 
@@ -26,11 +26,11 @@ export const TOKENS = {
 export type TokenName = keyof typeof TOKENS;
 export type StoreFacts = Record<TokenName, string>;
 
-/** The live values behind each token. */
-export function storeFacts(): StoreFacts {
+/** The values behind each token, from the owner's fees (getStoreFacts in src/server/store-settings.ts). */
+export function storeFacts(shipping: ShippingPolicy = DEFAULT_SHIPPING_POLICY): StoreFacts {
   return {
-    freeDelivery: formatPriceTag(DEFAULT_SHIPPING_POLICY.freeAbovePaise),
-    deliveryFee: formatPriceTag(DEFAULT_SHIPPING_POLICY.flatRatePaise),
+    freeDelivery: formatPriceTag(shipping.freeAbovePaise),
+    deliveryFee: formatPriceTag(shipping.flatRatePaise),
     area: SERVICE_AREA.label,
   };
 }

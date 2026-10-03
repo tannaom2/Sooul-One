@@ -71,7 +71,7 @@ export function firstIncompleteStep(form: CheckoutForm): CheckoutStep {
 
 /** One-line summary shown when a finished step collapses. */
 export function stepSummary(step: CheckoutStep, form: CheckoutForm): string {
-  if (step === "contact") return `${form.phone} · ${form.email}`;
+  if (step === "contact") return [form.phone, form.email].filter(Boolean).join(" · ");
   if (step === "address") return [form.name, form.line1, form.city, form.postalCode].filter(Boolean).join(", ");
   return "";
 }

@@ -174,6 +174,15 @@ export const DEFAULT_SHIPPING_POLICY: ShippingPolicy = {
   taxRatePercent: 18,
 };
 
+/** The owner's fees from Store controls (whole rupees) as a policy. GST on delivery stays fixed in code. */
+export function shippingPolicyFrom(fees: { readonly deliveryFee: number; readonly freeDeliveryAbove: number }): ShippingPolicy {
+  return {
+    flatRatePaise: toPaise(String(fees.deliveryFee)),
+    freeAbovePaise: toPaise(String(fees.freeDeliveryAbove)),
+    taxRatePercent: DEFAULT_SHIPPING_POLICY.taxRatePercent,
+  };
+}
+
 export interface QuoteInput {
   readonly lines: readonly QuoteLineInput[];
   readonly estimatedDeliveryDate: Date;

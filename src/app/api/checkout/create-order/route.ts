@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import Razorpay from "razorpay";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
 import { quoteCart, readSessionId, writeBasketCount } from "@/server/cart";
@@ -25,6 +26,7 @@ import { codForCheckout, recordOrderRisk } from "@/server/intel";
 import { alertOwnerNewOrder } from "@/server/order-alert";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { clientIp } from "@/lib/rate-limit-rules";
+import { attributionFromCookieHeader } from "@/lib/attribution";
 
 /**
  * Create an order and hand the shopper to Razorpay.
@@ -288,7 +290,7 @@ export async function POST(request: Request) {
             sessionId,
             // A signed-in shopper's order is theirs even if it goes to another number.
             customerId: customer?.id ?? null,
-            guestEmail: input.email,
+            guestEmail: input.email || null,
             guestPhone: input.phone,
             phoneVerifiedAt: phoneProven ? new Date() : null,
             // Cash on delivery is confirmed the moment it's placed; online
@@ -318,6 +320,8 @@ export async function POST(request: Request) {
             postalCode: input.postalCode,
             shippingTaxAmount: fromPaise(shippingTaxPaise),
             gstTreatment: result.gstTreatment,
+            // The campaign or site the shopper came from (src/lib/attribution.ts).
+            attribution: (attributionFromCookieHeader(request.headers.get("cookie")) ?? undefined) as Prisma.InputJsonValue | undefined,
           },
         });
         // A separate createMany rather than a nested write: nesting costs an
@@ -412,7 +416,7 @@ export async function POST(request: Request) {
   after(async () => {
     // RTO risk for the dispatch queue (Analytics → RTO risk). Never throws.
     await recordOrderRisk(order.id);
-    await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email }, {
+    await recordOrderEvent(order.id, "PLACED", { type: "CUSTOMER", email: input.email || null }, {
       method: input.paymentMethod,
       totalPaise: quote.totalPaise,
     });
@@ -431,7 +435,7 @@ export async function POST(request: Request) {
           data: {
             purpose: "MARKETING",
             granted: true,
-            email: input.email,
+            email: input.email || null,
             phone: input.phone,
             noticeText: MARKETING_CONSENT_TEXT,
             source: "checkout",

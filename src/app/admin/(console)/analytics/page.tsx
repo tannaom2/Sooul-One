@@ -51,7 +51,7 @@ export default async function AnalyticsPage({
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Revenue" value={formatINR(report.revenuePaise)} sub={`${report.orderCount} orders`} />
             <Stat label="Average order value" value={formatINR(report.averageOrderValuePaise)} />
-            <Stat label="New customers" value={String(report.newCustomerOrders)} sub={`of ${report.distinctCustomers} distinct emails`} />
+            <Stat label="New customers" value={String(report.newCustomerOrders)} sub={`of ${report.distinctCustomers} distinct mobile numbers`} />
             <Stat label="Repeat customers" value={String(report.repeatCustomerOrders)} />
           </section>
 

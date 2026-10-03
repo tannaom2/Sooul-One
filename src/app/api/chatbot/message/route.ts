@@ -6,16 +6,15 @@ import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { reportError } from "@/lib/observability";
 import { orderProgress } from "@/lib/order-progress";
-import { DEFAULT_SHIPPING_POLICY } from "@/lib/checkout/quote";
 import { estimateDeliveryDate, zoneForPincode } from "@/lib/checkout/delivery";
 import { OUTSIDE_AREA_MESSAGE, SERVICE_AREA, isServiceable } from "@/lib/checkout/service-area";
 import { lookupPincode } from "@/server/pincode";
 import { codForCheckout, extraDeliveryDays, getCodSettings } from "@/server/intel";
-import { getCheckoutState, getStoreControls } from "@/server/store-settings";
+import { getCheckoutState, getShippingPolicy, getStoreControls, getStoreFacts } from "@/server/store-settings";
 import { getBusinessProfile } from "@/server/business";
 import { getAssistantSettings } from "@/server/assistant-settings";
 import { getFaqs } from "@/server/site-content";
-import { fillTokens, storeFacts } from "@/lib/site-content";
+import { fillTokens } from "@/lib/site-content";
 import { codRequiresCode } from "@/server/customer-auth";
 import {
   MENU,
@@ -77,7 +76,7 @@ async function handoff(topic: string, orderNumber?: string): Promise<BotBlock> {
 async function pincodeAnswer(pin: string): Promise<BotReply> {
   const [extra, place] = await Promise.all([extraDeliveryDays(pin), lookupPincode(pin).catch(() => undefined)]);
   const serviceable = isServiceable(pin, place?.state ?? SERVICE_AREA.label, place?.state);
-  const [controls, cod] = await Promise.all([getStoreControls(), codForCheckout(pin, null, {})]);
+  const [controls, cod, shipping] = await Promise.all([getStoreControls(), codForCheckout(pin, null, {}), getShippingPolicy()]);
   const codAllowed = controls.codEnabled && cod.allowed;
   const settings = await getCodSettings();
   const limits = [
@@ -97,8 +96,8 @@ async function pincodeAnswer(pin: string): Promise<BotReply> {
           allowed: serviceable && codAllowed,
           note: !serviceable ? null : !controls.codEnabled ? "Cash on delivery is paused right now." : !cod.allowed ? cod.message : limits.length ? `On orders ${limits.join(" and ")}.` : null,
         },
-        deliveryFeePaise: DEFAULT_SHIPPING_POLICY.flatRatePaise,
-        freeAbovePaise: DEFAULT_SHIPPING_POLICY.freeAbovePaise,
+        deliveryFeePaise: shipping.flatRatePaise,
+        freeAbovePaise: shipping.freeAbovePaise,
       },
       ...(serviceable ? [] : [{ type: "text" as const, text: `${OUTSIDE_AREA_MESSAGE} We're growing, so check back soon.` }]),
     ],
@@ -238,7 +237,7 @@ async function answer(body: z.infer<typeof schema>, ip: () => Promise<boolean>):
         : { intent, reply: reply([{ type: "text", text: `Which pincode? We deliver across ${SERVICE_AREA.label}.` }], { expect: "pincode", state: { flow: "pincode" } }) };
     }
     case "shipping": {
-      const p = DEFAULT_SHIPPING_POLICY;
+      const p = await getShippingPolicy();
       return {
         intent,
         reply: reply([
@@ -282,7 +281,7 @@ async function answer(body: z.infer<typeof schema>, ip: () => Promise<boolean>):
       return { intent, reply: reply([{ type: "text", text: "Hi! I can track an order, check delivery to your pincode, explain returns, delivery charges and ways to pay, or put you in touch with us." }]) };
     default: {
       // The owner's own FAQ answers, before giving up.
-      const facts = storeFacts();
+      const facts = await getStoreFacts();
       const faqs = (await getFaqs()).map((f) => ({ ...f, question: fillTokens(f.question, facts), answer: fillTokens(f.answer, facts) }));
       const faq = text ? matchFaq(text, faqs) : null;
       if (faq) {

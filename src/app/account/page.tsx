@@ -7,6 +7,8 @@ import { formatDate } from "@/lib/format";
 import { SignOutButtons } from "./sign-out-buttons";
 import { InviteFriends } from "./invite-friends";
 import { accountReferrals, checkoutCredit, isReferred } from "@/server/referrals";
+import { ReorderButton } from "@/components/reorder-button";
+import { canReorder } from "@/lib/reorder";
 import { ReferralCodeEntry } from "@/components/account/referral-code-entry";
 
 export const dynamic = "force-dynamic";
@@ -63,10 +65,10 @@ export default async function AccountPage() {
               const status = STATUS[o.status] ?? { label: o.status, tone: "live" as const };
               const more = o.itemCount > 1 ? ` and ${o.itemCount - 1} more` : "";
               return (
-                <li key={o.orderNumber}>
+                <li key={o.orderNumber} className="flex flex-wrap items-stretch">
                   <Link
                     href={`/order/${encodeURIComponent(o.orderNumber)}${o.accessToken ? `?t=${encodeURIComponent(o.accessToken)}` : ""}`}
-                    className="flex items-start justify-between gap-4 p-4 hover:bg-shelf"
+                    className="flex min-w-0 flex-1 items-start justify-between gap-4 p-4 hover:bg-shelf"
                   >
                     <span className="min-w-0">
                       <span className={`block text-small ${TONE[status.tone]}`}>{status.label}</span>
@@ -84,6 +86,11 @@ export default async function AccountPage() {
                       <span className="mt-0.5 block text-micro underline">Track</span>
                     </span>
                   </Link>
+                  {canReorder(o.status) && (
+                    <div className="flex items-center px-4 pb-4 max-sm:w-full sm:pb-0 sm:pl-0">
+                      <ReorderButton orderNumber={o.orderNumber} token={null} className="btn btn-outline max-sm:w-full" />
+                    </div>
+                  )}
                 </li>
               );
             })}

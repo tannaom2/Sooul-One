@@ -42,7 +42,16 @@ vi.mock("@/lib/analytics", () => ({ recordEvent: h.recordEvent }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
 vi.mock("@/server/pincode", () => ({ lookupPincode: h.lookupPincode }));
 vi.mock("@/server/intel", () => ({ codForCheckout: h.codForCheckout, extraDeliveryDays: h.extraDeliveryDays, getCodSettings: h.getCodSettings }));
-vi.mock("@/server/store-settings", () => ({ getCheckoutState: h.getCheckoutState, getStoreControls: h.getStoreControls }));
+vi.mock("@/server/store-settings", async () => {
+  const { DEFAULT_SHIPPING_POLICY } = await import("@/lib/checkout/quote");
+  const { storeFacts } = await import("@/lib/site-content");
+  return {
+    getCheckoutState: h.getCheckoutState,
+    getStoreControls: h.getStoreControls,
+    getShippingPolicy: async () => DEFAULT_SHIPPING_POLICY,
+    getStoreFacts: async () => storeFacts(),
+  };
+});
 vi.mock("@/server/business", () => ({ getBusinessProfile: h.getBusinessProfile }));
 vi.mock("@/server/assistant-settings", () => ({ getAssistantSettings: h.getAssistantSettings }));
 vi.mock("@/server/customer-auth", () => ({ codRequiresCode: h.codRequiresCode }));

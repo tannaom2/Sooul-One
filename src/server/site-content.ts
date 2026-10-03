@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { CONTENT_TAG } from "@/lib/cache-tags";
 import { withLastGood } from "@/server/last-good";
+import { getStoreFacts } from "@/server/store-settings";
 import { fillTokens, resolveSiteText, storeFacts, topBarMessages, type FaqItem, type SiteText, type TopBarMessage } from "@/lib/site-content";
 
 /**
@@ -23,7 +24,7 @@ function filledDefaults(): SiteText {
 const loadTopBar = unstable_cache(
   async (): Promise<TopBarMessage[]> => {
     const rows = await db.announcement.findMany({ orderBy: { sortOrder: "asc" } });
-    return topBarMessages(rows, storeFacts());
+    return topBarMessages(rows, await getStoreFacts());
   },
   ["top-bar"],
   CACHE,
@@ -31,8 +32,8 @@ const loadTopBar = unstable_cache(
 
 const loadSiteText = unstable_cache(
   async (): Promise<SiteText> => {
-    const text = resolveSiteText(await db.siteText.findMany());
-    const facts = storeFacts();
+    const [rows, facts] = await Promise.all([db.siteText.findMany(), getStoreFacts()]);
+    const text = resolveSiteText(rows);
     return Object.fromEntries(Object.entries(text).map(([k, v]) => [k, fillTokens(v, facts)])) as SiteText;
   },
   ["site-text"],

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeOrderAnalytics, type OrderLike } from "../src/lib/order-analytics-compute";
 
 const order = (over: Partial<OrderLike> = {}): OrderLike => ({
-  guestEmail: "shopper@example.com",
+  customerKey: "shopper@example.com",
   placedAt: new Date("2026-09-01T00:00:00Z"),
   totalAmountPaise: 50000,
   state: "Maharashtra",
@@ -30,10 +30,10 @@ describe("computeOrderAnalytics", () => {
 
   it("classifies an order as new when it is the customer's first ever order", () => {
     const placedAt = new Date("2026-09-01T00:00:00Z");
-    const firstOrderByEmail = new Map([["a@example.com", placedAt]]);
+    const firstOrderByCustomer = new Map([["a@example.com", placedAt]]);
     const result = computeOrderAnalytics(
-      [order({ guestEmail: "a@example.com", placedAt })],
-      firstOrderByEmail,
+      [order({ customerKey: "a@example.com", placedAt })],
+      firstOrderByCustomer,
       new Map(),
     );
     expect(result.newCustomerOrders).toBe(1);
@@ -41,19 +41,19 @@ describe("computeOrderAnalytics", () => {
   });
 
   it("classifies an order as repeat when the customer's first order was earlier", () => {
-    const firstOrderByEmail = new Map([["a@example.com", new Date("2026-08-01T00:00:00Z")]]);
+    const firstOrderByCustomer = new Map([["a@example.com", new Date("2026-08-01T00:00:00Z")]]);
     const result = computeOrderAnalytics(
-      [order({ guestEmail: "a@example.com", placedAt: new Date("2026-09-01T00:00:00Z") })],
-      firstOrderByEmail,
+      [order({ customerKey: "a@example.com", placedAt: new Date("2026-09-01T00:00:00Z") })],
+      firstOrderByCustomer,
       new Map(),
     );
     expect(result.newCustomerOrders).toBe(0);
     expect(result.repeatCustomerOrders).toBe(1);
   });
 
-  it("counts distinct customers by email, not by order", () => {
+  it("counts distinct customers, not orders", () => {
     const result = computeOrderAnalytics(
-      [order({ guestEmail: "a@example.com" }), order({ guestEmail: "a@example.com" }), order({ guestEmail: "b@example.com" })],
+      [order({ customerKey: "a@example.com" }), order({ customerKey: "a@example.com" }), order({ customerKey: "b@example.com" })],
       new Map(),
       new Map(),
     );

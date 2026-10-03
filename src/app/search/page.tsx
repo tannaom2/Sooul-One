@@ -12,7 +12,8 @@ import { recordEvent } from "@/lib/analytics";
 import { reportError } from "@/lib/observability";
 import { clientIp, PUBLIC_LIMITS } from "@/lib/rate-limit-rules";
 import { groupByBrand, queryForLog, rank } from "@/lib/search";
-import { fillTokens, storeFacts } from "@/lib/site-content";
+import { fillTokens } from "@/lib/site-content";
+import { getStoreFacts } from "@/server/store-settings";
 import { brandHref } from "@/lib/brand-domains";
 
 export const metadata: Metadata = { title: "Search — SooulOne", robots: { index: false, follow: true } };
@@ -43,8 +44,7 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
       reportError("search/rate-limit", error);
     }
     if (!limited) {
-      const [catalog, allFaqs, allArticles] = await Promise.all([getSearchCatalog(), getFaqs(), getArticles()]);
-      const facts = storeFacts();
+      const [catalog, allFaqs, allArticles, facts] = await Promise.all([getSearchCatalog(), getFaqs(), getArticles(), getStoreFacts()]);
       const hit = rank(
         query,
         catalog.map((c) => ({ ...c, id: c.product.id, name: c.product.name, brand: c.product.brandName, category: c.product.categoryName })),

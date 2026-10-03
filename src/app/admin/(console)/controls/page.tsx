@@ -5,7 +5,7 @@ import { reportError } from "@/lib/observability";
 import { onlinePaymentsEnabled } from "@/lib/payments-config";
 import { DEFAULT_CONTROLS, type StoreControls } from "@/lib/store-controls";
 import { DEFAULT_THEME_SETTINGS, type ThemeSettings } from "@/lib/theme";
-import { ControlsForm } from "./controls-form";
+import { ControlsForm, type DeliveryFees } from "./controls-form";
 import type { CheckoutCodSettings } from "@/server/intel";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +16,13 @@ export default async function StoreControlsPage() {
 
   let controls: StoreControls = DEFAULT_CONTROLS;
   let theme: ThemeSettings = DEFAULT_THEME_SETTINGS;
+  let fees: DeliveryFees = { deliveryFee: 59, freeDeliveryAbove: 799 };
   let codRules: CheckoutCodSettings = { codAutoBlock: false, codAutoBlockRtoPercent: 35, codAutoBlockMinShipped: 4, codMinOrderValue: null, codMaxOrderValue: null, preferredPayment: "ONLINE" };
   try {
     const row = await db.storeSettings.findUnique({ where: { id: "default" } });
     if (row) {
       controls = { ordersPaused: row.ordersPaused, pauseMessage: row.pauseMessage, codEnabled: row.codEnabled, bundlesEnabled: row.bundlesEnabled };
+      fees = { deliveryFee: row.deliveryFee, freeDeliveryAbove: row.freeDeliveryAbove };
       theme = { toggleVisible: row.themeToggleVisible, forcedTheme: row.forcedTheme === "DARK" ? "dark" : "light" };
       codRules = {
         codAutoBlock: row.codAutoBlock,
@@ -45,7 +47,7 @@ export default async function StoreControlsPage() {
           recorded in Activity.
         </p>
       </div>
-      <ControlsForm controls={controls} theme={theme} codRules={codRules} onlinePayments={onlinePaymentsEnabled()} />
+      <ControlsForm controls={controls} theme={theme} fees={fees} codRules={codRules} onlinePayments={onlinePaymentsEnabled()} />
     </div>
   );
 }

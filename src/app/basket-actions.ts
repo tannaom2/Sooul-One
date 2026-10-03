@@ -16,6 +16,10 @@ import { recordEvent } from "@/lib/analytics";
 import { removeCartBox, saveCartBox } from "@/server/boxes";
 import { reportError } from "@/lib/observability";
 import { EMPTY_BASKET, MAX_LINE_QUANTITY, type BasketResult } from "@/lib/basket-types";
+import { db } from "@/lib/db";
+import { orderTokenMatches } from "@/lib/order-access";
+import { canReorder, reorderLines, reorderMessage } from "@/lib/reorder";
+import { getCustomer } from "@/server/customer-auth";
 
 /**
  * Basket Server Actions for the drawer (src/components/basket). Each returns
@@ -57,7 +61,10 @@ export async function loadBasket(): Promise<BasketResult> {
   }
 }
 
-export async function addToBasket(productId: string, quantity: number): Promise<BasketResult> {
+/** Where an add came from, for measuring: the product page (default) or a product card's quick add. */
+const viaSchema = z.enum(["card"]).optional();
+
+export async function addToBasket(productId: string, quantity: number, via?: "card"): Promise<BasketResult> {
   const parsed = addSchema.safeParse({ productId, quantity });
   if (!parsed.success) return { ok: false, message: "Choose a quantity between 1 and 20." };
 
@@ -74,7 +81,7 @@ export async function addToBasket(productId: string, quantity: number): Promise<
   after(() =>
     recordEvent(sessionId, "ADD_TO_CART", {
       productId: parsed.data.productId,
-      metadata: { quantity: parsed.data.quantity },
+      metadata: { quantity: parsed.data.quantity, ...(viaSchema.safeParse(via).data ? { via } : {}) },
     }),
   );
 
@@ -116,6 +123,56 @@ export async function addManyToBasket(productIds: string[]): Promise<BasketResul
     return { ok: false, message: `Added what was available: ${names} could be added just now.`, basket };
   } catch (error) {
     reportError("basket/add-many-snapshot", error);
+    return { ok: false, message: "Added, but your basket didn't refresh. Open it again to see it." };
+  }
+}
+
+const reorderSchema = z.object({ orderNumber: z.string().min(1).max(40), token: z.string().max(200).nullable() });
+
+/**
+ * "Order again": a past order's products back in this basket, at today's
+ * prices and stock (src/lib/reorder.ts). Only for whoever can open the order:
+ * its link token, or the signed-in shopper it belongs to. Anyone else gets the
+ * same answer as for an order that doesn't exist.
+ */
+export async function reorderToBasket(orderNumber: string, token: string | null): Promise<BasketResult> {
+  const parsed = reorderSchema.safeParse({ orderNumber, token });
+  if (!parsed.success) return { ok: false, message: "That order couldn't be found." };
+  let order;
+  try {
+    order = await db.order.findUnique({
+      where: { orderNumber: parsed.data.orderNumber },
+      select: { status: true, accessToken: true, customerId: true, items: { select: { productId: true, productNameSnapshot: true, quantity: true } } },
+    });
+  } catch (error) {
+    reportError("basket/reorder", error);
+    return { ok: false, message: TRY_AGAIN };
+  }
+  const allowed =
+    order && (orderTokenMatches(parsed.data.token, order.accessToken) || (order.customerId !== null && (await getCustomer())?.id === order.customerId));
+  if (!order || !allowed) return { ok: false, message: "That order couldn't be found." };
+  if (!canReorder(order.status)) return { ok: false, message: "This order is still waiting for its payment, and its items are still in your basket." };
+
+  const lines = reorderLines(order.items).slice(0, 30);
+  const sessionId = await getOrCreateSessionId();
+  const missed: string[] = [];
+  for (const line of lines) {
+    try {
+      await addToCart(sessionId, line.productId, line.quantity);
+    } catch (error) {
+      const known = error instanceof Error && /isn't available|stores only|sold out/.test(error.message);
+      if (!known) reportError("basket/reorder-line", error, { productId: line.productId });
+      missed.push(line.name);
+    }
+  }
+  const added = lines.length - missed.length;
+  if (added > 0) after(() => recordEvent(sessionId, "ADD_TO_CART", { metadata: { via: "reorder", lines: added } }));
+  try {
+    const basket = await snapshotFor(sessionId);
+    const message = reorderMessage(missed, lines.length);
+    return message ? { ok: false, message, basket } : { ok: true, basket };
+  } catch (error) {
+    reportError("basket/reorder-snapshot", error);
     return { ok: false, message: "Added, but your basket didn't refresh. Open it again to see it." };
   }
 }

@@ -8,6 +8,8 @@ import { DEFAULT_CONTROLS, checkoutState, type CheckoutState, type StoreControls
 import { ordersOpen } from "@/server/launch-readiness";
 import { DEFAULT_THEME_SETTINGS, type ThemeSettings } from "@/lib/theme";
 import { withLastGood } from "@/server/last-good";
+import { DEFAULT_SHIPPING_POLICY, shippingPolicyFrom, type ShippingPolicy } from "@/lib/checkout/quote";
+import { storeFacts, type StoreFacts } from "@/lib/site-content";
 
 /** Orders held while the store's own settings can't be read and none were read before. */
 export const UNREADABLE_CONTROLS: StoreControls = {
@@ -55,6 +57,28 @@ export const getThemeSettings = unstable_cache(
   ["theme-settings"],
   { revalidate: 3600, tags: [SETTINGS_TAG] },
 );
+
+const loadShippingPolicy = unstable_cache(
+  async (): Promise<ShippingPolicy> => {
+    const row = await db.storeSettings.findUnique({ where: { id: "default" }, select: { deliveryFee: true, freeDeliveryAbove: true } });
+    return row ? shippingPolicyFrom(row) : DEFAULT_SHIPPING_POLICY;
+  },
+  ["shipping-policy"],
+  { revalidate: 3600, tags: [SETTINGS_TAG] },
+);
+
+/**
+ * The delivery fee and free-delivery amount the owner set (Store controls).
+ * Every quote, the basket's free-delivery bar and every {token} in copy read
+ * this, so they can't disagree. A database error keeps the last fees read;
+ * with none, the defaults checkout always charged.
+ */
+export const getShippingPolicy = withLastGood("shipping-policy", loadShippingPolicy, () => DEFAULT_SHIPPING_POLICY);
+
+/** The live values behind copy {tokens}, with the owner's fees. */
+export async function getStoreFacts(): Promise<StoreFacts> {
+  return storeFacts(await getShippingPolicy());
+}
 
 /** What checkout can offer right now (src/lib/store-controls.ts). */
 export async function getCheckoutState(): Promise<CheckoutState> {

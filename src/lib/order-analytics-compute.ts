@@ -15,7 +15,8 @@ export interface OrderItemLike {
 }
 
 export interface OrderLike {
-  readonly guestEmail: string | null;
+  /** Who placed it: the mobile number (always asked at checkout), or the email on older orders without one. */
+  readonly customerKey: string | null;
   readonly placedAt: Date;
   readonly totalAmountPaise: number;
   readonly state: string | null;
@@ -47,7 +48,7 @@ const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 const istDay = (d: Date) => new Date(d.getTime() + IST_OFFSET).toISOString().slice(0, 10);
 
 /**
- * `firstOrderByEmail` must be each email's earliest paid-like order across
+ * `firstOrderByCustomer` must be each customer's earliest paid-like order across
  * ALL history, not just the current window — a customer whose first-ever
  * order was last quarter and who just bought again this week is a repeat
  * buyer, and building that map is the one thing this function can't do
@@ -55,19 +56,19 @@ const istDay = (d: Date) => new Date(d.getTime() + IST_OFFSET).toISOString().sli
  */
 export function computeOrderAnalytics(
   orders: readonly OrderLike[],
-  firstOrderByEmail: ReadonlyMap<string, Date>,
+  firstOrderByCustomer: ReadonlyMap<string, Date>,
   brandByProduct: ReadonlyMap<string, BrandLookupEntry>,
 ): OrderAnalyticsSummary {
   const revenuePaise = orders.reduce((sum, o) => sum + o.totalAmountPaise, 0);
   const averageOrderValuePaise = orders.length ? Math.round(revenuePaise / orders.length) : 0;
 
-  const emails = [...new Set(orders.map((o) => o.guestEmail).filter((e): e is string => Boolean(e)))];
+  const customers = [...new Set(orders.map((o) => o.customerKey).filter((e): e is string => Boolean(e)))];
 
   let newCustomerOrders = 0;
   let repeatCustomerOrders = 0;
   for (const order of orders) {
-    if (!order.guestEmail) continue;
-    const firstEver = firstOrderByEmail.get(order.guestEmail);
+    if (!order.customerKey) continue;
+    const firstEver = firstOrderByCustomer.get(order.customerKey);
     const isFirstOrder = firstEver && firstEver.getTime() === order.placedAt.getTime();
     if (isFirstOrder) newCustomerOrders += 1;
     else repeatCustomerOrders += 1;
@@ -147,7 +148,7 @@ export function computeOrderAnalytics(
     averageOrderValuePaise,
     newCustomerOrders,
     repeatCustomerOrders,
-    distinctCustomers: emails.length,
+    distinctCustomers: customers.length,
     topProducts,
     topBrands,
     revenueByState,

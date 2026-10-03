@@ -13,13 +13,12 @@ export type { OrderAnalyticsSummary } from "./order-analytics-compute";
 /**
  * Order and customer analytics.
  *
- * There is no account system yet (README: "Customer accounts... not
- * launch-blocking... not yet built") — every order is a guest checkout, so
- * "customer" here means a distinct `guestEmail`, not a `Customer` row. That's
- * a real limitation worth stating plainly: the same person checking out with
- * two different email addresses looks like two customers, and there is no
- * way to know otherwise without an account system. Good enough for "are we
- * seeing repeat buyers at all," not a precise CRM number.
+ * Most orders are guest checkouts, so "customer" here means a distinct
+ * mobile number (`guestPhone`, asked at every checkout and proven by code for
+ * cash on delivery), not a `Customer` row. Email is optional at checkout, so
+ * it's used only for older orders with no number. The same person ordering
+ * from two numbers still looks like two customers: good enough for "are we
+ * seeing repeat buyers," not a precise CRM number.
  *
  * "Revenue" throughout means orders in a state where money has actually
  * moved or the shopper has committed to pay on delivery — PENDING_PAYMENT and
@@ -29,7 +28,7 @@ export type { OrderAnalyticsSummary } from "./order-analytics-compute";
  * The actual computation lives in order-analytics-compute.ts, which is pure
  * and unit-tested; this file is just the fetching around it.
  */
-const REVENUE_STATUSES = ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"] as const;
+export const REVENUE_STATUSES = ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"] as const;
 
 export interface OrderAnalyticsReport extends OrderAnalyticsSummary {
   readonly since: Date;
@@ -46,7 +45,7 @@ export async function buildOrderAnalytics(days = 30): Promise<OrderAnalyticsRepo
   });
 
   const orderLikes: OrderLike[] = orders.map((o) => ({
-    guestEmail: o.guestEmail,
+    customerKey: o.guestPhone ?? o.guestEmail,
     placedAt: o.placedAt,
     totalAmountPaise: decimalToPaise(o.totalAmount),
     state: (o.shippingAddress as { state?: string } | null)?.state ?? null,
@@ -58,21 +57,18 @@ export async function buildOrderAnalytics(days = 30): Promise<OrderAnalyticsRepo
     })),
   }));
 
-  // Each email's earliest paid-like order across ALL history, not just this
-  // window — a customer whose first order was last quarter and who just
+  // Each customer's earliest paid-like order across ALL history, not just
+  // this window — a customer whose first order was last quarter and who just
   // bought again this week is a repeat buyer.
-  const emails = [...new Set(orderLikes.map((o) => o.guestEmail).filter((e): e is string => Boolean(e)))];
-  const firstOrderByEmail = new Map<string, Date>();
-  if (emails.length) {
-    const earliest = await db.order.groupBy({
-      by: ["guestEmail"],
-      where: { guestEmail: { in: emails }, status: { in: [...REVENUE_STATUSES] } },
-      _min: { placedAt: true },
-    });
-    for (const row of earliest) {
-      if (row.guestEmail && row._min.placedAt) firstOrderByEmail.set(row.guestEmail, row._min.placedAt);
-    }
-  }
+  const phones = [...new Set(orders.flatMap((o) => (o.guestPhone ? [o.guestPhone] : [])))];
+  const emails = [...new Set(orders.flatMap((o) => (!o.guestPhone && o.guestEmail ? [o.guestEmail] : [])))];
+  const firstOrderByCustomer = new Map<string, Date>();
+  const [byPhone, byEmail] = await Promise.all([
+    phones.length ? db.order.groupBy({ by: ["guestPhone"], where: { guestPhone: { in: phones }, status: { in: [...REVENUE_STATUSES] } }, _min: { placedAt: true } }) : [],
+    emails.length ? db.order.groupBy({ by: ["guestEmail"], where: { guestEmail: { in: emails }, guestPhone: null, status: { in: [...REVENUE_STATUSES] } }, _min: { placedAt: true } }) : [],
+  ]);
+  for (const row of byPhone) if (row.guestPhone && row._min.placedAt) firstOrderByCustomer.set(row.guestPhone, row._min.placedAt);
+  for (const row of byEmail) if (row.guestEmail && row._min.placedAt) firstOrderByCustomer.set(row.guestEmail, row._min.placedAt);
 
   const productIds = [...new Set(orderLikes.flatMap((o) => o.items.map((i) => i.productId)))];
   const productsWithBrand = productIds.length
@@ -88,6 +84,6 @@ export async function buildOrderAnalytics(days = 30): Promise<OrderAnalyticsRepo
   return {
     since,
     until,
-    ...computeOrderAnalytics(orderLikes, firstOrderByEmail, brandByProduct),
+    ...computeOrderAnalytics(orderLikes, firstOrderByCustomer, brandByProduct),
   };
 }

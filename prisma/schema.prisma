@@ -472,6 +472,9 @@ model Order {
   /// address, GSTIN, FSSAI, contact): an issued GST invoice never changes when
   /// Business details do. See sellerSnapshot in src/lib/invoice.ts.
   sellerSnapshot        Json?
+  /// Where the shopper came from: the first visit and the latest campaign or
+  /// outside site before the order (src/lib/attribution.ts). Null: no record.
+  attribution           Json?
   /// GST on the delivery charge, and whether tax was CGST+SGST (INTRA_STATE)
   /// or IGST (INTER_STATE), as charged at checkout.
   shippingTaxAmount     Decimal?     @db.Decimal(10, 2)
@@ -835,6 +838,10 @@ model StoreSettings {
   codMaxOrderValue   Int?
   /// Which way to pay checkout selects first.
   preferredPayment   PaymentPreference @default(ONLINE)
+  /// Delivery charge on an order below freeDeliveryAbove (₹, incl. GST). 0: delivery is always free.
+  deliveryFee        Int        @default(59)
+  /// Delivery is free when the order, after discounts, reaches this (₹, incl. GST).
+  freeDeliveryAbove  Int        @default(799)
   /// Turn cash on delivery off by itself for pincodes whose parcels keep
   /// coming back (src/lib/intel/pincodes.ts). Off until the owner opts in.
   codAutoBlock       Boolean    @default(false)

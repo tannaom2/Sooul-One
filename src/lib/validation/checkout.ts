@@ -9,7 +9,9 @@ import * as z from "zod/mini";
  * browser, and full zod added about 95 KB (compressed) to the checkout page.
  */
 export const checkoutInputSchema = z.object({
-  email: z.email({ error: "Enter an email we can send the receipt to." }),
+  // Optional (benchmark gap C5): the mobile number is what tracking, sign-in and
+  // cash on delivery run on. Blank means no receipt by email.
+  email: z.optional(z.union([z.literal(""), z.email({ error: "Check the email address, or leave it blank." })])),
   phone: z.string().check(z.regex(/^[6-9]\d{9}$/, { error: "Enter a 10-digit Indian mobile number." })),
   name: z.string().check(z.minLength(1, { error: "Enter the delivery name." })),
   line1: z.string().check(z.minLength(1, { error: "Enter the address." })),

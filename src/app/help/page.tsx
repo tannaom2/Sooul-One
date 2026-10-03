@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/ui";
 import { JumpLink } from "@/components/jump-link";
 import { getFaqs } from "@/server/site-content";
 import { getBrandFamily } from "@/server/brand-family";
-import { groupFaqs, storeFacts } from "@/lib/site-content";
+import { groupFaqs } from "@/lib/site-content";
+import { getStoreFacts } from "@/server/store-settings";
 
 export const metadata: Metadata = {
   title: "Questions and answers — SooulOne",
@@ -19,8 +20,8 @@ export const metadata: Metadata = {
  * without JavaScript and each answer has its own link (#faq-id).
  */
 export default async function Help() {
-  const [faqs, family] = await Promise.all([getFaqs(), getBrandFamily()]);
-  const groups = groupFaqs(faqs, storeFacts());
+  const [faqs, family, facts] = await Promise.all([getFaqs(), getBrandFamily(), getStoreFacts()]);
+  const groups = groupFaqs(faqs, facts);
   const brandName = (slug: string | null) => family.find((b) => b.slug === slug)?.name ?? null;
 
   return (

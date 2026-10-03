@@ -9,6 +9,8 @@ import { OrderTracker } from "@/components/order-tracker";
 import { orderProgress } from "@/lib/order-progress";
 import { asAddress } from "@/lib/stored-order";
 import { getCustomer } from "@/server/customer-auth";
+import { ReorderButton } from "@/components/reorder-button";
+import { canReorder } from "@/lib/reorder";
 
 export const dynamic = "force-dynamic";
 
@@ -141,9 +143,15 @@ export default async function OrderPage({
         </div>
       </div>
 
-      <Link href="/" className="btn btn-outline mt-8">
-        Keep shopping
-      </Link>
+      <div className="mt-8 flex flex-wrap gap-3">
+        {/* Once it's on its way or done with: while it's being packed, "again" is noise. */}
+        {canReorder(order.status) && !["PAID", "PROCESSING"].includes(order.status) && (
+          <ReorderButton orderNumber={order.orderNumber} token={orderTokenMatches(t, order.accessToken) ? (t ?? null) : null} className="btn btn-solid" />
+        )}
+        <Link href="/" className="btn btn-outline">
+          Keep shopping
+        </Link>
+      </div>
     </div>
   );
 }

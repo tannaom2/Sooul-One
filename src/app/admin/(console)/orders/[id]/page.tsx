@@ -9,6 +9,7 @@ import { decimalToPaise } from "@/lib/format";
 import { OrderStatusForm } from "../status-form";
 import { OrderNoteForm } from "./note-form";
 import { CLOSE_REASONS, STATUS_LABELS, allowedMoves } from "@/lib/order-lifecycle";
+import { describeTouch, readAttribution, type Touch } from "@/lib/attribution";
 
 const reasonLabel = (code: string) =>
   Object.values(CLOSE_REASONS).flat().find((r) => r.code === code)?.label ?? code;
@@ -22,6 +23,7 @@ const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: 
 const EMAIL_LABEL: Record<string, string> = {
   order_confirmation: "Order confirmation email",
   shipping_notification: "Shipping email",
+  owner_new_order: "New-order email to you",
 };
 
 /** One line of plain English per event, with any extra detail beneath. */
@@ -45,6 +47,8 @@ function describe(e: { type: string; detail: any }): { title: string; body?: str
       return { title: "Status changed", body: parts.join(" · ") || undefined };
     }
     case "EMAIL_SENT":
+      // Email is optional at checkout: nothing went wrong.
+      if (d.reason === "no_recipient") return { title: `${EMAIL_LABEL[d.email] ?? "Email"} not sent`, body: "No email address on this order." };
       return {
         title: `${EMAIL_LABEL[d.email] ?? "Email"} ${d.delivered ? "sent" : "not sent"}`,
         body: d.delivered ? undefined : d.reason === "not_configured" ? "Email isn't configured on this server." : d.reason ?? undefined,
@@ -187,7 +191,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <div className="panel-head">Customer</div>
             <div className="grid gap-1 p-3.5 text-small">
               <p className="font-semibold">{address.name}</p>
-              <p className="break-words text-ink-soft">{order.guestEmail}</p>
+              <p className="break-words text-ink-soft">{order.guestEmail ?? <span className="text-ink-faint">No email given</span>}</p>
               <p className="text-ink-soft">
                 <span className="tabular">{order.guestPhone}</span>
                 {/* Proven by SMS code at checkout: the number is real and was in the shopper's hand. */}
@@ -226,8 +230,41 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
               )}
             </dl>
           </section>
+
+          <CameFrom value={order.attribution} />
         </aside>
       </div>
     </div>
+  );
+}
+
+/** The visit before the order, and the first ever if different (src/lib/attribution.ts). */
+function CameFrom({ value }: { value: unknown }) {
+  const a = readAttribution(value);
+  const row = (label: string, t: Touch) => (
+    <div className="border-b border-rule px-3.5 py-2.5 last:border-b-0">
+      <dt className="text-micro text-ink-faint">{label}</dt>
+      <dd className="text-small">
+        <span className="block break-words">{describeTouch(t)}</span>
+        <span className="block text-micro text-ink-faint">
+          {[t.term && `Term: ${t.term}`, t.content && `Ad: ${t.content}`, t.clickKind && `${t.clickKind} kept`, `Landed on ${t.landing}`, when.format(new Date(t.at))].filter(Boolean).join(" · ")}
+        </span>
+      </dd>
+    </div>
+  );
+  return (
+    <section className="panel">
+      <div className="panel-head">Came from</div>
+      {a ? (
+        <dl>
+          {row("Before ordering", a.last)}
+          {a.first.at !== a.last.at && row("First visit", a.first)}
+        </dl>
+      ) : (
+        <p className="p-3.5 text-small text-ink-soft">
+          Not recorded: placed before visits were recorded, with cookies blocked, or after a visit on another device.
+        </p>
+      )}
+    </section>
   );
 }

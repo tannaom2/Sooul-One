@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit, requirePermission } from "@/lib/auth";
 import { diffFields } from "@/lib/audit-diff";
-import { CATALOG_TAG, PINCODE_TAG, SETTINGS_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, CONTENT_TAG, PINCODE_TAG, SETTINGS_TAG, expireTag } from "@/lib/cache-tags";
 
 export interface ControlsResult {
   ok: boolean;
@@ -38,6 +38,15 @@ export async function saveStoreControls(_prev: ControlsResult, form: FormData): 
   if (codMinOrderValue !== null && codMaxOrderValue !== null && codMinOrderValue >= codMaxOrderValue) {
     return { ok: false, message: "The cash on delivery minimum must be below the maximum." };
   }
+  const wholeRupees = (name: string, max: number) => {
+    const raw = String(form.get(name) ?? "").trim();
+    const value = Number(raw);
+    return raw !== "" && Number.isInteger(value) && value >= 0 && value <= max ? value : null;
+  };
+  const deliveryFee = wholeRupees("deliveryFee", 1_000);
+  if (deliveryFee === null) return { ok: false, message: "Enter a delivery charge in whole rupees, from ₹0 to ₹1,000." };
+  const freeDeliveryAbove = wholeRupees("freeDeliveryAbove", 100_000);
+  if (freeDeliveryAbove === null) return { ok: false, message: "Enter the free-delivery amount in whole rupees, from ₹0 to ₹1,00,000." };
   const codAutoBlock = form.get("codAutoBlock") === "on";
   // Disabled inputs aren't sent: keep the saved thresholds while the rule is off.
   const saved = await db.storeSettings.findUnique({ where: { id: "default" }, select: { codAutoBlockRtoPercent: true, codAutoBlockMinShipped: true } });
@@ -53,6 +62,8 @@ export async function saveStoreControls(_prev: ControlsResult, form: FormData): 
     bundlesEnabled: form.get("bundlesEnabled") === "on",
     themeToggleVisible: form.get("themeToggleVisible") === "on",
     forcedTheme,
+    deliveryFee,
+    freeDeliveryAbove,
     // Sent only while cash on delivery is on (its fieldset is disabled otherwise): keep what was saved.
     ...(form.has("preferredPayment")
       ? { codMinOrderValue, codMaxOrderValue, preferredPayment, codAutoBlock, codAutoBlockRtoPercent: percent, codAutoBlockMinShipped: minShipped }
@@ -69,6 +80,8 @@ export async function saveStoreControls(_prev: ControlsResult, form: FormData): 
       bundlesEnabled: true,
       themeToggleVisible: true,
       forcedTheme: "LIGHT",
+      deliveryFee: 59,
+      freeDeliveryAbove: 799,
       codMinOrderValue: null,
       codMaxOrderValue: null,
       preferredPayment: "ONLINE",
@@ -85,6 +98,8 @@ export async function saveStoreControls(_prev: ControlsResult, form: FormData): 
   expireTag(PINCODE_TAG);
   // Combo offers on product pages and cards follow the bundles switch.
   if ("bundlesEnabled" in changes) expireTag(CATALOG_TAG);
+  // The top bar, site text and FAQs name the fees through {tokens} and are cached with them.
+  if ("deliveryFee" in changes || "freeDeliveryAbove" in changes) expireTag(CONTENT_TAG);
   revalidatePath("/admin/controls");
   revalidatePath("/admin");
   // The theme is applied as each storefront page loads, so shoppers see a change on their next page.

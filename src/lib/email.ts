@@ -116,10 +116,8 @@ function wrap(heading: string, bodyHtml: string, footer: string = ORDER_FOOTER):
 
 export async function sendOrderConfirmation(order: StoredOrder): Promise<Sent> {
   const to = order.guestEmail ?? order.customer?.email;
-  if (!to) {
-    console.warn("[email] order has no address to send to", order.orderNumber);
-    return { delivered: false, reason: "no_recipient" };
-  }
+  // Email is optional at checkout: no address, nothing to send (shown as such on the order's timeline).
+  if (!to) return { delivered: false, reason: "no_recipient" };
 
   const { subject, html, text } = renderOrderConfirmation(
     buildOrderBill(order),

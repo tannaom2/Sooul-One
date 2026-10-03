@@ -9,14 +9,21 @@ import { saveStoreControls, type ControlsResult } from "./actions";
 
 const INITIAL: ControlsResult = { ok: false };
 
+export interface DeliveryFees {
+  deliveryFee: number;
+  freeDeliveryAbove: number;
+}
+
 export function ControlsForm({
   controls,
   theme,
+  fees,
   codRules,
   onlinePayments,
 }: {
   controls: StoreControls;
   theme: ThemeSettings;
+  fees: DeliveryFees;
   codRules: CheckoutCodSettings;
   onlinePayments: boolean;
 }) {
@@ -78,6 +85,31 @@ export function ControlsForm({
             <span className="block text-ink-soft">Off stops every bundle discount in baskets and checkout at once.</span>
           </span>
         </label>
+      </fieldset>
+
+      <fieldset className="panel grid gap-3 p-4">
+        <legend className="label px-1">Delivery charges</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="deliveryFee">
+              Delivery charge (₹, incl. GST)
+            </label>
+            <input id="deliveryFee" name="deliveryFee" type="number" min={0} max={1000} step={1} className="field" defaultValue={fees.deliveryFee} required />
+            <p className="mt-1 text-micro text-ink-faint">On orders below the free-delivery amount. 0 makes delivery free on every order.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="freeDeliveryAbove">
+              Free delivery from (₹, incl. GST)
+            </label>
+            <input id="freeDeliveryAbove" name="freeDeliveryAbove" type="number" min={0} max={100000} step={1} className="field" defaultValue={fees.freeDeliveryAbove} required />
+            <p className="mt-1 text-micro text-ink-faint">Checked against the order after discounts and offers.</p>
+          </div>
+        </div>
+        <p className="text-small text-ink-soft">
+          Checkout, the basket&apos;s free-delivery bar, the Help assistant and any text using {"{deliveryFee}"} or {"{freeDelivery}"} (top
+          bar, FAQs, site text) change together. Orders already placed keep what they were charged. Update the Shipping policy page
+          to match.
+        </p>
       </fieldset>
 
       <fieldset className="panel grid gap-3 p-4" disabled={!cod}>

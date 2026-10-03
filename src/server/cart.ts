@@ -9,7 +9,7 @@ import {
 } from "@/lib/session-cookie";
 import { db } from "@/lib/db";
 import { decimalToPaise } from "@/lib/format";
-import { DEFAULT_SHIPPING_POLICY, buildQuote, type Quote, type QuoteBox, type QuoteCredit, type QuoteLineInput } from "@/lib/checkout/quote";
+import { buildQuote, type Quote, type QuoteBox, type QuoteCredit, type QuoteLineInput } from "@/lib/checkout/quote";
 import { boxIssues, boxIssueMessage, boxKindLabel } from "@/lib/checkout/boxes";
 import { BOX_RULE_INCLUDE, boxRuleOf } from "@/server/boxes";
 import { groupKits } from "@/lib/checkout/kits";
@@ -21,7 +21,7 @@ import { SLOWEST_SERVED_ZONE, estimateDeliveryDate, zoneForPincode } from "@/lib
 import { gstTreatmentFor } from "@/lib/checkout/service-area";
 import { resolveUnitPrice } from "@/lib/pricing";
 import type { BundleRule } from "@/lib/checkout/bundles";
-import { getStoreControls } from "@/server/store-settings";
+import { getShippingPolicy, getStoreControls } from "@/server/store-settings";
 import { extraDeliveryDays } from "@/server/intel";
 import { couponValidity, minimumOrderMessage } from "@/lib/checkout/coupons";
 import { productAvailability } from "@/lib/checkout/availability";
@@ -330,7 +330,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
   // query starts at CartItem (filtered by the cart's session) to save a level
   // of relation loading compared with going through Cart.
   // The owner can switch bundle offers off (Store controls); cached, so no extra round trip.
-  const controls = await getStoreControls();
+  const [controls, shipping] = await Promise.all([getStoreControls(), getShippingPolicy()]);
   const [items, cartBoxRows, bundleRows, found] = await Promise.all([
     db.cartItem.findMany({ where: { cart: { sessionId } }, include: CART_ITEM_INCLUDE }),
     db.cartBox.findMany({
@@ -437,7 +437,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     }
   }
 
-  const built = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon, bundles, boxes, credit: context.credit ?? undefined });
+  const built = buildQuote({ lines, estimatedDeliveryDate, gstTreatment, coupon, bundles, boxes, credit: context.credit ?? undefined, shipping });
   // A box that needs attention holds checkout: its items would otherwise be
   // charged at their usual prices without the shopper deciding to.
   const quote: Quote = cartBoxes.some((b) => b.issue) ? { ...built, canProceed: false } : built;
@@ -472,6 +472,7 @@ export async function quoteCart(sessionId: string, context: QuoteContext = {}) {
     bundlePrices,
     bundleListPrices,
     estimatedDeliveryDate,
+    shipping,
     couponRejected: Boolean(context.couponCode) && !quote.appliedCouponCode,
     /** Why the code didn't apply, in words for the shopper. */
     couponMessage: context.couponCode && !quote.appliedCouponCode ? (couponMessage ?? "That code isn't valid for this order.") : null,
@@ -568,7 +569,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
     savingsPaise: quote.productDiscountPaise + quote.bundleDiscountPaise + quote.discountPaise,
     shippingPaise: quote.shippingPaise,
     totalPaise: quote.totalPaise,
-    freeDelivery: freeDeliveryProgress(discounted, DEFAULT_SHIPPING_POLICY.freeAbovePaise),
+    freeDelivery: freeDeliveryProgress(discounted, result.shipping.freeAbovePaise),
     appliedOffers: [
       ...quote.appliedBundles.map((b) => ({ id: b.id, name: b.name, discountPaise: b.discountPaise })),
       ...quote.appliedBoxes.map((b) => ({ id: b.boxId, name: b.name, discountPaise: b.discountPaise })),
