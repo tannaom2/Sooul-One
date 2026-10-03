@@ -23,8 +23,21 @@ export const PINCODE_TAG = "pincodes";
 export const CONTENT_TAG = "content";
 
 /**
+ * Mark a tag stale when only stock moved (an order placed, cancelled or
+ * paid late). The next visitor still gets the cached page at once while it
+ * refreshes in the background; the one after sees the new stock. Clearing
+ * the whole catalog on every order made the next view of every product page
+ * wait seconds on a cold cache (benchmark gap F4). Safe because the basket
+ * and checkout re-check stock live: a page one order behind can't oversell.
+ */
+export function refreshTag(tag: typeof CATALOG_TAG): void {
+  revalidateTag(tag, "max");
+}
+
+/**
  * Expire a tag immediately, from a Server Action or a route handler, so the
- * next shopper sees the change, not the one after.
+ * next shopper sees the change, not the one after. For what a shopper must
+ * see at once: a price, a product taken down, a recall.
  */
 export function expireTag(
   tag: typeof CATALOG_TAG | typeof STORES_TAG | typeof BUSINESS_TAG | typeof SETTINGS_TAG | typeof PINCODE_TAG | typeof CONTENT_TAG,

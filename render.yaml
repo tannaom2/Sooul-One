@@ -125,3 +125,22 @@ services:
         value: https://soulone-app.onrender.com/api/cron/boxes
       - key: CRON_SECRET
         sync: false
+
+  # The message queue's backstop (src/app/api/cron/messages): sends email
+  # retries and anything a request queued but didn't send, queues refill
+  # reminders that have come due, and clears out old sent messages. Without
+  # it, a failed order confirmation is never retried. Same CRON_SECRET.
+  - type: cron
+    name: soulone-messages
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "*/5 * * * *"
+    buildCommand: "true"
+    startCommand: >-
+      node -e "fetch(process.env.TARGET_URL,{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(async r=>{console.log(r.status,await r.text());if(!r.ok)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+    envVars:
+      - key: TARGET_URL
+        value: https://soulone-app.onrender.com/api/cron/messages
+      - key: CRON_SECRET
+        sync: false

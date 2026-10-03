@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { CATALOG_TAG, STORES_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, STORES_TAG, expireTag, refreshTag } from "@/lib/cache-tags";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { onOrderStatusChanged } from "@/server/referrals";
@@ -10,7 +10,7 @@ import { can } from "@/lib/permissions";
 import { diffFields } from "@/lib/audit-diff";
 import { recordOrderEvent } from "@/lib/order-events";
 import { productInputSchema } from "@/lib/validation/product";
-import { sendShippingNotification } from "@/lib/email";
+import { deliverNow, messageKey } from "@/server/messages";
 import { STATUS_LABELS, checkMove, isClosing, releasesStock } from "@/lib/order-lifecycle";
 import { releaseStock } from "@/server/order-stock";
 import { issueInvoiceNumber } from "@/server/invoice-number";
@@ -138,6 +138,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
   }
   if (regulatoryType === "HEALTH_SUPPLEMENT") {
     candidate.servingsPerContainer = num(form, "servingsPerContainer");
+    candidate.servingsPerDay = num(form, "servingsPerDay") ?? null;
     candidate.sugarPerServingG = num(form, "sugarPerServingG");
     candidate.dosageGuidance = String(form.get("dosageGuidance") ?? "").trim();
     candidate.supplementFacts = json(form, "supplementFacts");
@@ -254,6 +255,7 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
 
   if (input.regulatoryType === "HEALTH_SUPPLEMENT") {
     data.servingsPerContainer = input.servingsPerContainer;
+    data.servingsPerDay = input.servingsPerDay ?? null;
     data.sugarPerServingG = input.sugarPerServingG;
     data.dosageGuidance = input.dosageGuidance;
     data.supplementFacts = input.supplementFacts;
@@ -477,7 +479,7 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
     return count === 1;
   });
   if (!applied) return { ok: false, message: STALE };
-  if (statusChanges && releasesStock(status)) expireTag(CATALOG_TAG);
+  if (statusChanges && releasesStock(status)) refreshTag(CATALOG_TAG); // stock returned: see src/lib/cache-tags.ts
 
   const updated = { ...previous, ...data, status: statusChanges ? (status as OrderStatus) : previous.status } as typeof previous;
 
@@ -496,17 +498,18 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
 
   let mailed = "";
   if (status === "SHIPPED" && previous.status !== "SHIPPED") {
-    const sent = await sendShippingNotification(updated);
-    await recordOrderEvent(orderId, "EMAIL_SENT", { type: "SYSTEM" }, {
-      email: "shipping_notification",
-      delivered: sent.delivered,
-      reason: sent.reason ?? null,
-    });
-    mailed = sent.delivered
-      ? " Customer notified."
-      : sent.reason === "not_configured"
-        ? " Email isn't configured, so the customer wasn't notified."
-        : " Couldn't email the customer — check the server log.";
+    const [sent] = await deliverNow({ kind: "shipping_notification", dedupeKey: messageKey.shipping(orderId), orderId });
+    const outcome = sent?.outcome;
+    mailed =
+      outcome?.status === "SENT"
+        ? " Customer notified."
+        : outcome?.status === "SKIPPED"
+          ? outcome.reason === "not_configured"
+            ? " Email isn't configured, so the customer wasn't notified."
+            : outcome.reason === "no_recipient"
+              ? " No email address on this order, so no shipping email."
+              : " No shipping email was needed."
+          : " The shipping email didn't go yet; it will be retried (see Messages).";
   }
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);

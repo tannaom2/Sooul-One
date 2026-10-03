@@ -177,6 +177,9 @@ model Product {
 
   // --- Supplement-specific (regulatoryType = HEALTH_SUPPLEMENT) ---
   servingsPerContainer Int?
+  /// Servings taken a day ("chew 2 gummies daily" is 2), so a pack's run-out
+  /// date can be worked out for refill reminders. Blank: no reminder offered.
+  servingsPerDay       Int?
   /// "1 gummy daily" style — must carry explicit do-not-exceed language.
   dosageGuidance       String?
   /// { ingredient: { amountPerServing, percentRDA } }
@@ -418,6 +421,7 @@ model Order {
   status                OrderStatus  @default(PENDING_PAYMENT)
   items                 OrderItem[]
   events                OrderEvent[]
+  messages              OutboundMessage[]
   /// Sum of lines at the price paid, after product-level discounts.
   subtotal              Decimal      @db.Decimal(10, 2)
   /// [ADDED] Saved through product-level discounts (list price minus price paid).
@@ -460,6 +464,9 @@ model Order {
   /// delivery can be measured against what was actually promised.
   promisedDeliveryDate  DateTime?
   deliveredAt           DateTime?
+  /// When the shopper asked for a refill reminder on this order (benchmark
+  /// gap R2, src/server/refill-reminders.ts); cleared when they stop them.
+  refillOptInAt         DateTime?
   /// Set when an order ends as CANCELLED, RTO or RETURNED.
   closedAt              DateTime?
   /// Why it ended: a code from CLOSE_REASONS in src/lib/order-lifecycle.ts.
@@ -1331,4 +1338,57 @@ model JobOpening {
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+/// One message to send, kept until it's sent or given up on (benchmark gap
+/// M11, src/server/messages.ts). Written in the same step as what causes it,
+/// then sent by a worker that retries with backoff, so a provider blip delays
+/// a message instead of losing it. Holds ids, not content: the message is
+/// rendered when it's sent, from the record as it is then.
+model OutboundMessage {
+  id          String         @id @default(cuid())
+  channel     MessageChannel @default(EMAIL)
+  /// What to send: a kind in src/lib/messages.ts.
+  kind        String
+  /// One message per key ("order_confirmation:<orderId>"), so code that runs twice can't send twice.
+  dedupeKey   String         @unique
+  /// What the sender needs to look up, e.g. { "enquiryId": "..." }. Never message text or contact details.
+  payload     Json           @default("{}")
+  orderId     String?
+  order       Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      MessageStatus  @default(PENDING)
+  attempts    Int            @default(0)
+  /// Not before this time: the first send, or the next retry.
+  sendAfter   DateTime       @default(now())
+  /// A worker holds the message until then; a crashed worker's hold runs out and another picks it up.
+  lockedUntil DateTime?
+  /// The last failure, as the provider gave it (no message content).
+  lastError   String?
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status, sendAfter])
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+enum MessageChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+}
+
+enum MessageStatus {
+  /// Waiting to be sent (first try or a retry).
+  PENDING
+  /// A worker has it now.
+  SENDING
+  SENT
+  /// Nothing to send to, or sending isn't set up: not retried.
+  SKIPPED
+  /// Every attempt failed. Can be retried from the console.
+  FAILED
+  /// Stopped from the console before it went.
+  CANCELLED
 }

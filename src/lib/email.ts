@@ -274,3 +274,38 @@ export async function sendNewOrderAlert(
   const text = [`New order ${order.orderNumber}: ${total}`, facts.replace(/<[^>]+>/g, ""), "", ...order.items.map((i) => `  ${i.name} × ${i.quantity}`), "", order.consoleUrl].join("\n");
   return send(to, `New order ${order.orderNumber} · ${total} · ${method}`, html, text);
 }
+
+/**
+ * A refill reminder (benchmark gap R2), only to a shopper who asked for one
+ * on their order. It names what's running low and when, offers the same
+ * order again, and carries a one-tap stop link. No offers or other products:
+ * it's the reminder they asked for, nothing more.
+ */
+export async function sendRefillReminderEmail(
+  to: string,
+  reminder: { orderNumber: string; items: string[]; runOutLabel: string; orderUrl: string; stopUrl: string },
+): Promise<Sent> {
+  const what = reminder.items.length === 1 ? reminder.items[0] : "Your gummies";
+  const list = reminder.items.map((i) => `<li style="margin:0 0 4px">${esc(i)}</li>`).join("");
+  const html = wrap(
+    `${esc(what)} ${reminder.items.length === 1 ? "runs" : "run"} out around ${esc(reminder.runOutLabel)}`,
+    `<p style="margin:0 0 12px;font-size:15px;line-height:1.5">
+       By our count, what you ordered in <strong>${esc(reminder.orderNumber)}</strong> runs out around ${esc(reminder.runOutLabel)}, going by the daily amount on the pack:
+     </p>
+     <ul style="margin:0 0 16px;padding-left:20px;font-size:15px">${list}</ul>
+     <p style="margin:0 0 16px;font-size:14px;color:#5b4f45">Order now and it should arrive before you run out. Delivery takes 2 to 4 days.</p>
+     ${emailButton(reminder.orderUrl, "Order the same again")}`,
+    `You asked for this reminder on order ${esc(reminder.orderNumber)}, and it's the only one for that order. <a href="${esc(reminder.stopUrl)}" style="color:#8c7f73">Stop refill reminders</a>.`,
+  );
+  const text = [
+    `${what} ${reminder.items.length === 1 ? "runs" : "run"} out around ${reminder.runOutLabel}.`,
+    "",
+    `By our count, what you ordered in ${reminder.orderNumber} runs out around ${reminder.runOutLabel}:`,
+    ...reminder.items.map((i) => `  - ${i}`),
+    "",
+    `Order the same again: ${reminder.orderUrl}`,
+    "",
+    `You asked for this reminder on order ${reminder.orderNumber}. Stop refill reminders: ${reminder.stopUrl}`,
+  ].join("\n");
+  return send(to, `${what} ${reminder.items.length === 1 ? "runs" : "run"} out around ${reminder.runOutLabel}`, html, text);
+}

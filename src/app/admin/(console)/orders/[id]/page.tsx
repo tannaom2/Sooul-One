@@ -10,6 +10,7 @@ import { OrderStatusForm } from "../status-form";
 import { OrderNoteForm } from "./note-form";
 import { CLOSE_REASONS, STATUS_LABELS, allowedMoves } from "@/lib/order-lifecycle";
 import { describeTouch, readAttribution, type Touch } from "@/lib/attribution";
+import { MESSAGE_KINDS, reasonLabel as messageReason } from "@/lib/messages";
 
 const reasonLabel = (code: string) =>
   Object.values(CLOSE_REASONS).flat().find((r) => r.code === code)?.label ?? code;
@@ -20,11 +21,7 @@ export const dynamic = "force-dynamic";
 
 const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 
-const EMAIL_LABEL: Record<string, string> = {
-  order_confirmation: "Order confirmation email",
-  shipping_notification: "Shipping email",
-  owner_new_order: "New-order email to you",
-};
+const EMAIL_LABEL: Record<string, string> = MESSAGE_KINDS;
 
 /** One line of plain English per event, with any extra detail beneath. */
 function describe(e: { type: string; detail: any }): { title: string; body?: string; warn?: boolean } {
@@ -51,7 +48,10 @@ function describe(e: { type: string; detail: any }): { title: string; body?: str
       if (d.reason === "no_recipient") return { title: `${EMAIL_LABEL[d.email] ?? "Email"} not sent`, body: "No email address on this order." };
       return {
         title: `${EMAIL_LABEL[d.email] ?? "Email"} ${d.delivered ? "sent" : "not sent"}`,
-        body: d.delivered ? undefined : d.reason === "not_configured" ? "Email isn't configured on this server." : d.reason ?? undefined,
+        // Sent through the message queue (src/server/messages.ts): retries are counted.
+        body: d.delivered
+          ? d.attempts ? `After ${d.attempts} tries.` : undefined
+          : [d.reason === "not_configured" ? "Email isn't configured on this server." : messageReason(d.reason ?? null), d.attempts && `${d.attempts} tries; retry it from Messages`].filter(Boolean).join(" · ") || undefined,
         warn: !d.delivered,
       };
     case "NOTE":

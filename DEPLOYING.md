@@ -187,6 +187,7 @@ falling through unnoticed.
 | `soulone-expire-unpaid` | `/api/cron/expire-unpaid` | Every 10 minutes | Unpaid online orders hold stock forever. It asks Razorpay before cancelling, so a late payment is never lost. |
 | `soulone-referral-payouts` | `/api/cron/referrals` | 04:00 IST daily | Referral rewards are never paid. |
 | `soulone-box-pools` | `/api/cron/boxes` | 02:30 IST daily | Make Your Own Box clearance picks drift from real expiry. |
+| `soulone-messages` | `/api/cron/messages` | Every 5 minutes | A failed email (order confirmation, shipping, alerts) is never retried, and refill reminders never go. |
 
 `tests/cron-schedule.test.ts` fails if a route under `/api/cron` has no job.
 

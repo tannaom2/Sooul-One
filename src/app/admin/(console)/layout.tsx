@@ -65,6 +65,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
       { href: "/admin/business", label: "Business details", permission: "settings:manage" },
       { href: "/admin/stores", label: "Stores", permission: "stores:write" },
       { href: "/admin/team", label: "Team", permission: "team:manage" },
+      { href: "/admin/messages", label: "Messages", permission: "orders:view" },
       { href: "/admin/activity", label: "Activity", permission: "audit:view" },
     ],
   },

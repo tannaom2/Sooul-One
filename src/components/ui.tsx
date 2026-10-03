@@ -5,6 +5,7 @@ import { formatPercent } from "@/lib/pricing";
 import { allergenSentence } from "@/lib/label-facts";
 import type { ProductSummary } from "@/server/catalog";
 import { QuickAdd } from "@/components/quick-add";
+import { LinkPending } from "@/components/link-pending";
 
 /**
  * The statutory veg / non-veg mark.
@@ -124,7 +125,8 @@ export function ProductCard({
       className={`group flex flex-col gap-3 border bg-surface p-4 transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-strong hover:shadow-card ${selected ? "border-veg bg-shelf" : "border-rule"}`}
       style={{ borderRadius: "var(--radius-panel)" }}
     >
-    <Link href={`/product/${product.slug}`} className="flex flex-1 flex-col gap-3">
+    <Link href={`/product/${product.slug}`} className="relative flex flex-1 flex-col gap-3">
+      <LinkPending />
       {product.imageUrl ? (
         <Image
           src={product.imageUrl}

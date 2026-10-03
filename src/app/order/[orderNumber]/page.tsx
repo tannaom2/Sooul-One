@@ -11,6 +11,8 @@ import { asAddress } from "@/lib/stored-order";
 import { getCustomer } from "@/server/customer-auth";
 import { ReorderButton } from "@/components/reorder-button";
 import { canReorder } from "@/lib/reorder";
+import { REFILL_NOTICE, refillStatus } from "@/server/refill-reminders";
+import { RefillReminder } from "./refill-reminder";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +62,9 @@ export default async function OrderPage({
   }
 
   const address = asAddress(order.shippingAddress);
+  const linkToken = orderTokenMatches(t, order.accessToken) ? (t ?? null) : null;
+  // Supplements: offer a reminder before they run out (src/server/refill-reminders.ts).
+  const refill = await refillStatus(order.id);
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-16">
@@ -143,10 +148,21 @@ export default async function OrderPage({
         </div>
       </div>
 
+      {refill.offer && (
+        <RefillReminder
+          orderNumber={order.orderNumber}
+          token={linkToken}
+          optedIn={refill.optedIn}
+          remindOn={refill.remindOn ? formatDate(refill.remindOn) : null}
+          hasEmail={refill.hasEmail}
+          notice={REFILL_NOTICE}
+        />
+      )}
+
       <div className="mt-8 flex flex-wrap gap-3">
         {/* Once it's on its way or done with: while it's being packed, "again" is noise. */}
         {canReorder(order.status) && !["PAID", "PROCESSING"].includes(order.status) && (
-          <ReorderButton orderNumber={order.orderNumber} token={orderTokenMatches(t, order.accessToken) ? (t ?? null) : null} className="btn btn-solid" />
+          <ReorderButton orderNumber={order.orderNumber} token={linkToken} className="btn btn-solid" />
         )}
         <Link href="/" className="btn btn-outline">
           Keep shopping

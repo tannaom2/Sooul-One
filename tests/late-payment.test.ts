@@ -31,12 +31,12 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: (fn: () => unknown) => fn() }));
 vi.mock("@/lib/db", () => ({ db: h.db }));
 vi.mock("@/lib/cron-auth", () => ({ cronAuthorized: () => true }));
-vi.mock("@/lib/cache-tags", () => ({ CATALOG_TAG: "catalog", expireTag: vi.fn() }));
+vi.mock("@/lib/cache-tags", () => ({ CATALOG_TAG: "catalog", expireTag: vi.fn(), refreshTag: vi.fn() }));
 vi.mock("@/lib/order-events", () => ({ recordOrderEvent: h.recordOrderEvent }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
 vi.mock("@/server/referrals", () => ({ onOrderStatusChanged: vi.fn() }));
 vi.mock("@/server/order-stock", () => ({ releaseStock: h.releaseStock, takeStock: h.takeStock }));
-vi.mock("@/server/order-alert", () => ({ alertOwnerNewOrder: vi.fn(async () => undefined) }));
+vi.mock("@/server/messages", async () => ({ deliverNow: vi.fn(async () => []), messageKey: (await vi.importActual<typeof import("@/lib/messages")>("@/lib/messages")).messageKey }));
 
 describe("the rules", () => {
   it("closes the payment window well before the sweep closes the order", () => {

@@ -2,15 +2,14 @@ import "server-only";
 import { after } from "next/server";
 import Razorpay from "razorpay";
 import { db } from "@/lib/db";
-import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { recordOrderEvent } from "@/lib/order-events";
 import { reportError } from "@/lib/observability";
-import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, refreshTag } from "@/lib/cache-tags";
 import { lateCaptureAction } from "@/lib/payment-webhook";
 import { clearCart } from "@/server/cart";
 import { takeStock } from "@/server/order-stock";
-import { alertOwnerNewOrder } from "@/server/order-alert";
+import { deliverNow, messageKey } from "@/server/messages";
 
 /**
  * What happens once a payment is known to be captured, wherever that's
@@ -62,12 +61,13 @@ export async function afterPaymentCaptured(order: { id: string; sessionId: strin
   if (order.sessionId) {
     await clearCart(order.sessionId).catch((error) => reportError("payments/clear-cart", error, { orderId: order.id }));
   }
-  // The first moment the payment is known to have cleared.
-  const paid = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
-  const sent = await sendOrderConfirmation(paid);
-  await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, { email: "order_confirmation", delivered: sent.delivered, reason: sent.reason ?? null });
-  // The owner hears about an online order once it's paid (M9).
-  await alertOwnerNewOrder(order.id);
+  // The first moment the payment is known to have cleared: the confirmation,
+  // and the owner hears about an online order (M9). Queued, so a failed send
+  // is retried; keyed by order, so a second capture path can't send twice.
+  await deliverNow(
+    { kind: "order_confirmation", dedupeKey: messageKey.orderConfirmation(order.id), orderId: order.id },
+    { kind: "owner_new_order", dedupeKey: messageKey.ownerNewOrder(order.id), orderId: order.id },
+  );
   if (order.sessionId) {
     const sessionId = order.sessionId;
     after(() => recordEvent(sessionId, "ORDER_PAID", { orderId: order.id, metadata: { totalPaise: payment.amountPaise, method: "RAZORPAY" } }));
@@ -120,7 +120,7 @@ export async function handleLateCapture(orderId: string, payment: CapturedPaymen
         return true;
       });
       if (reinstated) {
-        expireTag(CATALOG_TAG);
+        refreshTag(CATALOG_TAG);
         await recordOrderEvent(orderId, "STATUS_CHANGED", { type: "SYSTEM" }, {
           status: { from: "CANCELLED", to: "PAID" },
           closeReason: { from: "PAYMENT_NOT_COMPLETED", to: null },

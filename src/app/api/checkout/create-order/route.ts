@@ -2,13 +2,12 @@ import { NextResponse, after } from "next/server";
 import Razorpay from "razorpay";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, refreshTag } from "@/lib/cache-tags";
 import { quoteCart, readSessionId, writeBasketCount } from "@/server/cart";
 import { takeStock } from "@/server/order-stock";
 import { orderNumber } from "@/lib/format";
 import { fromPaise } from "@/lib/money";
 import { apportion } from "@/lib/invoice";
-import { sendOrderConfirmation } from "@/lib/email";
 import { recordEvent } from "@/lib/analytics";
 import { checkoutInputSchema } from "@/lib/validation/checkout";
 import { OUTSIDE_AREA_MESSAGE, isServiceable } from "@/lib/checkout/service-area";
@@ -23,7 +22,7 @@ import { limitPublic } from "@/server/rate-limit";
 import { codRequiresCode, getCustomer } from "@/server/customer-auth";
 import { CreditChanged, checkoutCredit, onOrderPlaced } from "@/server/referrals";
 import { codForCheckout, recordOrderRisk } from "@/server/intel";
-import { alertOwnerNewOrder } from "@/server/order-alert";
+import { enqueueMessage, messageKey, processMessages } from "@/server/messages";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { clientIp } from "@/lib/rate-limit-rules";
 import { attributionFromCookieHeader } from "@/lib/attribution";
@@ -327,6 +326,16 @@ export async function POST(request: Request) {
         // A separate createMany rather than a nested write: nesting costs an
         // extra statement per relation plus a re-read of the order.
         await tx.orderItem.createMany({ data: itemRows.map((row) => ({ ...row, orderId: created.id })) });
+        // A COD order is confirmed now: its confirmation and the owner's alert
+        // are written with it, so neither can be lost (src/server/messages.ts).
+        // An online order's wait for the payment (src/server/payments.ts).
+        if (isCod) {
+          await enqueueMessage(
+            tx,
+            { kind: "order_confirmation", dedupeKey: messageKey.orderConfirmation(created.id), orderId: created.id },
+            { kind: "owner_new_order", dedupeKey: messageKey.ownerNewOrder(created.id), orderId: created.id },
+          );
+        }
 
         // Spend the wallet credit the quote took off, and move a referred
         // friend's first order on: in this transaction, so neither can happen
@@ -408,8 +417,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Stock just moved, so "Only N left" and availability must refresh.
-  expireTag(CATALOG_TAG);
+  // Stock just moved, so "Only N left" and availability refresh (src/lib/cache-tags.ts).
+  refreshTag(CATALOG_TAG);
 
   // Analytics and the confirmation email run after the response is sent: the
   // order is already safely stored, and the shopper shouldn't wait on them.
@@ -457,16 +466,9 @@ export async function POST(request: Request) {
       orderId: order.id,
       metadata: { totalPaise: quote.totalPaise, method: "COD" },
     });
-    // A COD order never reaches the Razorpay webhook, so its confirmation is
-    // sent from here. sendOrderConfirmation swallows its own failures.
-    const sent = await sendOrderConfirmation({ ...order, items: itemRows });
-    await recordOrderEvent(order.id, "EMAIL_SENT", { type: "SYSTEM" }, {
-      email: "order_confirmation",
-      delivered: sent.delivered,
-      reason: sent.reason ?? null,
-    });
-    // The owner hears about a COD order now; an online one when it's paid (src/server/payments.ts).
-    await alertOwnerNewOrder(order.id);
+    // A COD order never reaches the Razorpay webhook: send the confirmation and
+    // the owner's alert queued with it. A failure is retried by the queue.
+    await processMessages({ dedupeKeys: [messageKey.orderConfirmation(order.id), messageKey.ownerNewOrder(order.id)] });
   });
 
   // --- Cash on delivery needs no gateway -----------------------------------

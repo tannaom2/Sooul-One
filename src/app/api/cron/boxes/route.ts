@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, refreshTag } from "@/lib/cache-tags";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { refreshBoxPool } from "@/server/boxes";
 
@@ -20,6 +20,6 @@ export async function GET(request: Request) {
   const boxes = await db.box.findMany({ where: { isActive: true }, select: { id: true } });
   const pools: Record<string, number> = {};
   for (const b of boxes) pools[b.id] = (await refreshBoxPool(b.id)).inPool;
-  if (boxes.length > 0) expireTag(CATALOG_TAG);
+  if (boxes.length > 0) refreshTag(CATALOG_TAG);
   return NextResponse.json({ status: "ok", refreshed: boxes.length, pools });
 }

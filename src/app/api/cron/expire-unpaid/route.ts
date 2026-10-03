@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { onOrderStatusChanged } from "@/server/referrals";
-import { CATALOG_TAG, expireTag } from "@/lib/cache-tags";
+import { CATALOG_TAG, refreshTag } from "@/lib/cache-tags";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { recordOrderEvent } from "@/lib/order-events";
 import { UNPAID_EXPIRY_MINUTES } from "@/lib/order-lifecycle";
@@ -84,6 +84,6 @@ export async function GET(request: Request) {
     });
   }
 
-  if (closed > 0) expireTag(CATALOG_TAG);
+  if (closed > 0) refreshTag(CATALOG_TAG); // stock returned: see src/lib/cache-tags.ts
   return NextResponse.json({ status: "ok", checked: stale.length, closed, paid, waiting });
 }

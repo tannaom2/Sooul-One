@@ -393,6 +393,15 @@ export function ProductForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Servings per container" name="servingsPerContainer" type="number" defaultValue={product?.servingsPerContainer?.toString()} error={err("servingsPerContainer")} />
             <Field
+              label="Servings per day"
+              name="servingsPerDay"
+              type="number"
+              optional
+              defaultValue={product?.servingsPerDay?.toString()}
+              error={err("servingsPerDay")}
+              hint="As on the dosage line (2 for “chew 2 gummies daily”). Used to time refill reminders; blank offers none."
+            />
+            <Field
               label="Sugar per serving (g)"
               name="sugarPerServingG"
               type="number"

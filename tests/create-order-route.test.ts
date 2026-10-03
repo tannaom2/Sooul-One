@@ -33,10 +33,12 @@ const h = vi.hoisted(() => {
     takeStock: vi.fn(),
     lookupPincode: vi.fn(),
     getCheckoutState: vi.fn(),
-    sendOrderConfirmation: vi.fn(async () => ({ delivered: true })),
+    enqueueMessage: vi.fn(async () => undefined),
+    processMessages: vi.fn(async () => []),
     recordEvent: vi.fn(),
     recordOrderEvent: vi.fn(),
     expireTag: vi.fn(),
+    refreshTag: vi.fn(),
     razorpayCreate: vi.fn(),
     getCustomer: vi.fn(),
     codRequiresCode: vi.fn(),
@@ -60,10 +62,9 @@ vi.mock("@/server/cart", () => ({
 vi.mock("@/server/order-stock", () => ({ takeStock: h.takeStock }));
 vi.mock("@/server/pincode", () => ({ lookupPincode: h.lookupPincode }));
 vi.mock("@/server/store-settings", () => ({ getCheckoutState: h.getCheckoutState }));
-vi.mock("@/lib/email", () => ({ sendOrderConfirmation: h.sendOrderConfirmation }));
 vi.mock("@/lib/analytics", () => ({ recordEvent: h.recordEvent }));
 vi.mock("@/lib/order-events", () => ({ recordOrderEvent: h.recordOrderEvent }));
-vi.mock("@/lib/cache-tags", () => ({ CATALOG_TAG: "catalog", expireTag: h.expireTag }));
+vi.mock("@/lib/cache-tags", () => ({ CATALOG_TAG: "catalog", expireTag: h.expireTag, refreshTag: h.refreshTag }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
 vi.mock("@/server/customer-auth", () => ({ getCustomer: h.getCustomer, codRequiresCode: h.codRequiresCode }));
 vi.mock("@/server/referrals", () => ({
@@ -79,7 +80,12 @@ vi.mock("razorpay", () => ({
     orders = { create: h.razorpayCreate };
   },
 }));
-vi.mock("@/server/order-alert", () => ({ alertOwnerNewOrder: vi.fn(async () => undefined) }));
+vi.mock("@/server/messages", async () => ({
+  enqueueMessage: h.enqueueMessage,
+  processMessages: h.processMessages,
+  deliverNow: vi.fn(async () => []),
+  messageKey: (await vi.importActual<typeof import("@/lib/messages")>("@/lib/messages")).messageKey,
+}));
 
 import { POST } from "../src/app/api/checkout/create-order/route";
 
@@ -380,14 +386,20 @@ describe("cash on delivery", () => {
       { id: "b2", qty: 1, name: "Masala Makhana" },
     ]);
     expect(h.writeBasketCount).toHaveBeenCalledWith(0);
-    expect(h.expireTag).toHaveBeenCalledWith("catalog");
+    expect(h.refreshTag).toHaveBeenCalledWith("catalog");
   });
 
-  it("sends the confirmation after the response, and records consent only when ticked", async () => {
+  it("queues the confirmation and owner alert with the order, sends them after the response, and records consent only when ticked", async () => {
     await post({ ...INPUT, marketingConsent: true });
-    expect(h.sendOrderConfirmation).not.toHaveBeenCalled();
+    // Written in the order's own transaction (src/server/messages.ts).
+    expect(h.enqueueMessage).toHaveBeenCalledWith(
+      h.tx,
+      { kind: "order_confirmation", dedupeKey: "order_confirmation:order-1", orderId: "order-1" },
+      { kind: "owner_new_order", dedupeKey: "owner_new_order:order-1", orderId: "order-1" },
+    );
+    expect(h.processMessages).not.toHaveBeenCalled();
     for (const fn of h.afterCallbacks) await fn();
-    expect(h.sendOrderConfirmation).toHaveBeenCalledTimes(1);
+    expect(h.processMessages).toHaveBeenCalledWith({ dedupeKeys: ["order_confirmation:order-1", "owner_new_order:order-1"] });
     expect(h.db.consentRecord.create).toHaveBeenCalledTimes(1);
 
     vi.clearAllMocks();
@@ -460,7 +472,8 @@ describe("online payment", () => {
     expect(h.db.order.update).toHaveBeenCalledWith({ where: { id: "order-1" }, data: { paymentId: "order_RZP1" } });
 
     for (const fn of h.afterCallbacks) await fn();
-    expect(h.sendOrderConfirmation).not.toHaveBeenCalled(); // the webhook sends it once paid
+    expect(h.enqueueMessage).not.toHaveBeenCalled(); // queued once paid (src/server/payments.ts)
+    expect(h.processMessages).not.toHaveBeenCalled();
   });
 
   it("says precisely when the gateway isn't configured", async () => {

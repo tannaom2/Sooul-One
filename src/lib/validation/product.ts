@@ -155,6 +155,8 @@ const packagedFood = baseProduct.extend({
 const healthSupplement = baseProduct.extend({
   regulatoryType: z.literal("HEALTH_SUPPLEMENT"),
   servingsPerContainer: z.number().int().positive("Servings per container is required"),
+  /** Servings a day, for refill reminders (src/lib/refill.ts). Blank: no reminder offered. */
+  servingsPerDay: z.number().int().min(1, "At least 1 a day, or leave blank").max(10, "More than 10 a day? Check the figure").nullable().optional(),
   /**
    * Grams of sugar per serving, shown as a number beside the price. Zero is a
    * valid answer; blank is not, because "no added sugar" badges are what every

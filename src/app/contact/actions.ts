@@ -7,9 +7,8 @@ import { clientIp, PUBLIC_LIMITS } from "@/lib/rate-limit-rules";
 import { overLimit } from "@/server/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { reportError } from "@/lib/observability";
-import { sendEnquiryNotice } from "@/lib/email";
-import { getBusinessProfile } from "@/server/business";
-import { ENQUIRY_KINDS, enquirySchema } from "@/lib/validation/site-content";
+import { deliverNow, messageKey } from "@/server/messages";
+import { enquirySchema } from "@/lib/validation/site-content";
 
 export interface EnquiryState {
   ok?: boolean;
@@ -56,16 +55,15 @@ export async function sendEnquiry(_prev: EnquiryState, form: FormData): Promise<
     return { message: "Check the highlighted fields.", fieldErrors };
   }
 
+  let enquiryId: string;
   try {
-    await db.enquiry.create({ data: parsed.data });
+    enquiryId = (await db.enquiry.create({ data: parsed.data, select: { id: true } })).id;
   } catch (error) {
     reportError("enquiry/save", error);
     return { message: "Something went wrong on our side. Please email us instead." };
   }
 
-  after(async () => {
-    const business = await getBusinessProfile();
-    await sendEnquiryNotice(process.env.OWNER_ALERT_EMAIL || business.customerCareEmail, { ...parsed.data, kind: ENQUIRY_KINDS[parsed.data.kind] });
-  });
+  // The owner's email notice, queued so a failed send is retried. The inbox (Enquiries) is the record either way.
+  after(() => deliverNow({ kind: "enquiry_notice", dedupeKey: messageKey.enquiry(enquiryId), payload: { enquiryId } }));
   return { ok: true, message: "Thanks, we've got your message and will reply by email." };
 }
