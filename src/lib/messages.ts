@@ -11,6 +11,8 @@ export const MESSAGE_KINDS = {
   owner_new_order: "New-order email to you",
   enquiry_notice: "New enquiry email to you",
   refill_reminder: "Refill reminder email",
+  supplier_licence_expiry: "Supplier licence expiry email to you",
+  recall_notice: "Recall notice email",
 } as const;
 
 export type MessageKind = keyof typeof MESSAGE_KINDS;

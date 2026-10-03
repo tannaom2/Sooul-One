@@ -24,8 +24,9 @@ export async function getReadiness(): Promise<Readiness> {
       where: { isActive: true },
       select: {
         name: true,
-        manufacturerName: true,
-        manufacturerAddress: true,
+        manufacturerId: true,
+        manufacturer: { select: { fssaiLicence: true } },
+        marketer: { select: { fssaiLicence: true } },
         countryOfOrigin: true,
         netQuantity: true,
         mrp: true,
@@ -42,7 +43,8 @@ export async function getReadiness(): Promise<Readiness> {
     draftPolicies: DRAFT_POLICIES,
     liveProducts: products.length,
     liveProductsMissingDeclarations: products
-      .filter((p) => LIVE_REQUIRED.some(([field]) => p[field] == null || p[field] === ""))
+      // A manufacturer (or named packer or marketer) without a licence number counts as missing.
+      .filter((p) => LIVE_REQUIRED.some(([field]) => p[field] == null || p[field] === "") || !p.manufacturer?.fssaiLicence || (p.marketer && !p.marketer.fssaiLicence))
       .map((p) => p.name),
     liveProductsWithoutPhotos: products.filter((p) => p._count.images === 0).map((p) => p.name),
     emailConfigured: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),

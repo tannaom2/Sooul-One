@@ -7,6 +7,8 @@ import { BatchForm } from "./batch-form";
 import { RecallControl } from "./recall-control";
 import { normalizeBatch } from "@/lib/batch-verify";
 import { reportError } from "@/lib/observability";
+import Link from "next/link";
+import { can } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ export default async function Batches() {
   if (!session) return <NoAccess />;
 
   let products: any[] = [];
+  let suppliers: { id: string; name: string }[] = [];
   // How often shoppers checked each batch on /verify in the last 90 days, by normalised code.
   let checks = new Map<string, number>();
   try {
@@ -25,11 +28,14 @@ export default async function Batches() {
       WHERE type = 'BATCH_CHECKED' AND "createdAt" > now() - interval '90 days' AND (metadata->>'found')::boolean
       GROUP BY 1`;
     checks = new Map(counted.map((c) => [c.batch, Number(c.n)]));
-    products = await db.product.findMany({
-      where: { isActive: true },
-      include: { batches: { orderBy: { expiresOn: "asc" } } },
-      orderBy: { name: "asc" },
-    });
+    [products, suppliers] = await Promise.all([
+      db.product.findMany({
+        where: { isActive: true },
+        include: { batches: { orderBy: { expiresOn: "asc" }, include: { supplier: { select: { name: true } } } } },
+        orderBy: { name: "asc" },
+      }),
+      db.supplier.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    ]);
   } catch (error) {
     reportError("admin/batches", error);
     return <Empty title="Can't reach the database" detail="Check DATABASE_URL and run the migrations." />;
@@ -52,7 +58,11 @@ export default async function Batches() {
         <Empty title="No products yet" detail="Add a product before receiving stock against it." />
       ) : (
         <>
-          <BatchForm products={products.map((p) => ({ id: p.id, name: p.name }))} />
+          <BatchForm
+            products={products.map((p) => ({ id: p.id, name: p.name, manufacturerId: p.manufacturerId ?? null }))}
+            suppliers={suppliers}
+            today={new Date(now.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10)}
+          />
 
           <section>
             <h2 className="mb-3 text-h3 font-bold">Current batches</h2>
@@ -75,6 +85,19 @@ export default async function Batches() {
                           {checks.get(normalizeBatch(b.batchNumber)) ? (
                             <span className="ml-2 text-micro text-ink-soft">checked {checks.get(normalizeBatch(b.batchNumber))}× on /verify</span>
                           ) : null}
+                        </span>
+                        <span className="text-micro text-ink-faint">
+                          {b.supplier ? `From ${b.supplier.name}` : "Supplier not recorded"}
+                          {b.invoiceNumber ? ` · invoice ${b.invoiceNumber}` : ""}
+                          {/* The recall list: who received it, with contact details (owner and manager). */}
+                          {can(session.role, "recalls:manage") && (
+                            <>
+                              {" · "}
+                              <Link href={`/admin/batches/${b.id}`} className="underline">
+                                Who received it
+                              </Link>
+                            </>
+                          )}
                         </span>
                         <RecallControl batchId={b.id} batchNumber={b.batchNumber} recalled={Boolean(b.recalledAt)} note={b.recallNote} />
                       </span>

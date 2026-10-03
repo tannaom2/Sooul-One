@@ -17,6 +17,8 @@ const ALL: Permission[] = [
   "team:manage",
   "content:write",
   "enquiries:manage",
+  "recalls:manage",
+  "recalls:notify",
 ];
 
 // The full expected matrix, written out rather than derived, so a change to
@@ -24,7 +26,7 @@ const ALL: Permission[] = [
 // purpose.
 const EXPECTED: Record<AdminRole, Permission[]> = {
   OWNER: ALL,
-  MANAGER: ALL.filter((p) => p !== "finance:view" && p !== "audit:view" && p !== "team:manage"),
+  MANAGER: ALL.filter((p) => p !== "finance:view" && p !== "audit:view" && p !== "team:manage" && p !== "recalls:notify"),
   FULFILMENT: ["dashboard:view", "orders:view", "orders:write", "products:view", "batches:write"],
   CONTENT: ["dashboard:view", "products:view", "products:write", "reviews:moderate", "content:write"],
   STAFF: ["dashboard:view"],
@@ -57,6 +59,11 @@ describe("permission matrix", () => {
   it("only the owner manages the team", () => {
     const withTeam = (Object.keys(EXPECTED) as AdminRole[]).filter((r) => can(r, "team:manage"));
     expect(withTeam).toEqual(["OWNER"]);
+  });
+
+  it("only the owner emails the buyers of a recalled batch", () => {
+    const withNotify = (Object.keys(EXPECTED) as AdminRole[]).filter((r) => can(r, "recalls:notify"));
+    expect(withNotify).toEqual(["OWNER"]);
   });
 
   it("offers every role on the Team page, and nothing else", () => {

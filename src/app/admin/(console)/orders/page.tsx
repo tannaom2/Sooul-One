@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise, formatDate } from "@/lib/format";
+import { STATUS_LABELS } from "@/lib/order-lifecycle";
 import { ORDER_VIEWS, ORDERS_PAGE_SIZE, orderFiltersHref, parseOrderFilters, type OrderView } from "@/lib/order-filters";
 import { reportError } from "@/lib/observability";
 import { BarList, ChartCard, Pager, StackedBar, SERIES, BAD, GOOD } from "@/components/charts";
@@ -54,7 +55,8 @@ export default async function Orders({
       db.order.findMany({
         where,
         include: { _count: { select: { items: true } } },
-        orderBy: { placedAt: "desc" },
+        // To ship: the longest-waiting first, so the oldest paid orders go out first.
+        orderBy: { placedAt: view === "to_ship" ? "asc" : "desc" },
         take: ORDERS_PAGE_SIZE,
         skip: (page - 1) * ORDERS_PAGE_SIZE,
       }),
@@ -131,16 +133,23 @@ export default async function Orders({
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
           <div className="grid gap-3">
             <p className="text-micro text-ink-faint">
-              Showing {(page - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(page * ORDERS_PAGE_SIZE, total)} of {total}, newest first
+              Showing {(page - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(page * ORDERS_PAGE_SIZE, total)} of {total}, {view === "to_ship" ? "oldest first" : "newest first"}
             </p>
             <div className="panel">
+              <div aria-hidden className="hidden gap-x-4 border-b border-rule px-4 py-2 text-micro font-semibold text-ink-faint sm:grid sm:grid-cols-[9rem_1fr_7.5rem_5.5rem_6rem]">
+                <span>Order</span>
+                <span>Customer · placed</span>
+                <span>Status</span>
+                <span>Pays</span>
+                <span className="text-right">Total</span>
+              </div>
               {orders.map((o) => {
                 const address = o.shippingAddress as any;
                 return (
                   <Link
                     key={o.id}
                     href={`/admin/orders/${o.id}`}
-                    className="grid gap-x-4 gap-y-0.5 border-b border-rule px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[10rem_1fr_7rem_6rem] sm:items-center"
+                    className="grid gap-x-4 gap-y-0.5 border-b border-rule px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[9rem_1fr_7.5rem_5.5rem_6rem] sm:items-center"
                   >
                     <span className="tabular font-semibold">{o.orderNumber}</span>
                     <span className="min-w-0 truncate text-ink-soft">
@@ -148,14 +157,16 @@ export default async function Orders({
                       <span className="text-ink-faint">
                         {" "}
                         · {o._count.items} {o._count.items === 1 ? "item" : "items"} · {formatDate(o.placedAt)}
+                        {o.postalCode && <span className="tabular"> · {o.postalCode}</span>}
                       </span>
                     </span>
                     <span className="text-ink-soft">
-                      {o.status.replace(/_/g, " ").toLowerCase()}
+                      {STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] ?? o.status}
                       {o.riskScore !== null && ["PAID", "PROCESSING"].includes(o.status) && riskBand(o.riskScore) !== "LOW" && (
                         <span className="block text-micro font-semibold text-alert">risk {o.riskScore}</span>
                       )}
                     </span>
+                    <span className="text-ink-soft">{o.paymentGateway === "COD" ? "Cash" : "Online"}</span>
                     <span className="tabular font-semibold sm:text-right">{formatINR(decimalToPaise(o.totalAmount))}</span>
                   </Link>
                 );

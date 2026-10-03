@@ -1,3 +1,4 @@
+import { STATUS_LABELS } from "@/lib/order-lifecycle";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
@@ -31,6 +32,10 @@ export default async function Dashboard() {
   const since30 = new Date(now.getTime() - 30 * DAY);
   const since60 = new Date(now.getTime() - 60 * DAY);
   const since24h = new Date(now.getTime() - DAY);
+  // Yesterday in India time, and the same weekday a week before it.
+  const IST = 5.5 * 60 * 60 * 1000;
+  const today = new Date(Math.floor((now.getTime() + IST) / DAY) * DAY - IST);
+  const yesterday = new Date(today.getTime() - DAY);
 
   // Revenue counts orders that were paid for (or are COD and on their way);
   // abandoned, failed, cancelled and refunded orders are left out.
@@ -41,13 +46,19 @@ export default async function Dashboard() {
   let products: any[] = [];
   let runningLow: any[] = [];
   let toShip = 0;
+  let returnsToCheck = 0;
+  let newEnquiries = 0;
+  let failedMessages = 0;
+  let flaggedReferrals = 0;
+  let yday = { revenue: 0, orders: 0 };
+  let weekBefore = { revenue: 0, orders: 0 };
   let pendingReviews = 0;
   let failedSignIns = 0;
   let current = { revenue: 0, orders: 0 };
   let previous = { revenue: 0, orders: 0 };
 
   try {
-    const [recent, live, ship, reviews, failed, cur, prev] = await Promise.all([
+    const [recent, live, ship, reviews, failed, cur, prev, unchecked, enquiries, failedMsgs, flagged, yd, wk] = await Promise.all([
       db.order.findMany({ orderBy: { placedAt: "desc" }, take: 8 }),
       // Recalled batches are off sale: not stock, and not worth an expiry warning.
       db.product.findMany({ where: { isActive: true }, include: { batches: { where: SELLABLE_BATCH_WHERE } } }),
@@ -63,6 +74,15 @@ export default async function Dashboard() {
         : 0,
       db.order.aggregate({ where: period(since30, now), _sum: { totalAmount: true }, _count: { _all: true } }),
       db.order.aggregate({ where: period(since60, since30), _sum: { totalAmount: true }, _count: { _all: true } }),
+      // Parcels back (RTO or returned) with a line nobody has decided yet, or one set aside.
+      canSeeOrders
+        ? db.order.count({ where: { status: { in: ["RTO", "RETURNED"] }, items: { some: { OR: [{ returnCheck: null }, { returnCheck: { outcome: "QUARANTINED" } }] } } } })
+        : 0,
+      can(session.role, "enquiries:manage") ? db.enquiry.count({ where: { status: "NEW" } }) : 0,
+      canSeeOrders ? db.outboundMessage.count({ where: { status: "FAILED" } }) : 0,
+      can(session.role, "settings:manage") ? db.referral.count({ where: { flagged: true, status: "HELD" } }) : 0,
+      canSeeOrders ? db.order.aggregate({ where: period(yesterday, today), _sum: { totalAmount: true }, _count: { _all: true } }) : null,
+      canSeeOrders ? db.order.aggregate({ where: period(new Date(yesterday.getTime() - 7 * DAY), new Date(today.getTime() - 7 * DAY)), _sum: { totalAmount: true }, _count: { _all: true } }) : null,
     ]);
     orders = recent;
     products = live;
@@ -73,6 +93,14 @@ export default async function Dashboard() {
       .filter((p: any) => p.stock.low)
       .sort((a: any, b: any) => a.stock.shippable - b.stock.shippable);
     toShip = ship;
+    returnsToCheck = unchecked;
+    newEnquiries = enquiries;
+    failedMessages = failedMsgs;
+    flaggedReferrals = flagged;
+    if (yd && wk) {
+      yday = { revenue: decimalToPaise(yd._sum.totalAmount), orders: yd._count._all };
+      weekBefore = { revenue: decimalToPaise(wk._sum.totalAmount), orders: wk._count._all };
+    }
     pendingReviews = reviews;
     failedSignIns = failed;
     current = { revenue: decimalToPaise(cur._sum.totalAmount), orders: cur._count._all };
@@ -146,6 +174,23 @@ export default async function Dashboard() {
       href: "/admin/orders?view=to_ship",
       text: `${toShip} ${toShip === 1 ? "order" : "orders"} to pack and ship`,
     },
+    can(session.role, "orders:write") && returnsToCheck > 0 && {
+      href: "/admin/orders?view=returned",
+      text: `${returnsToCheck} returned ${returnsToCheck === 1 ? "parcel" : "parcels"} to check before restocking`,
+    },
+    newEnquiries > 0 && {
+      href: "/admin/enquiries",
+      text: `${newEnquiries} ${newEnquiries === 1 ? "enquiry" : "enquiries"} waiting for a reply`,
+    },
+    failedMessages > 0 && {
+      href: "/admin/messages",
+      text: `${failedMessages} ${failedMessages === 1 ? "email" : "emails"} failed to send after every retry`,
+      warn: true,
+    },
+    flaggedReferrals > 0 && {
+      href: "/admin/referrals",
+      text: `${flaggedReferrals} flagged ${flaggedReferrals === 1 ? "referral" : "referrals"} to review`,
+    },
     pendingReviews > 0 && {
       href: "/admin/reviews",
       text: `${pendingReviews} ${pendingReviews === 1 ? "review" : "reviews"} waiting for approval`,
@@ -166,7 +211,21 @@ export default async function Dashboard() {
     },
   ].filter((a): a is { href: string; text: string; warn?: boolean } => Boolean(a));
 
-  const tiles = [
+  type Tile = { label: string; value: string; change: number | null | undefined; compare?: string };
+  const tiles = ([
+    // How yesterday went, against the same weekday last week. Revenue for the owner; orders for others who see orders.
+    canSeeFinance && {
+      label: `Yesterday · ${yday.orders} ${yday.orders === 1 ? "order" : "orders"}`,
+      value: formatINR(yday.revenue),
+      change: percentChange(yday.revenue, weekBefore.revenue),
+      compare: "the same day last week",
+    },
+    !canSeeFinance && canSeeOrders && {
+      label: "Orders yesterday",
+      value: String(yday.orders),
+      change: percentChange(yday.orders, weekBefore.orders),
+      compare: "the same day last week",
+    },
     canSeeFinance && {
       label: "Revenue, last 30 days",
       value: formatINR(current.revenue),
@@ -178,7 +237,7 @@ export default async function Dashboard() {
       change: percentChange(current.orders, previous.orders),
     },
     { label: "Live products", value: String(products.length), change: undefined },
-  ].filter((t): t is { label: string; value: string; change: number | null | undefined } => Boolean(t));
+  ] as (Tile | false)[]).filter((t): t is Tile => Boolean(t));
 
   return (
     <div className="grid gap-10">
@@ -228,14 +287,14 @@ export default async function Dashboard() {
             {t.change !== undefined && (
               <p className="text-micro text-ink-faint">
                 {t.change === null ? (
-                  "No sales in the 30 days before to compare with"
+                  `No sales in ${t.compare ?? "the 30 days before"} to compare with`
                 ) : (
                   <>
                     <span className="tabular" style={{ color: t.change >= 0 ? "var(--color-veg)" : "var(--color-alert)" }}>
                       {t.change > 0 ? "+" : t.change < 0 ? "−" : ""}
                       {Math.abs(t.change)}%
                     </span>{" "}
-                    vs the 30 days before
+                    vs {t.compare ?? "the 30 days before"}
                   </>
                 )}
               </p>
@@ -319,7 +378,7 @@ export default async function Dashboard() {
                   <span className="ml-3 text-ink-faint">{formatDate(o.placedAt)}</span>
                 </span>
                 <span>
-                  <span className="mr-3 text-ink-soft">{o.status.replace(/_/g, " ").toLowerCase()}</span>
+                  <span className="mr-3 text-ink-soft">{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] ?? o.status}</span>
                   <span className="tabular font-semibold">{formatINR(decimalToPaise(o.totalAmount))}</span>
                 </span>
               </Link>

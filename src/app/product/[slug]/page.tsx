@@ -1,5 +1,6 @@
 import { turnstileSiteKey } from "@/lib/turnstile";
 import { notFound } from "next/navigation";
+import { licenceLine } from "@/lib/suppliers";
 import { after } from "next/server";
 import { displayPrice, getOffersForProduct, getProductBySlug } from "@/server/catalog";
 import { ProductCombos } from "@/components/product/product-combos";
@@ -123,8 +124,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     ["Ingredients", product.ingredients],
     ["Net quantity", product.netQuantity],
     ["MRP", product.mrp != null ? `${formatINR(decimalToPaise(product.mrp))} (incl. of all taxes)` : null],
-    ["Manufactured by", [product.manufacturerName, product.manufacturerAddress].filter(Boolean).join(", ") || null],
-    ["Packed or marketed by", product.packerDetails],
+    // Each firm with its FSSAI licence number (Labelling and Display Regs 2020, reg 5(7)(b)).
+    ["Manufactured by", product.manufacturer
+      ? [product.manufacturer.name, product.manufacturer.address, product.manufacturer.fssaiLicence && licenceLine(product.manufacturer.fssaiLicence)].filter(Boolean).join(", ")
+      : [product.manufacturerName, product.manufacturerAddress].filter(Boolean).join(", ") || null],
+    ["Packed or marketed by", product.marketer
+      ? [product.marketer.name, product.marketer.address, product.marketer.fssaiLicence && licenceLine(product.marketer.fssaiLicence)].filter(Boolean).join(", ")
+      : product.packerDetails],
     ["Country of origin", product.countryOfOrigin],
     ["Customer care", [business.customerCarePhone, business.customerCareEmail].filter(Boolean).join(" · ") || null],
     ["FSSAI licence", fssai],

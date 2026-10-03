@@ -309,3 +309,50 @@ export async function sendRefillReminderEmail(
   ].join("\n");
   return send(to, `${what} ${reminder.items.length === 1 ? "runs" : "run"} out around ${reminder.runOutLabel}`, html, text);
 }
+
+/**
+ * A supplier's FSSAI licence is about to expire, or has (src/server/suppliers.ts).
+ * To the owner. Buying from an unlicensed vendor breaches the licence
+ * conditions, and live products show this licence number on their pages.
+ */
+export async function sendSupplierLicenceAlert(
+  to: string,
+  alert: { supplier: string; licence: string; expiresOn: Date; daysLeft: number; liveProducts: number; consoleUrl: string },
+): Promise<Sent> {
+  const date = alert.expiresOn.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+  const when = alert.daysLeft < 0 ? `expired on ${date}` : alert.daysLeft === 0 ? `expires today (${date})` : `expires on ${date}, in ${alert.daysLeft} ${alert.daysLeft === 1 ? "day" : "days"}`;
+  const products = alert.liveProducts > 0 ? `${alert.liveProducts} live ${alert.liveProducts === 1 ? "product shows" : "products show"} this licence number on ${alert.liveProducts === 1 ? "its page" : "their pages"}.` : "";
+  const html = wrap(
+    `${esc(alert.supplier)}: FSSAI licence ${esc(when)}`,
+    `<p style="margin:0 0 12px;font-size:15px;line-height:1.5">
+       The FSSAI licence of <strong>${esc(alert.supplier)}</strong> (no. ${esc(alert.licence)}) ${esc(when)}.
+       ${esc(products)}
+     </p>
+     <p style="margin:0 0 16px;font-size:14px;color:#5b4f45">Ask them for the renewed licence and enter its number and new expiry date under Suppliers. Until then, don't buy from them: FSSAI licence conditions require buying only from licensed vendors.</p>
+     ${emailButton(alert.consoleUrl, "Open Suppliers")}`,
+    "Sent because a supplier's licence is close to expiring. You'll hear again 14 days before.",
+  );
+  const text = [`${alert.supplier}: FSSAI licence ${when}.`, `Licence no. ${alert.licence}.`, products, "", "Enter the renewed licence under Suppliers:", alert.consoleUrl].join("\n");
+  return send(to, `${alert.supplier}: FSSAI licence ${alert.daysLeft < 0 ? "has expired" : `expires in ${Math.max(0, alert.daysLeft)} days`}`, html, text);
+}
+
+/**
+ * A recall notice to someone who bought a recalled batch (src/server/recall.ts).
+ * A safety notice, so it goes whatever their marketing choices: the text is
+ * the owner's, as checked on the recall page.
+ */
+export async function sendRecallNoticeEmail(
+  to: string,
+  recall: { product: string; batchNumber: string; orderNumber: string; notice: string; contact: string | null },
+): Promise<Sent> {
+  const paragraphs = recall.notice.split(/\n{2,}/).map((p) => `<p style="margin:0 0 12px;font-size:15px;line-height:1.5;white-space:pre-line">${esc(p)}</p>`).join("");
+  const html = wrap(
+    `Recall: ${esc(recall.product)}, batch ${esc(recall.batchNumber)}`,
+    `<p style="margin:0 0 12px;font-size:14px;color:#5b4f45">You bought this batch in order <strong>${esc(recall.orderNumber)}</strong>.</p>
+     ${paragraphs}
+     ${recall.contact ? `<p style="margin:0;font-size:14px">Contact us: ${esc(recall.contact)}</p>` : ""}`,
+    `A product safety notice about order ${esc(recall.orderNumber)}. Not marketing.`,
+  );
+  const text = [`Recall: ${recall.product}, batch ${recall.batchNumber}`, `You bought this batch in order ${recall.orderNumber}.`, "", recall.notice, "", ...(recall.contact ? [`Contact us: ${recall.contact}`] : [])].join("\n");
+  return send(to, `Important: recall of ${recall.product}, batch ${recall.batchNumber}`, html, text);
+}

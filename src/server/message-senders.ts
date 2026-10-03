@@ -7,6 +7,8 @@ import { ENQUIRY_KINDS } from "@/lib/validation/site-content";
 import type { MessageKind, SendResult } from "@/lib/messages";
 import { getBusinessProfile } from "@/server/business";
 import { sendRefillReminder } from "@/server/refill-reminders";
+import { sendLicenceReminder } from "@/server/suppliers";
+import { sendRecallNotice } from "@/server/recall";
 
 /**
  * One sender per message kind (src/lib/messages.ts). Each looks up what it
@@ -76,5 +78,13 @@ export const SENDERS: Record<MessageKind, (payload: Payload, orderId: string | n
 
   async refill_reminder(p, orderId) {
     return sendRefillReminder(p, orderId);
+  },
+
+  async supplier_licence_expiry(p) {
+    return sendLicenceReminder(p);
+  },
+
+  async recall_notice(p, orderId) {
+    return sendRecallNotice(p, orderId);
   },
 };

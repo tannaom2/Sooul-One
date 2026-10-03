@@ -279,6 +279,9 @@ export const getProductBySlug = unstable_cache(
         variants: true,
         batches: { where: SELLABLE_BATCH_WHERE, orderBy: { expiresOn: "asc" } },
         reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" }, take: 10 },
+        // Shown in the label panel with their FSSAI licence numbers.
+        manufacturer: { select: { name: true, address: true, fssaiLicence: true } },
+        marketer: { select: { name: true, address: true, fssaiLicence: true } },
       },
     });
     if (!product) return null;

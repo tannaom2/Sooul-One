@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { saveProduct, type ActionResult } from "../actions";
 import { lintSupplementCopy } from "@/lib/compliance/claims";
 import { ImageUpload } from "@/components/image-upload";
 import { keepFormValues } from "@/components/keep-form-values";
+import { ErrorSummary, useUnsavedGuard } from "@/components/unsaved-guard";
 
 /**
  * The product form.
@@ -44,13 +45,22 @@ const NUTRIENTS: [key: string, label: string, unit: string][] = [
 
 const INITIAL: ActionResult = { ok: false };
 
+/** A supplier the form can name as manufacturer or packer/marketer. */
+export interface SupplierOption {
+  id: string;
+  name: string;
+  fssaiLicence: string | null;
+}
+
 export function ProductForm({
   brands,
+  suppliers = [],
   product,
   canEditPricing = true,
   canSeeCost = false,
 }: {
   brands: Brand[];
+  suppliers?: SupplierOption[];
   product?: any;
   /** False for copy editors: prices show read-only (still submitted, so the server can confirm they didn't change). */
   canEditPricing?: boolean;
@@ -99,9 +109,14 @@ export function ProductForm({
   );
 
   const err = (field: string) => state.fieldErrors?.[field]?.[0];
+  // A long form: warn before leaving with unsaved edits, save on Ctrl+S, and
+  // list a failed save's problems at the top (src/components/unsaved-guard.tsx).
+  const formRef = useRef<HTMLFormElement>(null);
+  const unsaved = useUnsavedGuard(formRef, state.version);
 
   return (
-    <form onSubmit={keepFormValues(submit)} className="grid max-w-3xl gap-6">
+    <form ref={formRef} onSubmit={keepFormValues(submit)} className="grid max-w-3xl gap-6">
+      <ErrorSummary errors={state.fieldErrors} />
       {product?.id && <input type="hidden" name="id" value={product.id} />}
       {/* Which version of the product this form was loaded from, so a save
           can't silently overwrite someone else's change made in the meantime. */}
@@ -486,20 +501,36 @@ export function ProductForm({
           without them. A draft can be saved without them.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Manufacturer's name" name="manufacturerName" defaultValue={product?.manufacturerName ?? undefined} error={err("manufacturerName")} />
           <Field label="Country of origin" name="countryOfOrigin" defaultValue={product?.countryOfOrigin ?? undefined} error={err("countryOfOrigin")} />
           <Field label="Net quantity" name="netQuantity" defaultValue={product?.netQuantity ?? undefined} error={err("netQuantity")} hint='As printed, e.g. "150 g" or "60 gummies (120 g)".' />
         </div>
-        <TextArea label="Manufacturer's address" name="manufacturerAddress" rows={2} defaultValue={product?.manufacturerAddress} error={err("manufacturerAddress")} />
-        <TextArea
-          label="Packed or marketed by"
-          name="packerDetails"
-          rows={2}
-          defaultValue={product?.packerDetails}
-          error={err("packerDetails")}
-          hint="Name and address, only if different from the manufacturer."
-          optional
-        />
+        {/* Who made it, and who packs or markets it: picked from Suppliers, so each firm's
+            FSSAI licence number shows on the product page. Going live needs them on file. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SupplierSelect
+            name="manufacturerId"
+            label="Manufactured by"
+            suppliers={suppliers}
+            defaultValue={product?.manufacturerId ?? ""}
+            error={err("manufacturerId")}
+            empty="Choose the manufacturer"
+          />
+          <SupplierSelect
+            name="marketerId"
+            label="Packed or marketed by"
+            suppliers={suppliers}
+            defaultValue={product?.marketerId ?? ""}
+            error={err("marketerId")}
+            empty="Same as the manufacturer"
+          />
+        </div>
+        <p className="-mt-2 text-micro text-ink-faint">
+          Firms and their FSSAI licence numbers are kept under{" "}
+          <a href="/admin/suppliers" className="underline" target="_blank" rel="noreferrer">
+            Suppliers
+          </a>
+          . A product can&apos;t go live until each firm named here has its licence number on file.
+        </p>
         <TextArea
           label="Ingredients"
           name="ingredients"
@@ -543,10 +574,12 @@ export function ProductForm({
         </span>
       </label>
 
-      <div className="flex items-center gap-4 border-t border-rule pt-5">
+      {/* Stays in view while scrolling, so saving never needs a trip to the bottom. */}
+      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-4 border-t border-rule bg-surface px-4 py-3">
         <button className="btn btn-solid" disabled={pending}>
           {pending ? "Saving…" : product?.id ? "Save changes" : "Create product"}
         </button>
+        {unsaved && !pending && <span className="text-micro text-ink-faint">Unsaved changes · Ctrl+S saves</span>}
         <div aria-live="polite" role="status">
           {state.message && (
             <p className="text-small" style={{ color: state.ok ? "var(--color-veg)" : "var(--color-alert)" }}>
@@ -634,4 +667,39 @@ function Field({
 
 function Err({ children }: { children: React.ReactNode }) {
   return <p className="mt-1 text-small text-alert">{children}</p>;
+}
+
+/** Manufacturer or packer/marketer, from Suppliers; a firm without a licence number says so. */
+function SupplierSelect({
+  name,
+  label,
+  suppliers,
+  defaultValue,
+  error,
+  empty,
+}: {
+  name: string;
+  label: string;
+  suppliers: SupplierOption[];
+  defaultValue: string;
+  error?: string;
+  empty: string;
+}) {
+  return (
+    <div>
+      <label className="label" htmlFor={name}>
+        {label}
+      </label>
+      <select id={name} name={name} className="field" defaultValue={defaultValue} aria-invalid={Boolean(error) || undefined}>
+        <option value="">{empty}</option>
+        {suppliers.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+            {s.fssaiLicence ? ` · Lic. ${s.fssaiLicence}` : " · no licence number yet"}
+          </option>
+        ))}
+      </select>
+      {error && <p className="mt-1 text-micro text-alert">{error}</p>}
+    </div>
+  );
 }

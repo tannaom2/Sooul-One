@@ -25,7 +25,8 @@ function walk(dir: string): string[] {
 // Pages that are meant to list every batch, recalled ones included: the
 // owner's Stock batches page and the public batch check (which must say a
 // batch is recalled, so it has to find it).
-const SHOWS_ALL = new Set(["src/app/admin/(console)/batches/page.tsx", "src/server/batch-verify.ts"]);
+// Pages that list or count every batch received, recalled ones included.
+const SHOWS_ALL = new Set(["src/app/admin/(console)/batches/page.tsx", "src/server/batch-verify.ts", "src/app/admin/(console)/suppliers/page.tsx"]);
 
 describe("recalled batches are off sale", () => {
   it("the sellable filters leave recalled batches out", () => {

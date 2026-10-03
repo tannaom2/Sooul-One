@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { ProductForm } from "../product-form";
+import { ProductForm, type SupplierOption } from "../product-form";
 import { Empty, NoAccess } from "@/components/ui";
 import { reportError } from "@/lib/observability";
 
@@ -14,7 +14,9 @@ export default async function NewProduct() {
   if (!session) return <NoAccess />;
 
   let brands: any[] = [];
+  let suppliers: SupplierOption[] = [];
   try {
+    suppliers = await db.supplier.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, fssaiLicence: true } });
     brands = await db.brand.findMany({
       where: { isActive: true },
       include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
@@ -37,7 +39,7 @@ export default async function NewProduct() {
   return (
     <div>
       <h1 className="mb-6 text-h2 font-extrabold">Add a product</h1>
-      <ProductForm brands={brands} canSeeCost={can(session.role, "finance:view")} />
+      <ProductForm brands={brands} suppliers={suppliers} canSeeCost={can(session.role, "finance:view")} />
     </div>
   );
 }

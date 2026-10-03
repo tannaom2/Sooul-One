@@ -16,25 +16,35 @@ type NavItem = { href: string; label: string; permission: Permission };
 // server-side, so a typed-in URL gets "no access", not the page.
 const NAV: { group: string | null; items: NavItem[] }[] = [
   { group: null, items: [{ href: "/admin", label: "Overview", permission: "dashboard:view" }] },
+  // Grouped by the job, not the table: packing and stock work sit together,
+  // and the catalogue apart from it.
   {
-    group: "Sell",
+    group: "Operations",
     items: [
       { href: "/admin/orders", label: "Orders", permission: "orders:view" },
       { href: "/admin/analytics/risk", label: "RTO risk", permission: "orders:view" },
+      { href: "/admin/batches", label: "Stock batches", permission: "batches:write" },
+      { href: "/admin/suppliers", label: "Suppliers", permission: "batches:write" },
+      { href: "/admin/messages", label: "Messages", permission: "orders:view" },
+    ],
+  },
+  {
+    group: "Catalogue",
+    items: [
       { href: "/admin/products", label: "Products", permission: "products:view" },
       { href: "/admin/categories", label: "Categories", permission: "products:write" },
       { href: "/admin/bundles", label: "Bundles", permission: "bundles:write" },
       { href: "/admin/boxes", label: "Boxes", permission: "bundles:write" },
-      { href: "/admin/coupons", label: "Discount codes", permission: "products:pricing" },
-      { href: "/admin/batches", label: "Stock batches", permission: "batches:write" },
+      { href: "/admin/analytics/site", label: "Search terms", permission: "content:write" },
     ],
   },
   {
-    group: "Engage",
+    group: "Customers",
     items: [
-      { href: "/admin/reviews", label: "Reviews", permission: "reviews:moderate" },
       { href: "/admin/enquiries", label: "Enquiries", permission: "enquiries:manage" },
+      { href: "/admin/reviews", label: "Reviews", permission: "reviews:moderate" },
       { href: "/admin/referrals", label: "Referrals", permission: "settings:manage" },
+      { href: "/admin/coupons", label: "Discount codes", permission: "products:pricing" },
     ],
   },
   {
@@ -65,7 +75,6 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
       { href: "/admin/business", label: "Business details", permission: "settings:manage" },
       { href: "/admin/stores", label: "Stores", permission: "stores:write" },
       { href: "/admin/team", label: "Team", permission: "team:manage" },
-      { href: "/admin/messages", label: "Messages", permission: "orders:view" },
       { href: "/admin/activity", label: "Activity", permission: "audit:view" },
     ],
   },

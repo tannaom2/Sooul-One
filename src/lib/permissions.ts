@@ -34,7 +34,11 @@ export type Permission =
   /** FAQs, /learn articles and open roles: storefront words, not settings. */
   | "content:write"
   /** Messages from the contact forms: people's names, emails and phone numbers. */
-  | "enquiries:manage";
+  | "enquiries:manage"
+  /** Who received a batch, with their contact details, and its download: for a recall. */
+  | "recalls:manage"
+  /** Email every buyer of a recalled batch. */
+  | "recalls:notify";
 
 const MATRIX: Record<AdminRole, readonly Permission[]> = {
   OWNER: [
@@ -54,6 +58,8 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "settings:manage",
     "content:write",
     "enquiries:manage",
+    "recalls:manage",
+    "recalls:notify",
   ],
   MANAGER: [
     "dashboard:view",
@@ -68,6 +74,7 @@ const MATRIX: Record<AdminRole, readonly Permission[]> = {
     "stores:write",
     "content:write",
     "enquiries:manage",
+    "recalls:manage",
   ],
   FULFILMENT: ["dashboard:view", "orders:view", "orders:write", "products:view", "batches:write"],
   CONTENT: ["dashboard:view", "products:view", "products:write", "reviews:moderate", "content:write"],

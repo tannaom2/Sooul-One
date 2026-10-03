@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { Empty, NoAccess } from "@/components/ui";
-import { ProductForm } from "../product-form";
+import { ProductForm, type SupplierOption } from "../product-form";
 import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
@@ -18,14 +18,16 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
 
   let product: any = null;
   let brands: any[] = [];
+  let suppliers: SupplierOption[] = [];
   try {
-    [product, brands] = await Promise.all([
+    [product, brands, suppliers] = await Promise.all([
       db.product.findUnique({ where: { id }, include: { images: { orderBy: { sortOrder: "asc" } } } }),
       db.brand.findMany({
         where: { isActive: true },
         include: { categories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
         orderBy: { name: "asc" },
       }),
+      db.supplier.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, fssaiLicence: true } }),
     ]);
   } catch (error) {
     reportError("admin/products/edit", error);
@@ -42,6 +44,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
       {/* Landed cost is finance data: kept out of the page for roles that can't see it. */}
       <ProductForm
         brands={brands}
+        suppliers={suppliers}
         product={can(session.role, "finance:view") ? product : { ...product, unitCost: null }}
         canEditPricing={can(session.role, "products:pricing")}
         canSeeCost={can(session.role, "finance:view")}

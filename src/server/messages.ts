@@ -38,9 +38,10 @@ export interface NewMessage {
 }
 
 /** Write messages down to send. Safe to call twice: a key already queued is left as it is. */
-export async function enqueueMessage(client: Client, ...messages: NewMessage[]): Promise<void> {
-  if (messages.length === 0) return;
-  await client.outboundMessage.createMany({
+/** Returns how many were newly queued: one already queued under the same key is skipped. */
+export async function enqueueMessage(client: Client, ...messages: NewMessage[]): Promise<number> {
+  if (messages.length === 0) return 0;
+  const { count } = await client.outboundMessage.createMany({
     data: messages.map((m) => ({
       kind: m.kind,
       dedupeKey: m.dedupeKey,
@@ -50,6 +51,7 @@ export async function enqueueMessage(client: Client, ...messages: NewMessage[]):
     })),
     skipDuplicates: true,
   });
+  return count;
 }
 
 export interface Processed {

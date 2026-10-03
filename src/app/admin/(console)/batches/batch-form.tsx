@@ -6,7 +6,17 @@ import { keepFormValues, useClearOnSuccess } from "@/components/keep-form-values
 
 const INITIAL: ActionResult = { ok: false };
 
-export function BatchForm({ products }: { products: { id: string; name: string }[] }) {
+export function BatchForm({
+  products,
+  suppliers,
+  today,
+}: {
+  /** Each product with its manufacturer, which the supplier choice starts at. */
+  products: { id: string; name: string; manufacturerId: string | null }[];
+  suppliers: { id: string; name: string }[];
+  /** yyyy-mm-dd, India time: received today unless changed. */
+  today: string;
+}) {
   const [state, submit, pending] = useActionState(addBatch, INITIAL);
   const formRef = useClearOnSuccess(state);
 
@@ -14,11 +24,42 @@ export function BatchForm({ products }: { products: { id: string; name: string }
     <form ref={formRef} onSubmit={keepFormValues(submit)} className="panel grid gap-4 p-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
         <label className="label" htmlFor="productId">Product</label>
-        <select id="productId" name="productId" className="field">
+        <select id="productId" name="productId" className="field" onChange={(e) => {
+          // Start the supplier at the product's manufacturer: the usual case.
+          const maker = products.find((p) => p.id === e.target.value)?.manufacturerId;
+          const select = e.currentTarget.form?.elements.namedItem("supplierId") as HTMLSelectElement | null;
+          if (select && maker) select.value = maker;
+        }}>
           {products.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
+      </div>
+
+      {/* Where it came from, for tracing a recall back to its source (Suppliers). */}
+      <div>
+        <label className="label" htmlFor="supplierId">Supplied by</label>
+        <select id="supplierId" name="supplierId" className="field" defaultValue={products[0]?.manufacturerId ?? ""}>
+          <option value="">Choose the supplier</option>
+          {suppliers.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-micro text-ink-faint">
+          Not listed? Add it under <a href="/admin/suppliers" className="underline">Suppliers</a> first.
+        </p>
+      </div>
+      <div>
+        <label className="label" htmlFor="receivedOn">Received on</label>
+        <input id="receivedOn" name="receivedOn" type="date" className="field" defaultValue={today} max={today} />
+      </div>
+      <div>
+        <label className="label" htmlFor="invoiceNumber">Supplier&apos;s invoice number</label>
+        <input id="invoiceNumber" name="invoiceNumber" className="field" maxLength={60} />
+      </div>
+      <div>
+        <label className="label" htmlFor="invoiceDate">Invoice date</label>
+        <input id="invoiceDate" name="invoiceDate" type="date" className="field" max={today} />
       </div>
 
       <div>

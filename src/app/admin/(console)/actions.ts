@@ -10,6 +10,7 @@ import { can } from "@/lib/permissions";
 import { diffFields } from "@/lib/audit-diff";
 import { recordOrderEvent } from "@/lib/order-events";
 import { productInputSchema } from "@/lib/validation/product";
+import { liveLicenceProblem } from "@/lib/suppliers";
 import { deliverNow, messageKey } from "@/server/messages";
 import { STATUS_LABELS, checkMove, isClosing, releasesStock } from "@/lib/order-lifecycle";
 import { releaseStock } from "@/server/order-stock";
@@ -124,9 +125,8 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
       .split(",")
       .map((a) => a.trim())
       .filter(Boolean),
-    manufacturerName: text(form, "manufacturerName"),
-    manufacturerAddress: text(form, "manufacturerAddress"),
-    packerDetails: text(form, "packerDetails"),
+    manufacturerId: text(form, "manufacturerId"),
+    marketerId: text(form, "marketerId"),
     countryOfOrigin: text(form, "countryOfOrigin"),
     netQuantity: text(form, "netQuantity"),
     mrp: text(form, "mrp"),
@@ -203,6 +203,21 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     }
   }
 
+  // The manufacturer and any packer or marketer come from Suppliers. Going
+  // live needs each one's FSSAI licence number on file, since the product
+  // page must show it (src/lib/suppliers.ts).
+  const [manufacturer, marketer] = await Promise.all([
+    input.manufacturerId ? db.supplier.findUnique({ where: { id: input.manufacturerId }, select: { name: true, address: true, fssaiLicence: true } }) : null,
+    input.marketerId && input.marketerId !== input.manufacturerId
+      ? db.supplier.findUnique({ where: { id: input.marketerId }, select: { name: true, address: true, fssaiLicence: true } })
+      : null,
+  ]);
+  if (input.manufacturerId && !manufacturer) return { ok: false, message: "That manufacturer is no longer in Suppliers.", fieldErrors: { manufacturerId: ["Choose it again."] } };
+  if (input.isActive) {
+    const problem = liveLicenceProblem(manufacturer, marketer);
+    if (problem) return { ok: false, message: problem.message, fieldErrors: { [problem.field]: [problem.message] } };
+  }
+
   const data: Record<string, unknown> = {
     sku: input.sku,
     name: input.name,
@@ -229,9 +244,12 @@ export async function saveProduct(_prev: ActionResult, form: FormData): Promise<
     suitableFromAge: input.suitableFromAge ?? null,
     suitableToAge: input.suitableToAge ?? null,
     allergens: input.allergens,
-    manufacturerName: input.manufacturerName ?? null,
-    manufacturerAddress: input.manufacturerAddress ?? null,
-    packerDetails: input.packerDetails ?? null,
+    manufacturerId: input.manufacturerId ?? null,
+    marketerId: marketer ? input.marketerId : null,
+    // The label text other readers use, kept in step with the suppliers.
+    manufacturerName: manufacturer?.name ?? null,
+    manufacturerAddress: manufacturer?.address ?? null,
+    packerDetails: marketer ? `${marketer.name}, ${marketer.address}` : null,
     countryOfOrigin: input.countryOfOrigin ?? null,
     netQuantity: input.netQuantity ?? null,
     mrp: input.mrp ?? null,
@@ -325,6 +343,15 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
   const manufacturedOn = new Date(String(form.get("manufacturedOn")));
   const expiresOn = new Date(String(form.get("expiresOn")));
   const quantity = num(form, "quantityReceived") ?? 0;
+  // Where it came from: the supplier and its invoice, for tracing a recall back (src/lib/suppliers.ts).
+  const supplierId = String(form.get("supplierId") ?? "");
+  const invoiceNumber = String(form.get("invoiceNumber") ?? "").trim().slice(0, 60) || null;
+  const indiaDate = (key: string) => {
+    const raw = String(form.get(key) ?? "").trim();
+    return raw ? new Date(`${raw}T00:00:00+05:30`) : null;
+  };
+  const invoiceDate = indiaDate("invoiceDate");
+  const receivedOn = indiaDate("receivedOn") ?? new Date();
 
   if (!productId || !batchNumber || quantity <= 0) {
     return { ok: false, message: "Enter a batch number and a quantity above zero." };
@@ -335,11 +362,17 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
   if (expiresOn <= manufacturedOn) {
     return { ok: false, message: "The expiry date must be after the manufacture date." };
   }
+  if (!supplierId) return { ok: false, message: "Choose who supplied this batch. Add the firm under Suppliers if it isn't listed." };
+  if ((invoiceDate && Number.isNaN(invoiceDate.getTime())) || Number.isNaN(receivedOn.getTime()) || receivedOn > new Date()) {
+    return { ok: false, message: "Check the invoice and received dates: neither can be in the future." };
+  }
 
-  const [product, existing] = await Promise.all([
+  const [product, existing, supplier] = await Promise.all([
     db.product.findUnique({ where: { id: productId }, select: { name: true } }),
     db.productBatch.findUnique({ where: { productId_batchNumber: { productId, batchNumber } }, select: { id: true } }),
+    db.supplier.findUnique({ where: { id: supplierId }, select: { isActive: true } }),
   ]);
+  if (!supplier?.isActive) return { ok: false, message: "That supplier isn't available. Pick another, or check it under Suppliers." };
   if (!product) return { ok: false, message: "That product no longer exists. Reload the page and pick it again." };
   const DUPLICATE_BATCH = `${product.name} already has a batch numbered ${batchNumber}. Check the number on the pack; each batch number can be received once.`;
   if (existing) return { ok: false, message: DUPLICATE_BATCH };
@@ -354,6 +387,10 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
         expiresOn,
         quantityReceived: quantity,
         quantityRemaining: quantity,
+        supplierId,
+        invoiceNumber,
+        invoiceDate,
+        receivedOn,
       },
     });
   } catch (error) {

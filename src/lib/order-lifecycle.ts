@@ -71,6 +71,21 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   RETURNED: "Returned by customer",
 };
 
+/** Payment states as staff should read them, not the stored codes. */
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  COD_PENDING: "Cash due on delivery",
+  captured: "Paid online",
+  captured_after_cancel: "Paid after the order was cancelled: refund due",
+  failed: "Payment failed",
+  refund_requested: "Refund requested",
+  refunded: "Refunded",
+};
+
+export function paymentStatusLabel(status: string | null, gateway: string | null): string {
+  if (!status) return gateway === "RAZORPAY" ? "Waiting for payment" : "Not paid yet";
+  return PAYMENT_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+}
+
 export interface OrderLike {
   readonly status: OrderStatus | string;
   /** Captured online. Cancelling these needs a refund, which arrives with live Razorpay. */

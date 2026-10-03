@@ -205,6 +205,15 @@ model Product {
   manufacturerAddress String?
   /// "Packed by" / "Marketed by" name and address, when not the manufacturer.
   packerDetails       String?
+  /// Who made it (Suppliers). Its FSSAI licence number is shown on the
+  /// product page, and a product can't go live without one (Labelling and
+  /// Display Regs 2020, reg 5(7)(b)). manufacturerName/Address above are kept
+  /// in step with it on save.
+  manufacturerId      String?
+  manufacturer        Supplier?    @relation("ProductManufacturer", fields: [manufacturerId], references: [id], onDelete: Restrict)
+  /// Who packs or markets it, when a different firm: its licence is shown too.
+  marketerId          String?
+  marketer            Supplier?    @relation("ProductMarketer", fields: [marketerId], references: [id], onDelete: Restrict)
   countryOfOrigin     String?
   /// As printed on the pack: "150 g", "60 gummies (120 g)".
   netQuantity         String?
@@ -246,6 +255,16 @@ model ProductBatch {
   /// says so, with recallNote, instead of "within its best-before".
   recalledAt        DateTime?
   recallNote        String?
+  /// Where this batch came from (Suppliers) and the paperwork for it, so a
+  /// recall can be traced back to its source (FSSAI Schedule 4; FSS Act s.27(3)).
+  supplierId        String?
+  supplier          Supplier?   @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  invoiceNumber     String?
+  invoiceDate       DateTime?
+  receivedOn        DateTime?
+  /// The recall notice emailed to its buyers, and when (src/lib/recall.ts).
+  recallNoticeText  String?
+  recallNotifiedAt  DateTime?
   orderItems        OrderItem[] // [FIX] back-relation — OrderItem.batchId is the recall-traceability link
   createdAt         DateTime    @default(now())
 
@@ -539,6 +558,9 @@ model OrderItem {
   /// taxable value and GST exactly as checkout charged it.
   taxableAmount         Decimal? @db.Decimal(10, 2)
   taxAmount             Decimal? @db.Decimal(10, 2)
+
+  /// What was decided when the parcel came back (RTO or returned): src/lib/returns.ts.
+  returnCheck ReturnCheck?
 
   @@index([orderId])
   @@index([productId])
@@ -1391,4 +1413,67 @@ enum MessageStatus {
   FAILED
   /// Stopped from the console before it went.
   CANCELLED
+}
+
+/// A firm SooulOne buys from or whose products it sells: manufacturers,
+/// packers, marketers and distributors, each with its FSSAI licence. FSSAI
+/// licence conditions require buying only from licensed vendors and keeping
+/// the record (Annexure 3, condition 14). Managed under Suppliers; the owner
+/// is emailed before a licence expires (src/server/suppliers.ts).
+model Supplier {
+  id               String            @id @default(cuid())
+  name             String
+  address          String
+  /// The 14-digit FSSAI licence or registration number.
+  fssaiLicence     String?
+  licenceType      FssaiLicenceType?
+  licenceExpiresOn DateTime?
+  gstin            String?
+  contactName      String?
+  contactPhone     String?
+  contactEmail     String?
+  notes            String?
+  /// No longer bought from; kept for the records of past batches.
+  isActive         Boolean           @default(true)
+  manufactured     Product[]         @relation("ProductManufacturer")
+  marketed         Product[]         @relation("ProductMarketer")
+  batches          ProductBatch[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([licenceExpiresOn])
+}
+
+enum FssaiLicenceType {
+  /// Central licence (FSSAI): required for e-commerce, importers and large operators.
+  CENTRAL
+  /// State licence.
+  STATE
+  /// Basic registration, for small businesses.
+  REGISTRATION
+}
+
+/// The check of one line of a parcel that came back (RTO, or returned by the
+/// customer): back on sale, set aside to decide later, or written off. Only
+/// "back to stock" adds the units to the batch again (src/lib/returns.ts).
+model ReturnCheck {
+  id          String        @id @default(cuid())
+  orderItemId String        @unique
+  orderItem   OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  outcome     ReturnOutcome
+  quantity    Int
+  note        String?
+  decidedBy   String
+  decidedAt   DateTime      @default(now())
+
+  @@index([outcome])
+}
+
+enum ReturnOutcome {
+  /// Sealed and fit to sell: the units go back into the batch.
+  RESTOCKED
+  /// Kept aside until someone decides (a damaged outer carton, a query to the supplier).
+  QUARANTINED
+  /// Opened, damaged, recalled or too close to expiry: not sold again.
+  WRITTEN_OFF
 }

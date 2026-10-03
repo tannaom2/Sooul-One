@@ -8,9 +8,11 @@ import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
 import { OrderStatusForm } from "../status-form";
 import { OrderNoteForm } from "./note-form";
-import { CLOSE_REASONS, STATUS_LABELS, allowedMoves } from "@/lib/order-lifecycle";
+import { CLOSE_REASONS, STATUS_LABELS, allowedMoves, paymentStatusLabel } from "@/lib/order-lifecycle";
 import { describeTouch, readAttribution, type Touch } from "@/lib/attribution";
 import { MESSAGE_KINDS, reasonLabel as messageReason } from "@/lib/messages";
+import { isReturned } from "@/lib/returns";
+import { ReturnCheck } from "./return-check";
 
 const reasonLabel = (code: string) =>
   Object.values(CLOSE_REASONS).flat().find((r) => r.code === code)?.label ?? code;
@@ -76,11 +78,19 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   const order: any = await db.order.findUnique({
     where: { id },
     include: {
-      items: { include: { batch: { select: { batchNumber: true } } } },
+      items: { include: { batch: { select: { batchNumber: true } }, returnCheck: true } },
       events: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!order) notFound();
+  // The packing run: the longest-waiting order still to pack, other than this one.
+  const nextToPack = canWrite
+    ? await db.order.findFirst({
+        where: { status: { in: ["PAID", "PROCESSING"] }, id: { not: order.id } },
+        orderBy: { placedAt: "asc" },
+        select: { id: true, orderNumber: true },
+      })
+    : null;
 
   const paidOnline = order.paymentGateway === "RAZORPAY" && order.paymentStatus === "captured";
   const address = order.shippingAddress ?? {};
@@ -89,9 +99,16 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
   return (
     <div className="grid gap-8">
       <div>
-        <Link href="/admin/orders" className="text-small text-ink-soft hover:underline">
-          ← All orders
-        </Link>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <Link href="/admin/orders" className="text-small text-ink-soft hover:underline">
+            ← All orders
+          </Link>
+          {nextToPack && (
+            <Link href={`/admin/orders/${nextToPack.id}`} className="text-small font-semibold hover:underline">
+              Next order to pack: <span className="tabular">{nextToPack.orderNumber}</span> →
+            </Link>
+          )}
+        </div>
         <div className="mt-2 flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="tabular text-h2 font-extrabold">{order.orderNumber}</h1>
           <p className="text-small text-ink-soft">
@@ -167,6 +184,23 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
         </div>
 
         <aside className="grid content-start gap-6">
+          {/* A parcel that came back is checked line by line before anything goes back on sale (src/lib/returns.ts). */}
+          {isReturned(order.status) && (
+            <ReturnCheck
+              orderId={order.id}
+              canWrite={canWrite}
+              lines={order.items.map((i: any) => ({
+                id: i.id,
+                name: i.productNameSnapshot,
+                batch: i.batch?.batchNumber ?? null,
+                quantity: i.quantity,
+                outcome: i.returnCheck?.outcome ?? null,
+                note: i.returnCheck?.note ?? null,
+                decidedBy: i.returnCheck?.decidedBy ?? null,
+                decidedAt: i.returnCheck ? when.format(i.returnCheck.decidedAt) : null,
+              }))}
+            />
+          )}
           {canWrite && (
             <section className="panel">
               <div className="panel-head">Update status</div>
@@ -215,7 +249,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
             <div className="panel-head">Payment</div>
             <dl>
               <div className="panel-row"><dt>Method</dt><dd>{order.paymentGateway === "COD" ? "Cash on delivery" : order.paymentGateway ?? "—"}</dd></div>
-              <div className="panel-row"><dt>Status</dt><dd>{order.paymentStatus ?? "—"}</dd></div>
+              <div className="panel-row"><dt>Status</dt><dd>{paymentStatusLabel(order.paymentStatus, order.paymentGateway)}</dd></div>
               {order.paymentId && <div className="panel-row"><dt>Razorpay order</dt><dd className="truncate text-micro">{order.paymentId}</dd></div>}
               {order.trackingNumber && <div className="panel-row"><dt>Tracking</dt><dd className="tabular">{order.trackingNumber}</dd></div>}
               {order.invoiceNumber && (

@@ -41,8 +41,8 @@ const validFood = {
 
 /** A complete set of label declarations, so a product may go live. */
 const declarations = {
-  manufacturerName: "Example Foods Pvt Ltd",
-  manufacturerAddress: "Plot 1, GIDC, Ahmedabad, Gujarat 382445",
+  // The manufacturer, from Suppliers (its licence is checked when saving: src/lib/suppliers.ts).
+  manufacturerId: "sup_example_foods",
   countryOfOrigin: "India",
   netQuantity: "60 gummies (120 g)",
   mrp: "499",
@@ -93,7 +93,7 @@ describe("label declarations", () => {
 
   it("lists each missing declaration before a product can go live", () => {
     const paths = errorPaths({ ...validFood, isActive: true });
-    for (const field of ["manufacturerName", "manufacturerAddress", "countryOfOrigin", "netQuantity", "mrp", "ingredients", "hsnCode"]) {
+    for (const field of ["manufacturerId", "countryOfOrigin", "netQuantity", "mrp", "ingredients", "hsnCode"]) {
       expect(paths).toContain(field);
     }
     expect(productInputSchema.safeParse({ ...validFood, ...declarations, isActive: true }).success).toBe(true);

@@ -90,9 +90,10 @@ const baseProduct = z.object({
    * is a draft, so it can be set up before the pack artwork is final;
    * required before it goes live (LIVE_REQUIRED, below).
    */
-  manufacturerName: z.string().trim().max(200).optional(),
-  manufacturerAddress: z.string().trim().max(500).optional(),
-  packerDetails: z.string().trim().max(500).optional(),
+  /** The manufacturer, from Suppliers; its FSSAI licence is shown on the page. */
+  manufacturerId: z.string().trim().max(40).optional(),
+  /** The packer or marketer, from Suppliers, only when a different firm. */
+  marketerId: z.string().trim().max(40).optional(),
   countryOfOrigin: z.string().trim().max(60).optional(),
   netQuantity: z.string().trim().max(60).optional(),
   mrp: rupees.optional(),
@@ -101,8 +102,7 @@ const baseProduct = z.object({
 
 /** What a product can't go live without, with the name staff see. */
 export const LIVE_REQUIRED = [
-  ["manufacturerName", "Manufacturer's name"],
-  ["manufacturerAddress", "Manufacturer's address"],
+  ["manufacturerId", "The manufacturer (from Suppliers)"],
   ["countryOfOrigin", "Country of origin"],
   ["netQuantity", "Net quantity"],
   ["mrp", "MRP"],

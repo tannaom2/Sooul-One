@@ -114,6 +114,23 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
     })),
   });
 
+  /* ------------------------------------------------------------- suppliers */
+  // One per manufacturer line, with obviously fake licence numbers (they start
+  // 00000) so a demo product page can never be mistaken for a real label.
+  // SooulOne Nutrition's licence expires within 60 days, to show the warning.
+  const supplierIdByMaker = new Map<string, string>();
+  const makers = [...new Map(Object.values(MAKERS).map((m) => [m.name, m])).values()];
+  await db.supplier.createMany({
+    data: makers.map((m, i) => {
+      const sid = id("sup");
+      supplierIdByMaker.set(m.name, sid);
+      return {
+        id: sid, name: m.name, address: m.address, fssaiLicence: `0000000000010${i + 1}`, licenceType: "CENTRAL" as const,
+        licenceExpiresOn: i === 0 ? at(now, 400) : at(now, 40), gstin: null, isActive: true, createdAt: at(start, -30),
+      };
+    }),
+  });
+
   /* -------------------------------------------------------------- products */
   const products: ProductRow[] = [];
   for (const p of CATALOGUE) {
@@ -127,8 +144,8 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
       discountActive: Boolean(p.discountPercent), discountPercent: p.discountPercent, hsnCode: p.hsn,
       taxRatePercent: p.tax, lowStockThreshold: 10, weightGrams: p.weightGrams, availableInRetail: Boolean(p.availableInRetail),
       retailOnly: false, isActive: true, isVeg: p.isVeg, shelfLifeDays: p.shelfLifeDays, allergens: p.allergens,
-      suitableFromAge: p.ages?.[0], suitableToAge: p.ages?.[1], manufacturerName: maker.name,
-      manufacturerAddress: maker.address, countryOfOrigin: "India", netQuantity: p.netQuantity, mrp: String(p.mrp),
+      suitableFromAge: p.ages?.[0], suitableToAge: p.ages?.[1], manufacturerId: supplierIdByMaker.get(maker.name),
+      countryOfOrigin: "India", netQuantity: p.netQuantity, mrp: String(p.mrp),
       ingredients: p.ingredients,
       ...(p.type === "PACKAGED_FOOD"
         ? { nutritionFacts: p.nutrition }
@@ -162,6 +179,7 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
       complianceReviewedAt: p.type === "HEALTH_SUPPLEMENT" ? at(createdAt, 2, 16) : null,
       complianceReviewedBy: p.type === "HEALTH_SUPPLEMENT" ? content.email : null,
       manufacturerName: MAKERS[p.brand].name, manufacturerAddress: MAKERS[p.brand].address,
+      manufacturerId: supplierIdByMaker.get(MAKERS[p.brand].name),
       packerDetails: `Marketed by SooulOne, Ahmedabad, Gujarat`, countryOfOrigin: "India", netQuantity: p.netQuantity,
       ingredients: p.ingredients, metaTitle: `${p.name} | SooulOne`, metaDescription: p.short, createdAt,
     })),
@@ -426,6 +444,8 @@ export async function generateDemo(db: PrismaClient, now = new Date(), seed = 20
       // it; the database requires every batch to have received something.
       quantityReceived: b.sold + b.remaining + (b.arrival < start || b.sold + b.remaining === 0 ? r.int(30, 120) : 0),
       quantityRemaining: b.remaining, createdAt: b.arrival,
+      // From the product's manufacturer, received the day it arrived.
+      supplierId: supplierIdByMaker.get(MAKERS[products.find((p) => p.id === b.productId)!.brand].name), receivedOn: b.arrival,
     })),
   });
 
