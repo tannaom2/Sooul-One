@@ -8,6 +8,7 @@ import { MFA_LIMIT, clientIp } from "@/lib/rate-limit-rules";
 import { clearHits, overLimit } from "@/server/rate-limit";
 import { clearStepUp, issueStepUp } from "@/lib/step-up";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { safeActivityNext } from "@/lib/step-up-rules";
 
 export interface StepUpState {
   error?: string;
@@ -51,7 +52,7 @@ export async function verifyStepUp(_prev: StepUpState, form: FormData): Promise<
   await audit(session, "STEP_UP_OK", "AdminUser", session.adminUserId, { "access until": untilText });
   // Back to the activity page, or the export that asked for the check; never anywhere else.
   const next = String(form.get("next") ?? "");
-  redirect(/^\/admin\/activity(\/[a-z/-]*)?$/.test(next) ? next : "/admin/activity");
+  redirect(safeActivityNext(next));
 }
 
 /** End the pass now, e.g. before stepping away from the screen. */

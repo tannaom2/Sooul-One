@@ -46,7 +46,14 @@ export default async function Batches() {
   return (
     <div className="grid gap-10">
       <div>
-        <h1 className="text-h2 font-extrabold">Receive stock</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="text-h2 font-extrabold">Receive stock</h1>
+          {/* No customer data, so no authenticator step (src/app/admin/(console)/batches/export/route.ts). */}
+          <span className="flex gap-4 text-small">
+            <a href="/admin/batches/export" className="underline">Download stock (CSV)</a>
+            <a href="/admin/batches/export?all=1" className="text-ink-soft underline">All batches</a>
+          </span>
+        </div>
         <p className="mt-2 max-w-[62ch] text-ink-soft">
           Record every delivery as a batch with its own manufacture and expiry dates. That is what
           lets the site send the oldest still-compliant stock first, and what answers

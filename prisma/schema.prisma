@@ -901,6 +901,9 @@ model StoreSettings {
   codAutoBlockRtoPercent Int    @default(35)
   /// ...out of at least this many shipped COD parcels, so one refusal can't block a pincode.
   codAutoBlockMinShipped Int    @default(4)
+  /// A summary email to the owner each morning (src/server/digest.ts): what
+  /// needs doing, yesterday's sales and the Copilot's insights. On by default.
+  dailyDigest        Boolean    @default(true)
   /// The storefront assistant (src/components/storefront-bot.tsx) is shown.
   assistantEnabled   Boolean    @default(true)
   /// Days after delivery a return can be asked for, as the business has

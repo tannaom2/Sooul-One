@@ -18,6 +18,7 @@ export const MESSAGE_KINDS = {
   review_request: "Review request email",
   refund_notice: "Refund email",
   back_in_stock: "Back-in-stock email",
+  owner_digest: "Daily summary email to you",
 } as const;
 
 export type MessageKind = keyof typeof MESSAGE_KINDS;

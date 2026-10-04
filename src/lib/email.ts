@@ -519,3 +519,52 @@ export async function sendBackInStockEmail(to: string, alert: { product: string;
   ].join("\n");
   return send(to, `${alert.product} is back in stock`, html, text);
 }
+
+/**
+ * The owner's morning summary (src/server/digest.ts): what needs doing, with
+ * links into the console, yesterday's sales and the Copilot's top insights.
+ * Internal: to the owner's alert address, never to shoppers.
+ */
+export async function sendOwnerDigestEmail(
+  to: string,
+  digest: {
+    subject: string;
+    sales: string;
+    lines: readonly { text: string; url: string; urgent: boolean }[];
+    insights: readonly { title: string; detail: string }[];
+    consoleUrl: string;
+    settingsUrl: string;
+  },
+): Promise<Sent> {
+  const item = (l: { text: string; url: string; urgent: boolean }) =>
+    `<li style="margin:0 0 6px"><a href="${esc(l.url)}" style="color:${l.urgent ? "#9a3412" : "#241c15"}">${esc(l.text)}</a></li>`;
+  const html = wrap(
+    "Good morning",
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">${esc(digest.sales)}</p>
+     ${
+       digest.lines.length
+         ? `<p style="margin:0 0 8px;font-size:15px;font-weight:700">Needs attention</p><ul style="margin:0 0 16px;padding-left:20px;font-size:15px;line-height:1.5">${digest.lines.map(item).join("")}</ul>`
+         : `<p style="margin:0 0 16px;font-size:15px">Nothing needs attention this morning.</p>`
+     }
+     ${
+       digest.insights.length
+         ? `<p style="margin:0 0 8px;font-size:15px;font-weight:700">From the Copilot</p>${digest.insights
+             .map((i) => `<p style="margin:0 0 10px;font-size:14px;line-height:1.5"><strong>${esc(i.title)}</strong><br><span style="color:#5b4f45">${esc(i.detail)}</span></p>`)
+             .join("")}`
+         : ""
+     }
+     ${emailButton(digest.consoleUrl, "Open the console")}`,
+    `Your daily summary from the SooulOne console. <a href="${esc(digest.settingsUrl)}" style="color:#8c7f73">Turn it off</a> on the Messages page.`,
+  );
+  const text = [
+    "Good morning.",
+    "",
+    digest.sales,
+    "",
+    ...(digest.lines.length ? ["Needs attention:", ...digest.lines.map((l) => `  - ${l.text}: ${l.url}`)] : ["Nothing needs attention this morning."]),
+    ...(digest.insights.length ? ["", "From the Copilot:", ...digest.insights.map((i) => `  - ${i.title}. ${i.detail}`)] : []),
+    "",
+    `Open the console: ${digest.consoleUrl}`,
+  ].join("\n");
+  return send(to, digest.subject, html, text);
+}

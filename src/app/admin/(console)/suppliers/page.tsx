@@ -95,7 +95,7 @@ export default async function Suppliers() {
             };
             const live = s._count.manufactured + s._count.marketed;
             return (
-              <details key={s.id} className={`panel ${s.isActive ? "" : "opacity-70"}`}>
+              <details key={s.id} id={s.id} className={`panel scroll-mt-24 ${s.isActive ? "" : "opacity-70"}`}>
                 <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3">
                   <span className="font-semibold">
                     {s.name}

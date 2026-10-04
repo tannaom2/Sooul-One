@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** addToCart's quantity rules (src/server/cart.ts), including "Order again"'s top-up. */
 
@@ -28,6 +28,11 @@ const PRODUCT = {
   discountActive: false,
   batches: [{ id: "b1", batchNumber: "B1", expiresOn: new Date("2030-01-01"), quantityRemaining: 50 }],
 };
+
+// The basket module is large; load it once up front so a busy full run doesn't time out the first test.
+beforeAll(async () => {
+  await import("@/server/cart");
+}, 60_000);
 
 beforeEach(() => {
   vi.clearAllMocks();

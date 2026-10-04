@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
+import { digestEnabled } from "@/server/digest";
+import { DigestPanel } from "./digest-panel";
 import { can } from "@/lib/permissions";
 import { Empty, NoAccess } from "@/components/ui";
 import { Stat } from "@/components/charts";
@@ -81,6 +83,8 @@ export default async function Messages({ searchParams }: { searchParams: Promise
           went wrong.
         </p>
       </div>
+
+      {can(session.role, "settings:manage") && <DigestPanel enabled={await digestEnabled()} />}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Sent, last 7 days" value={String(counts.SENT ?? 0)} />

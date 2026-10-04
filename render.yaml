@@ -144,3 +144,21 @@ services:
         value: https://soulone-app.onrender.com/api/cron/messages
       - key: CRON_SECRET
         sync: false
+
+  # The owner's daily summary email (src/server/digest.ts): what needs doing,
+  # yesterday's sales and the Copilot's insights, at 8 am India time (02:30
+  # UTC). Switched off from the console's Messages page. Same CRON_SECRET.
+  - type: cron
+    name: soulone-digest
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "30 2 * * *"
+    buildCommand: "true"
+    startCommand: >-
+      node -e "fetch(process.env.TARGET_URL,{headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(async r=>{console.log(r.status,await r.text());if(!r.ok)process.exit(1)}).catch(e=>{console.error(e);process.exit(1)})"
+    envVars:
+      - key: TARGET_URL
+        value: https://soulone-app.onrender.com/api/cron/digest
+      - key: CRON_SECRET
+        sync: false

@@ -10,6 +10,8 @@ import { ORDER_VIEWS, ORDERS_PAGE_SIZE, orderFiltersHref, parseOrderFilters, typ
 import { reportError } from "@/lib/observability";
 import { BarList, ChartCard, Pager, StackedBar, SERIES, BAD, GOOD } from "@/components/charts";
 import { riskBand } from "@/lib/intel/rto-risk";
+import { can } from "@/lib/permissions";
+import { OrderRows } from "./order-rows";
 
 const STATUS_COLOR: Record<string, string> = {
   DELIVERED: GOOD, SHIPPED: SERIES[1], PROCESSING: SERIES[0], PAID: SERIES[2], PENDING_PAYMENT: SERIES[4],
@@ -78,7 +80,14 @@ export default async function Orders({
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-h2 font-extrabold">Orders</h1>
+        <div className="flex flex-wrap items-baseline gap-4">
+          <h1 className="text-h2 font-extrabold">Orders</h1>
+          {can(session.role, "finance:view") && (
+            <Link href="/admin/activity/downloads" className="text-small underline">
+              Downloads
+            </Link>
+          )}
+        </div>
         {/* Keyed on the filters so its fields reset when they change from outside it
             (a status tab, Clear, Back); defaultValue alone only applies on first mount. */}
         <form key={`${view}|${q}`} method="get" role="search" className="flex w-full gap-2 sm:w-auto">
@@ -135,43 +144,23 @@ export default async function Orders({
             <p className="text-micro text-ink-faint">
               Showing {(page - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(page * ORDERS_PAGE_SIZE, total)} of {total}, {view === "to_ship" ? "oldest first" : "newest first"}
             </p>
-            <div className="panel">
-              <div aria-hidden className="hidden gap-x-4 border-b border-rule px-4 py-2 text-micro font-semibold text-ink-faint sm:grid sm:grid-cols-[9rem_1fr_7.5rem_5.5rem_6rem]">
-                <span>Order</span>
-                <span>Customer · placed</span>
-                <span>Status</span>
-                <span>Pays</span>
-                <span className="text-right">Total</span>
-              </div>
-              {orders.map((o) => {
-                const address = o.shippingAddress as any;
-                return (
-                  <Link
-                    key={o.id}
-                    href={`/admin/orders/${o.id}`}
-                    className="grid gap-x-4 gap-y-0.5 border-b border-rule px-4 py-3 text-small last:border-b-0 hover:bg-shelf sm:grid-cols-[9rem_1fr_7.5rem_5.5rem_6rem] sm:items-center"
-                  >
-                    <span className="tabular font-semibold">{o.orderNumber}</span>
-                    <span className="min-w-0 truncate text-ink-soft">
-                      {address?.name ?? o.guestEmail}
-                      <span className="text-ink-faint">
-                        {" "}
-                        · {o._count.items} {o._count.items === 1 ? "item" : "items"} · {formatDate(o.placedAt)}
-                        {o.postalCode && <span className="tabular"> · {o.postalCode}</span>}
-                      </span>
-                    </span>
-                    <span className="text-ink-soft">
-                      {STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] ?? o.status}
-                      {o.riskScore !== null && ["PAID", "PROCESSING"].includes(o.status) && riskBand(o.riskScore) !== "LOW" && (
-                        <span className="block text-micro font-semibold text-alert">risk {o.riskScore}</span>
-                      )}
-                    </span>
-                    <span className="text-ink-soft">{o.paymentGateway === "COD" ? "Cash" : "Online"}</span>
-                    <span className="tabular font-semibold sm:text-right">{formatINR(decimalToPaise(o.totalAmount))}</span>
-                  </Link>
-                );
-              })}
-            </div>
+            <OrderRows
+              canWrite={can(session.role, "orders:write")}
+              canExport={can(session.role, "finance:view")}
+              rows={orders.map((o) => ({
+                id: o.id,
+                orderNumber: o.orderNumber,
+                name: (o.shippingAddress as any)?.name ?? o.guestEmail ?? "",
+                items: o._count.items,
+                placed: formatDate(o.placedAt),
+                postalCode: o.postalCode ?? null,
+                status: o.status,
+                statusLabel: STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] ?? o.status,
+                risk: o.riskScore !== null && ["PAID", "PROCESSING"].includes(o.status) && riskBand(o.riskScore) !== "LOW" ? o.riskScore : null,
+                pays: o.paymentGateway === "COD" ? "Cash" : "Online",
+                total: formatINR(decimalToPaise(o.totalAmount)),
+              }))}
+            />
             <Pager page={page} pages={pages} href={(p) => orderFiltersHref({ ...filters, page: p })} />
           </div>
           <div className="grid gap-4">

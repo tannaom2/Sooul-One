@@ -6,6 +6,7 @@ import { AdminNav } from "./admin-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CONSOLE_THEME_STORAGE_KEY } from "@/lib/theme";
 import { CopilotDrawer } from "./copilot-drawer";
+import { CommandMenu } from "./command-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
       { href: "/admin/analytics", label: "Analytics", permission: "finance:view" },
       { href: "/admin/funnel", label: "Funnel", permission: "finance:view" },
       { href: "/admin/reconciliation", label: "Reconciliation", permission: "finance:view" },
+      { href: "/admin/activity/downloads", label: "Downloads", permission: "finance:view" },
     ],
   },
   {
@@ -105,6 +107,10 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
             SooulOne
           </Link>
           <p className="text-micro text-ink-faint">Owner console</p>
+          {/* Ctrl+K: jump to a page or find a record (src/app/admin/(console)/command-menu.tsx). */}
+          <div className="mt-3">
+            <CommandMenu pages={groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.group })))} />
+          </div>
           {/* The owner's AI copilot (docs/COPILOT.md): for people who can see the store's figures. */}
           {can(session.role, "finance:view") && (
             <div className="mt-3">

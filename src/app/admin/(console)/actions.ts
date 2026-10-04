@@ -5,7 +5,8 @@ import { CATALOG_TAG, STORES_TAG, expireTag, refreshTag } from "@/lib/cache-tags
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { onOrderStatusChanged } from "@/server/referrals";
-import { audit, requirePermission } from "@/lib/auth";
+import { audit, requirePermission, type AdminSession } from "@/lib/auth";
+import { reportError } from "@/lib/observability";
 import { can } from "@/lib/permissions";
 import { diffFields } from "@/lib/audit-diff";
 import { recordOrderEvent } from "@/lib/order-events";
@@ -476,16 +477,75 @@ export async function saveStore(_prev: ActionResult, form: FormData): Promise<Ac
 export async function setOrderStatus(_prev: ActionResult, form: FormData): Promise<ActionResult> {
   const session = await requirePermission("orders:write");
   if (!session) return { ok: false, message: NOT_ALLOWED };
+  const result = await changeOrderStatus(session, {
+    orderId: String(form.get("orderId") ?? ""),
+    status: String(form.get("status") ?? ""),
+    // The status the page showed when staff opened it: the update only applies
+    // if the order is still there, so two people can't overwrite each other.
+    expected: String(form.get("expectedStatus") ?? ""),
+    tracking: String(form.get("trackingNumber") ?? "").trim().slice(0, 100),
+    courier: String(form.get("courierPartner") ?? "").trim().slice(0, 60),
+    reason: String(form.get("closeReason") ?? "") || null,
+  });
+  revalidatePath("/admin/orders");
+  revalidatePath(`/admin/orders/${String(form.get("orderId") ?? "")}`);
+  revalidatePath("/admin");
+  return result;
+}
 
-  const orderId = String(form.get("orderId") ?? "");
-  const status = String(form.get("status") ?? "");
-  // The status the page showed when staff opened it: the update only applies
-  // if the order is still there, so two people can't overwrite each other.
-  const expected = String(form.get("expectedStatus") ?? "");
-  const tracking = String(form.get("trackingNumber") ?? "").trim().slice(0, 100);
-  const courier = String(form.get("courierPartner") ?? "").trim().slice(0, 60);
-  const reason = String(form.get("closeReason") ?? "") || null;
+/** Bulk moves from the orders list: only the ones that need no details typed in. */
+const BULK_MOVES = { PROCESSING: "PAID", DELIVERED: "SHIPPED" } as const;
+const BULK_DONE = { PROCESSING: "moved to packing", DELIVERED: "marked delivered" } as const;
+const BULK_FROM = { PROCESSING: "paid and waiting to pack", DELIVERED: "shipped" } as const;
 
+/**
+ * "Start packing" or "Mark delivered" for several orders at once (benchmark
+ * gap M2). Each order goes through exactly the same change as the order
+ * page's form (changeOrderStatus): the same checks, stock, invoice, emails,
+ * timeline and audit. Orders not in the right state are skipped and named.
+ */
+export async function bulkSetOrderStatus(orderIds: string[], status: keyof typeof BULK_MOVES): Promise<ActionResult> {
+  const session = await requirePermission("orders:write");
+  if (!session) return { ok: false, message: NOT_ALLOWED };
+  if (!(status in BULK_MOVES) || !Array.isArray(orderIds) || orderIds.length === 0 || orderIds.length > 50 || orderIds.some((id) => typeof id !== "string" || id.length > 40)) {
+    return { ok: false, message: "Choose up to 50 orders and try again." };
+  }
+  const from = BULK_MOVES[status];
+  const orders = await db.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, orderNumber: true, status: true } });
+  let moved = 0;
+  const skipped: string[] = [];
+  const failed: string[] = [];
+  for (const order of orders) {
+    if (order.status !== from) {
+      skipped.push(order.orderNumber);
+      continue;
+    }
+    try {
+      const result = await changeOrderStatus(session, { orderId: order.id, status, expected: from, tracking: "", courier: "", reason: null });
+      if (result.ok) moved += 1;
+      else failed.push(`${order.orderNumber} (${(result.message ?? "").replace(/\.$/, "")})`);
+    } catch (error) {
+      reportError("orders/bulk-status", error, { orderId: order.id });
+      failed.push(order.orderNumber);
+    }
+  }
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  const parts = [`${moved} ${moved === 1 ? "order" : "orders"} ${BULK_DONE[status]}.`];
+  if (skipped.length) parts.push(`Skipped, not ${BULK_FROM[status]}: ${skipped.join(", ")}.`);
+  if (failed.length) parts.push(`Not changed: ${failed.join("; ")}.`);
+  return { ok: moved > 0 && failed.length === 0, message: parts.join(" ") };
+}
+
+/**
+ * One order's status change, shared by the order page's form and the bulk
+ * actions. Not exported: this file's exports are server actions, and this
+ * trusts the session its caller has already checked.
+ */
+async function changeOrderStatus(
+  session: AdminSession,
+  { orderId, status, expected, tracking, courier, reason }: { orderId: string; status: string; expected: string; tracking: string; courier: string; reason: string | null },
+): Promise<ActionResult> {
   const previous = await db.order.findUnique({ where: { id: orderId } });
   if (!previous) return { ok: false, message: "That order no longer exists." };
   const STALE = "Someone else changed this order a moment ago. Reload the page to see its current status.";
@@ -565,9 +625,6 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
     const [sent] = await processMessages({ dedupeKeys: [followUpKey.delivered(orderId)] });
     mailed = mailedNote(sent?.outcome, "delivered email");
   }
-  revalidatePath("/admin/orders");
-  revalidatePath(`/admin/orders/${orderId}`);
-  revalidatePath("/admin");
 
   if (!statusChanges) return { ok: true, message: Object.keys(changes).length ? "Tracking details saved." : "No change." };
   const restocked = releasesStock(status) ? " Its stock is back on sale." : "";
