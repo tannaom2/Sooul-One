@@ -434,6 +434,11 @@ model CartItem {
   quantity   Int
   priceAtAdd Decimal         @db.Decimal(10, 2)
 
+  /// One line per product per basket: two adds landing at once (two tabs, a
+  /// double tap) update the one line instead of making a second
+  /// (src/server/cart.ts addToCart). Variants aren't sold yet; if they are,
+  /// this becomes (cartId, productId, variantId) with a non-null variant.
+  @@unique([cartId, productId])
   // Postgres doesn't index foreign keys by itself (DR review, 2026-09-26).
   @@index([cartId])
   @@index([productId])

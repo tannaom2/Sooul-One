@@ -142,21 +142,43 @@ export async function addToCart(sessionId: string, productId: string, quantity: 
   // always charges the live price, so a stale basket can't lock in a
   // withdrawn promotion. Adding again means they've seen the current price.
   const priceAtAdd = paiseToDecimal(liveUnitPrice(product).pricePaise);
-  const existing = await db.cartItem.findFirst({ where: { cartId: cart.id, productId } });
+  // Capped per line, matching the quantity control; repeated adds used to grow without limit.
+  const wanted = Math.min(MAX_LINE_QUANTITY, quantity);
 
-  if (existing) {
-    await db.cartItem.update({
-      where: { id: existing.id },
-      // Capped per line, matching the quantity control; repeated adds used to grow without limit.
-      data: { quantity: Math.min(MAX_LINE_QUANTITY, options.atLeast ? Math.max(existing.quantity, quantity) : existing.quantity + quantity), priceAtAdd },
-    });
-  } else {
-    await db.cartItem.create({
-      data: { cartId: cart.id, productId, quantity: Math.min(MAX_LINE_QUANTITY, quantity), priceAtAdd },
-    });
+  // One line per product (a unique rule on the table). Looking for the line
+  // and then creating it let two adds landing at once (two tabs, a double tap)
+  // both find nothing and make two lines. Each step below is one statement,
+  // so the database settles the race: the upsert makes the line or adds to it
+  // in place, and the caps only ever move it towards the limit.
+  const line = await upsertLine(cart.id, productId, wanted, priceAtAdd, !options.atLeast && quantity);
+  if (options.atLeast) {
+    if (line.quantity < wanted) await db.cartItem.updateMany({ where: { id: line.id, quantity: { lt: wanted } }, data: { quantity: wanted } });
+  } else if (line.quantity > MAX_LINE_QUANTITY) {
+    await db.cartItem.updateMany({ where: { id: line.id, quantity: { gt: MAX_LINE_QUANTITY } }, data: { quantity: MAX_LINE_QUANTITY } });
   }
 
   return cart.id;
+}
+
+/**
+ * Make the product's line, or refresh its price and (when `increment` is a
+ * number) add to it. Postgres runs this as one INSERT ... ON CONFLICT; if a
+ * same-moment add still wins the insert (P2002), the line now exists and
+ * the second try updates it.
+ */
+async function upsertLine(cartId: string, productId: string, quantity: number, priceAtAdd: string, increment: number | false) {
+  const args = {
+    where: { cartId_productId: { cartId, productId } },
+    create: { cartId, productId, quantity, priceAtAdd },
+    update: increment === false ? { priceAtAdd } : { priceAtAdd, quantity: { increment } },
+    select: { id: true, quantity: true },
+  };
+  try {
+    return await db.cartItem.upsert(args);
+  } catch (error) {
+    if ((error as { code?: string } | null)?.code !== "P2002") throw error;
+    return db.cartItem.upsert(args);
+  }
 }
 
 /**
