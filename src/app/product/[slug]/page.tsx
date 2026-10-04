@@ -19,6 +19,8 @@ import { SLOWEST_SERVED_ZONE, estimateDeliveryDate } from "@/lib/checkout/delive
 import { readSessionId } from "@/server/cart";
 import { recordEvent } from "@/lib/analytics";
 import { ReviewForm } from "@/components/review-form";
+import { StockAlertForm } from "./stock-alert-form";
+import { STOCK_ALERT_NOTICE } from "@/lib/stock-alerts";
 import { ageLabel, allergenLabel, allergenSentence, sugarLabel } from "@/lib/label-facts";
 import { SERVICE_AREA } from "@/lib/checkout/service-area";
 import { getBusinessProfile } from "@/server/business";
@@ -231,7 +233,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {availability.state === "retail-only" ? (
                 <p className="text-small">Sold in our superstores only. This product is not shipped.</p>
               ) : availability.state === "out" ? (
-                <p className="text-small text-caution">{availability.message}</p>
+                <>
+                  <p className="text-small text-caution">{availability.message}</p>
+                  <StockAlertForm productId={product.id} notice={STOCK_ALERT_NOTICE} />
+                </>
               ) : (
                 <>
                   {/* Real stock at or below the owner's reorder level, never invented. */}

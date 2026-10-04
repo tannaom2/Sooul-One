@@ -9,6 +9,7 @@ import type { BoxPage } from "@/server/boxes";
 import type { ProductSummary } from "@/server/catalog";
 import { useCart } from "@/components/basket/cart-provider";
 import { ProductCard } from "@/components/ui";
+import { saveMyBox } from "@/app/account/saved-actions";
 
 /**
  * The box page. The products are the site's standard product cards, with an
@@ -40,16 +41,29 @@ function readDraft(slug: string): Picks {
  * once hydrated (the server renders it empty, then the client remounts it
  * with the draft), the way checkout restores its form.
  */
-export function BoxBuilder(props: { box: BoxPage; kindLabel: string; editing: Editing; tabs: React.ReactNode; filter: Filter }) {
+export function BoxBuilder(props: {
+  box: BoxPage;
+  kindLabel: string;
+  editing: Editing;
+  tabs: React.ReactNode;
+  filter: Filter;
+  /** Signed in: offer "Save this box for next time" once it's in the basket. */
+  signedIn: boolean;
+  /** Opened from a saved box on the account page (?saved=): start from its picks. */
+  saved: { picks: { productId: string; quantity: number }[] } | null;
+}) {
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
-  const { box, editing } = props;
+  const { box, editing, saved } = props;
   let initial: Picks = {};
   if (editing) initial = Object.fromEntries(editing.picks.map((p) => [p.productId, p.quantity]));
-  else if (hydrated) {
+  else if (saved) {
+    const known = new Set(box.items.map((i) => i.id));
+    initial = Object.fromEntries(saved.picks.filter((p) => known.has(p.productId)).map((p) => [p.productId, p.quantity]));
+  } else if (hydrated) {
     const known = new Set(box.items.map((i) => i.id));
     initial = Object.fromEntries(Object.entries(readDraft(box.slug)).filter(([id, n]) => known.has(id) && n > 0));
   }
-  return <Builder key={hydrated ? "client" : "server"} {...props} initial={initial} persist={hydrated && !editing} />;
+  return <Builder key={hydrated ? "client" : "server"} {...props} initial={initial} persist={hydrated && !editing && !saved} />;
 }
 
 function Builder({
@@ -60,6 +74,7 @@ function Builder({
   filter,
   initial,
   persist,
+  signedIn,
 }: {
   box: BoxPage;
   kindLabel: string;
@@ -68,11 +83,17 @@ function Builder({
   filter: Filter;
   initial: Picks;
   persist: boolean;
+  signedIn: boolean;
 }) {
   const router = useRouter();
   const { saveBox, pending } = useCart();
   const [picks, setPicks] = useState<Picks>(initial);
   const [added, setAdded] = useState(false);
+  // The box just added, so it can still be saved after the tray empties.
+  const [lastAdded, setLastAdded] = useState<{ productId: string; quantity: number }[] | null>(null);
+  const [boxName, setBoxName] = useState(`My ${box.name}`);
+  const [saveNote, setSaveNote] = useState<{ ok: boolean; message: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!persist) return;
@@ -144,8 +165,18 @@ function Builder({
     try {
       localStorage.removeItem(draftKey(box.slug));
     } catch {}
+    setLastAdded(pickList);
+    setSaveNote(null);
     setPicks({});
     setAdded(true);
+  }
+
+  async function saveForLater() {
+    if (!lastAdded) return;
+    setSaving(true);
+    const result = await saveMyBox({ boxId: box.id, name: boxName, picks: lastAdded });
+    setSaving(false);
+    setSaveNote(result);
   }
 
   const cta = editing ? "Save box" : `Add box to basket · ${formatPriceTag(box.pricePaise)}`;
@@ -270,6 +301,36 @@ function Builder({
             )}
             {added && <p className="font-semibold text-veg">Box added to your basket. Build another?</p>}
           </div>
+
+          {/* Saved boxes (src/server/saved-boxes.ts): reorder this one in a tap from the account page. */}
+          {added && lastAdded && !editing && (
+            signedIn ? (
+              saveNote?.ok ? (
+                <p className="mt-2 text-micro text-veg">{saveNote.message}</p>
+              ) : (
+                <form
+                  className="mt-2 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveForLater();
+                  }}
+                >
+                  <label className="sr-only" htmlFor="saved-box-name">
+                    Name for this box
+                  </label>
+                  <input id="saved-box-name" className="field min-w-0 flex-1 py-1.5 text-small" maxLength={60} value={boxName} onChange={(e) => setBoxName(e.target.value)} />
+                  <button className="btn btn-outline shrink-0 py-1.5 text-small" disabled={saving}>
+                    {saving ? "Saving…" : "Save for next time"}
+                  </button>
+                </form>
+              )
+            ) : (
+              <p className="mt-2 text-micro text-ink-soft">
+                <Link href="/account/sign-in" className="underline">Sign in</Link> to save boxes and reorder them in one tap.
+              </p>
+            )
+          )}
+          {saveNote && !saveNote.ok && <p className="mt-1 text-micro text-alert">{saveNote.message}</p>}
 
           <button type="button" onClick={addBox} disabled={!complete || pending} className="btn btn-solid mt-3 w-full">
             {pending ? "Adding…" : cta}

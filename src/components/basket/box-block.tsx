@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatPriceTag } from "@/lib/money";
 import type { BasketBox } from "@/lib/basket-types";
 import { useCart } from "./cart-provider";
+import { saveMyBox, type SavedResult } from "@/app/account/saved-actions";
 
 /**
  * A box the shopper built, as one block: "Gummies Box, 3 items, ₹999, you
@@ -24,6 +25,15 @@ export function BoxBlock({ box, refreshPage = false, onNavigate }: { box: Basket
     startTransition(async () => {
       await removeBox(box.cartBoxId);
       if (refreshPage) router.refresh();
+    });
+
+  // "Save for next time" (src/server/saved-boxes.ts): right here, because
+  // this drawer opens over the box page's own save option.
+  const [saved, setSaved] = useState<SavedResult | null>(null);
+  const [saving, startSave] = useTransition();
+  const save = () =>
+    startSave(async () => {
+      setSaved(await saveMyBox({ boxId: box.boxId, name: `My ${box.name}`, picks: box.items.map((i) => ({ productId: i.productId, quantity: i.quantity })) }));
     });
 
   const complete = box.issue === null;
@@ -68,9 +78,37 @@ export function BoxBlock({ box, refreshPage = false, onNavigate }: { box: Basket
           <button type="button" onClick={remove} disabled={pending} className="text-micro underline hover:text-alert">
             Remove box
           </button>
+          {/* On the same line as Edit, so it's in view wherever the drawer is scrolled. */}
+          {complete && box.available && !saved?.ok && !saved?.signIn && (
+            <button type="button" onClick={save} disabled={saving} className="text-micro underline">
+              {saving ? "Saving…" : "Save for next time"}
+            </button>
+          )}
         </span>
         {complete && box.savingPaise > 0 && <span className="text-small font-semibold text-veg">You save {formatPriceTag(box.savingPaise)}</span>}
       </div>
+
+      {saved && (
+        <p className="mt-2 text-micro" aria-live="polite">
+          {saved.ok ? (
+            <span className="text-veg">
+              Saved to your boxes.{" "}
+              <Link href="/account" onClick={onNavigate} className="underline">
+                See your boxes
+              </Link>
+            </span>
+          ) : saved.signIn ? (
+            <span className="text-ink-soft">
+              <Link href="/account/sign-in" onClick={onNavigate} className="underline">
+                Sign in
+              </Link>{" "}
+              to save boxes and reorder them in one tap.
+            </span>
+          ) : (
+            <span className="text-alert">{saved.message}</span>
+          )}
+        </p>
+      )}
     </div>
   );
 }

@@ -229,6 +229,7 @@ model Product {
   variants          ProductVariant[]
   batches           ProductBatch[]
   reviews           Review[]
+  stockAlerts       StockAlert[]
   orderItems        OrderItem[]
   cartItems         CartItem[]
   bundleEligibility BundleEligibleProduct[]
@@ -349,6 +350,8 @@ model Customer {
   referredBy       Referral?         @relation("Referee")
   walletEntries    WalletEntry[]
   quizResponses    QuizResponse[]
+  savedBoxes       SavedBox[]
+  stockAlerts      StockAlert[]
   createdAt        DateTime          @default(now())
 }
 
@@ -386,19 +389,28 @@ model PhoneOtp {
   @@index([phone, createdAt])
 }
 
+/// A signed-in shopper's address book (benchmark gap C16): saved from each
+/// order they place, offered at checkout, removable from the account page.
 model Address {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   customerId String
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  /// Who it's for, as typed at checkout.
+  name       String    @default("")
   label      String?
   line1      String
   line2      String?
   city       String
   state      String
   postalCode String
-  country    String   @default("IN")
+  country    String    @default("IN")
   phone      String
-  isDefault  Boolean  @default(false)
+  isDefault  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  /// The last order that went here; the address book lists the latest first.
+  lastUsedAt DateTime?
+
+  @@index([customerId, lastUsedAt])
 }
 
 model Cart {
@@ -1058,6 +1070,7 @@ model Box {
   slots           BoxSlot[]
   products        BoxProduct[]
   cartBoxes       CartBox[]
+  savedBoxes      SavedBox[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 }
@@ -1483,4 +1496,40 @@ enum ReturnOutcome {
   QUARANTINED
   /// Opened, damaged, recalled or too close to expiry: not sold again.
   WRITTEN_OFF
+}
+
+/// A shopper's named Make Your Own Box (benchmark gap R4), to put in the
+/// basket again in one tap. The picks are checked against the box's rules and
+/// live stock each time, like any box (src/server/boxes.ts).
+model SavedBox {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  boxId      String
+  box        Box      @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  name       String
+  /// [{ productId, quantity }]
+  picks      Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+/// "Email me when it's back" on a sold-out product (benchmark gap R9). One
+/// email, once the product can be shipped again, then done. The request is
+/// also kept as a consent record (purpose BACK_IN_STOCK).
+model StockAlert {
+  id         String    @id @default(cuid())
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  email      String
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  /// When the email was queued; null while still waiting.
+  notifiedAt DateTime?
+
+  @@unique([productId, email])
+  @@index([notifiedAt, productId])
 }

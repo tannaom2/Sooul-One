@@ -18,6 +18,7 @@ import { useQuote } from "./use-quote";
 import { usePincode } from "./use-pincode";
 import { CHECKOUT_TIMEOUT_SECONDS } from "@/lib/order-lifecycle";
 import { OUTSIDE_AREA_MESSAGE, SERVICE_AREA, inServicePincode } from "@/lib/checkout/service-area";
+import { addressSummary, sameAddress } from "@/lib/saved-addresses";
 
 /**
  * Checkout, in three steps: contact, address, payment.
@@ -55,6 +56,18 @@ export interface CheckoutAccount {
   readonly phone: string | null;
   readonly prefill: Partial<FormValues>;
   readonly codNeedsCode: boolean;
+  /** Their address book, latest first (src/server/saved-addresses.ts). */
+  readonly addresses: readonly SavedAddressOption[];
+}
+
+export interface SavedAddressOption {
+  readonly id: string;
+  readonly name: string;
+  readonly line1: string;
+  readonly line2: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
 }
 
 /**
@@ -495,6 +508,37 @@ function CheckoutForm({
 
                   {active && s === "address" && (
                     <div className="grid gap-4 border-t border-rule p-4 sm:grid-cols-2">
+                      {/* A signed-in shopper's saved addresses: one tap fills the fields below, which stay editable. */}
+                      {account.addresses.length > 0 && (
+                        <fieldset className="sm:col-span-2">
+                          <legend className="label">Deliver to a saved address</legend>
+                          <div className="grid gap-2">
+                            {account.addresses.map((a) => {
+                              const chosen = sameAddress(a, { line1: form.line1, line2: form.line2, postalCode: form.postalCode }) && a.name === form.name.trim();
+                              return (
+                                <label
+                                  key={a.id}
+                                  className={`flex cursor-pointer items-start gap-3 border p-3 text-small has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ink ${chosen ? "border-strong bg-shelf" : "border-rule"}`}
+                                  style={{ borderRadius: "var(--radius-panel)" }}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="saved-address"
+                                    className="mt-1"
+                                    checked={chosen}
+                                    onChange={() => {
+                                      setForm((f) => ({ ...f, name: a.name, line1: a.line1, line2: a.line2 ?? "", city: a.city, state: a.state, postalCode: a.postalCode }));
+                                      setErrors({});
+                                    }}
+                                  />
+                                  <span>{addressSummary(a)}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-2 text-micro text-ink-faint">Or type a new one below. New addresses are saved to your account when you order.</p>
+                        </fieldset>
+                      )}
                       <div>
                         {field("postalCode", "Pincode", { inputMode: "numeric", autoComplete: "postal-code", maxLength: 6 })}
                         <p className={`mt-1 text-micro ${outsideArea ? "text-alert" : "text-ink-faint"}`} aria-live="polite" hidden={Boolean(errors.postalCode)}>

@@ -10,6 +10,10 @@ import { accountReferrals, checkoutCredit, isReferred } from "@/server/referrals
 import { ReorderButton } from "@/components/reorder-button";
 import { canReorder } from "@/lib/reorder";
 import { ReferralCodeEntry } from "@/components/account/referral-code-entry";
+import { savedAddresses } from "@/server/saved-addresses";
+import { savedBoxes } from "@/server/saved-boxes";
+import { addressSummary } from "@/lib/saved-addresses";
+import { SavedAddresses, SavedBoxes } from "./saved-lists";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your account — SooulOne", robots: { index: false } };
@@ -37,15 +41,16 @@ function formatMobile(phone: string | null) {
 export default async function AccountPage() {
   const customer = await getCustomer();
   if (!customer) redirect("/account/sign-in");
-  const [orders, details, referrals, welcome, referred] = await Promise.all([
+  const [orders, details, referrals, welcome, referred, addresses, boxes] = await Promise.all([
     accountOrders(customer.id),
     checkoutPrefill(customer),
     accountReferrals(customer.id),
     checkoutCredit(customer.id),
     isReferred(customer.id),
+    savedAddresses(customer.id),
+    savedBoxes(customer.id),
   ]);
   const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
-  const address = [details.line1, details.line2, details.city, details.postalCode].filter(Boolean).join(", ");
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 lg:py-16">
@@ -114,15 +119,24 @@ export default async function AccountPage() {
               <dd className="min-w-0 break-all">{details.email}</dd>
             </div>
           )}
-          {address && (
-            <div className="panel-row">
-              <dt>Address</dt>
-              <dd className="min-w-0 text-right">{address}</dd>
-            </div>
-          )}
         </dl>
         <p className="mt-2 text-micro text-ink-faint">Checkout fills these in for you. Change them there whenever you need to.</p>
       </section>
+
+      {boxes.length > 0 && (
+        <section className="mt-10">
+          <h2 className="font-display text-h3 font-bold">Your boxes</h2>
+          <SavedBoxes boxes={boxes.map((b) => ({ ...b, picks: [...b.picks], items: [...b.items] }))} />
+        </section>
+      )}
+
+      {addresses.length > 0 && (
+        <section className="mt-10">
+          <h2 className="font-display text-h3 font-bold">Saved addresses</h2>
+          <SavedAddresses addresses={addresses.map((a) => ({ id: a.id, summary: addressSummary(a) }))} />
+          <p className="mt-2 text-micro text-ink-faint">Saved from your orders. Checkout offers them; a new address is saved when you order.</p>
+        </section>
+      )}
 
       {referrals && (
         <section className="mt-10">

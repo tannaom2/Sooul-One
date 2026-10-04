@@ -495,3 +495,27 @@ export async function sendRefundEmail(to: string, refund: { orderNumber: string;
   ].join("\n");
   return send(to, `Refund processed for SooulOne order ${refund.orderNumber}`, html, text);
 }
+
+/**
+ * A product someone asked about is back (src/server/stock-alerts.ts). Sent
+ * once, to the address they gave on the product page, about that product only.
+ */
+export async function sendBackInStockEmail(to: string, alert: { product: string; productUrl: string; askedOn: string }): Promise<Sent> {
+  const html = wrap(
+    `${esc(alert.product)} is back`,
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">You asked us on ${esc(alert.askedOn)} to tell you when <strong>${esc(alert.product)}</strong> was back in stock. It is, and it can be ordered now.</p>
+     ${emailButton(alert.productUrl, "See it")}
+     <p style="margin:0;font-size:13px;color:#8c7f73">Stock can run out again, so we can't hold it for you.</p>`,
+    `You asked for this one email on our product page. It was a one-time alert: we won't email you about this again unless you ask.`,
+  );
+  const text = [
+    `${alert.product} is back.`,
+    "",
+    `You asked us on ${alert.askedOn} to tell you when ${alert.product} was back in stock. It is, and it can be ordered now.`,
+    "",
+    `See it: ${alert.productUrl}`,
+    "",
+    "This was a one-time alert you asked for.",
+  ].join("\n");
+  return send(to, `${alert.product} is back in stock`, html, text);
+}

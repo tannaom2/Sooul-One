@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { boxPage, cartBoxPicks } from "@/server/boxes";
 import { readSessionId } from "@/server/cart";
+import { getCustomer } from "@/server/customer-auth";
+import { savedBoxPicks } from "@/server/saved-boxes";
 import { formatPriceTag } from "@/lib/money";
 import { boxKindLabel } from "@/lib/checkout/boxes";
 import { GummyBrandTabs } from "@/components/gummy-brand-tabs";
@@ -21,14 +23,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  * Make Your Own Box: pick any N products for one price, from a Box of Gummies
  * (filtered by sub-brand, with the Gummies page's own tabs) or a True Store
  * box (filtered by category, with the True Store page's own chips).
- * `?edit=<cartBoxId>` reopens a box already in the basket with its picks.
+ * `?edit=<cartBoxId>` reopens a box already in the basket with its picks;
+ * `?saved=<savedBoxId>` opens one of the shopper's saved boxes, to swap a pick.
  */
 export default async function BoxPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ edit?: string; brand?: string; concern?: string }>;
+  searchParams: Promise<{ edit?: string; saved?: string; brand?: string; concern?: string }>;
 }) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const box = await boxPage(slug);
@@ -39,6 +42,13 @@ export default async function BoxPage({
     const sessionId = await readSessionId();
     const found = sessionId ? await cartBoxPicks(sessionId, query.edit) : null;
     if (found && found.boxId === box.id) editing = { cartBoxId: query.edit, picks: found.picks };
+  }
+
+  const customer = await getCustomer();
+  let saved: { picks: { productId: string; quantity: number }[] } | null = null;
+  if (!editing && query.saved && customer) {
+    const found = await savedBoxPicks(customer.id, query.saved);
+    if (found && found.boxId === box.id) saved = { picks: found.picks };
   }
 
   // The filter keeps the edit in progress in the address, so switching tabs never loses it.
@@ -76,6 +86,8 @@ export default async function BoxPage({
       box={box}
       kindLabel={boxKindLabel(box.kind)}
       editing={editing}
+      signedIn={Boolean(customer)}
+      saved={saved}
       tabs={tabs}
       filter={{ field: box.kind === "GUMMIES" ? "brandSlug" : "categorySlug", value: active, param }}
     />

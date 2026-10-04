@@ -75,6 +75,8 @@ export function signInBlocked(counts: Record<keyof typeof SIGN_IN_LIMITS, number
 export const PUBLIC_LIMITS = {
   /** Reviews are moderated anyway; this stops spam filling the queue. */
   reviews: { max: 10, windowSeconds: 60 * 60 },
+  /** Back-in-stock requests: each one is an email we'll send later. */
+  stockAlert: { max: 10, windowSeconds: 60 * 60 },
   /** Each order holds stock, so scripted orders could empty the shelves. */
   createOrder: { max: 20, windowSeconds: 10 * 60 },
   /** Re-quotes as the shopper types; each one reads the basket and stock. */

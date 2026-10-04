@@ -67,6 +67,7 @@ vi.mock("@/lib/order-events", () => ({ recordOrderEvent: h.recordOrderEvent }));
 vi.mock("@/lib/cache-tags", () => ({ CATALOG_TAG: "catalog", expireTag: h.expireTag, refreshTag: h.refreshTag }));
 vi.mock("@/lib/observability", () => ({ reportError: vi.fn() }));
 vi.mock("@/server/customer-auth", () => ({ getCustomer: h.getCustomer, codRequiresCode: h.codRequiresCode }));
+vi.mock("@/server/saved-addresses", () => ({ rememberAddress: vi.fn(async () => {}) }));
 vi.mock("@/server/referrals", () => ({
   checkoutCredit: vi.fn(async () => ({ credit: null, note: null })),
   onOrderPlaced: vi.fn(async () => undefined),

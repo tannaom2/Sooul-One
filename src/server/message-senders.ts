@@ -10,6 +10,7 @@ import { sendRefillReminder } from "@/server/refill-reminders";
 import { sendLicenceReminder } from "@/server/suppliers";
 import { sendRecallNotice } from "@/server/recall";
 import { sendCheckIn, sendDeliveredNotice, sendRefundNotice, sendReviewRequest } from "@/server/follow-ups";
+import { sendStockAlert } from "@/server/stock-alerts";
 
 /**
  * One sender per message kind (src/lib/messages.ts). Each looks up what it
@@ -103,5 +104,9 @@ export const SENDERS: Record<MessageKind, (payload: Payload, orderId: string | n
 
   async refund_notice(p, orderId) {
     return sendRefundNotice(p, orderId);
+  },
+
+  async back_in_stock(p) {
+    return sendStockAlert(p);
   },
 };

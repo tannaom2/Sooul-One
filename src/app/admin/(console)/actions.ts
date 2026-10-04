@@ -15,6 +15,8 @@ import { deliverNow, enqueueMessage, messageKey, processMessages } from "@/serve
 import type { Outcome } from "@/lib/messages";
 import { followUpKey } from "@/lib/follow-ups";
 import { followUpsOnDelivery } from "@/server/follow-ups";
+import { sendDueStockAlerts } from "@/server/stock-alerts";
+import { after } from "next/server";
 import { STATUS_LABELS, checkMove, isClosing, releasesStock } from "@/lib/order-lifecycle";
 import { releaseStock } from "@/server/order-stock";
 import { issueInvoiceNumber } from "@/server/invoice-number";
@@ -409,6 +411,8 @@ export async function addBatch(_prev: ActionResult, form: FormData): Promise<Act
 
   // New stock changes availability and the best-before shoppers are quoted.
   expireTag(CATALOG_TAG);
+  // Anyone who asked to hear when it's back hears now (src/server/stock-alerts.ts).
+  after(sendDueStockAlerts);
   return { ok: true, message: `Batch ${batchNumber} received.` };
 }
 

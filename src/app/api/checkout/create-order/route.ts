@@ -20,6 +20,7 @@ import { MARKETING_CONSENT_TEXT } from "@/lib/consent";
 import { reportError } from "@/lib/observability";
 import { limitPublic } from "@/server/rate-limit";
 import { codRequiresCode, getCustomer } from "@/server/customer-auth";
+import { rememberAddress } from "@/server/saved-addresses";
 import { CreditChanged, checkoutCredit, onOrderPlaced } from "@/server/referrals";
 import { codForCheckout, recordOrderRisk } from "@/server/intel";
 import { enqueueMessage, messageKey, processMessages } from "@/server/messages";
@@ -429,6 +430,11 @@ export async function POST(request: Request) {
       method: input.paymentMethod,
       totalPaise: quote.totalPaise,
     });
+    // A signed-in shopper's address book (src/server/saved-addresses.ts), so
+    // checkout can offer this address next time.
+    if (customer) {
+      await rememberAddress(customer.id, address).catch((error) => reportError("address-book", error, { orderId: order.id }));
+    }
     // An account made by confirming the number moments ago has no name yet:
     // take the one this order is addressed to.
     if (customer && !customer.name) {
