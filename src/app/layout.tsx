@@ -18,6 +18,7 @@ import { StorefrontBot } from "@/components/storefront-bot";
 import { CONSOLE_THEME_SETTINGS, CONSOLE_THEME_STORAGE_KEY, THEME_STORAGE_KEY, themeBootScript } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBar } from "@/components/top-bar";
+import { TabBar } from "@/components/tab-bar";
 import { SocialLinks } from "@/components/social-links";
 import { getOpenRoles, getSiteText, getTopBar } from "@/server/site-content";
 import { brandHost, getBrandFamily, siteUrl } from "@/server/brand-family";
@@ -101,7 +102,8 @@ async function Nav({ showThemeToggle, path }: { showThemeToggle: boolean; path: 
               SooulOne
             </Link>
           )}
-          <div className="hidden gap-5 text-small font-medium sm:flex">
+          {/* One line each: at tablet width the labels used to wrap ("The True / Store"). */}
+          <div className="hidden gap-5 text-small font-medium whitespace-nowrap sm:flex">
             <Link href="/true-store" className="hover:underline">
               The True Store
             </Link>
@@ -126,7 +128,7 @@ async function Nav({ showThemeToggle, path }: { showThemeToggle: boolean; path: 
                   <circle cx="12" cy="8" r="4" />
                   <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
                 </svg>
-                <span className="hidden sm:inline">Account</span>
+                <span className="hidden lg:inline">Account</span>
               </Link>
             )}
             <BasketButton />
@@ -361,6 +363,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Nav showThemeToggle={theme.toggleVisible} path={path} />
             <main>{children}</main>
             <Footer />
+            {/* Phones and upright tablets: Home, shops, search and basket within thumb reach. */}
+            <TabBar />
             <BasketDrawer />
             {/* The Help assistant, unless the owner has switched it off (Settings → Assistants). */}
             {(await getAssistantSettings()).enabled && <StorefrontBot />}

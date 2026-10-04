@@ -52,6 +52,8 @@ const baseProduct = z.object({
    * Supplements additionally need the claims sign-off to go live (below).
    */
   isActive: z.boolean().default(false),
+  /** Leads the home page's Bestsellers rail (src/lib/home-rail.ts), ahead of the month's best sellers. */
+  isFeatured: z.boolean().default(false),
 
   /**
    * Required for every type, not just food. The veg/non-veg mark is mandatory

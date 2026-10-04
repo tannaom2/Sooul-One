@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { getBrands, getFeatured } from "@/server/catalog";
-import { ProductGrid, Empty } from "@/components/ui";
+import { ProductCard } from "@/components/ui";
+import { getHomeRail } from "@/server/home-rail";
+import { getTopBar } from "@/server/site-content";
+import { getShippingPolicy, getStoreControls } from "@/server/store-settings";
+import { getBusinessProfile } from "@/server/business";
+import { trustFacts, type TrustFact } from "@/lib/trust-strip";
 import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
@@ -11,75 +15,131 @@ const GUMMIES = [
   { slug: "man-rituals", name: "Man Rituals", line: "Vitality, multivitamin and hair support for men.", accent: "var(--color-manrituals)" },
 ];
 
+/** An example label, the hero's picture: every product page shows its own declared figures. */
+const PANEL: [string, string][] = [
+  ["Energy", "123 kcal"],
+  ["Protein", "5.7 g"],
+  ["Total sugars", "0.9 g"],
+  ["Total fat", "3.6 g"],
+  ["Dietary fibre", "4.5 g"],
+  ["Sodium", "144 mg"],
+];
+
+function NutritionPanel({ className = "" }: { className?: string }) {
+  return (
+    <div className={`panel self-start ${className}`}>
+      <div className="panel-head flex items-center justify-between">
+        <span>Nutrition per 30 g</span>
+        <span className="mark mark-veg" role="img" aria-label="Vegetarian" />
+      </div>
+      <dl>
+        {PANEL.map(([k, v]) => (
+          <div className="panel-row" key={k}>
+            <dt className={k.startsWith("of which") ? "pl-4 text-ink-soft" : ""}>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="px-3.5 py-2.5 text-micro text-ink-faint">An example panel. Every product shows its own declared figures.</p>
+    </div>
+  );
+}
+
 export default async function Home() {
   // The catalogue may be empty before the owner has added anything. Failing
   // softly here matters: a database that is merely unseeded should render the
   // site, not a stack trace.
-  let featured: Awaited<ReturnType<typeof getFeatured>> = [];
-  let brandCount = 0;
+  let rail: Awaited<ReturnType<typeof getHomeRail>> = [];
+  let trust: TrustFact[] = [];
   try {
-    featured = await getFeatured();
-    brandCount = (await getBrands()).length;
+    const [products, messages, controls, shipping, business] = await Promise.all([getHomeRail(), getTopBar(), getStoreControls(), getShippingPolicy(), getBusinessProfile()]);
+    rail = products;
+    // Facts the store keeps, less any the top bar already says (src/lib/trust-strip.ts).
+    trust = trustFacts(
+      { fssaiLicence: business.fssaiLicence, codEnabled: controls.codEnabled, freeDeliveryAbove: shipping.freeAbovePaise > 0 && shipping.flatRatePaise > 0 ? Math.round(shipping.freeAbovePaise / 100) : null },
+      messages.map((m) => m.text),
+    );
   } catch (error) {
     reportError("home", error);
-    featured = [];
   }
 
   return (
     <>
       {/* HERO — the most characteristic thing in this brief is the label
-          itself, so the hero is a label, not a lifestyle photograph. */}
-      <section className="border-b border-rule">
-        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
-          <div>
-            <h1 className="max-w-[16ch] text-hero font-extrabold">
+          itself, so the hero is a label, not a lifestyle photograph. Kept
+          short, so products reach the first screen on every size. */}
+      <section>
+        <div className="mx-auto grid max-w-6xl gap-8 px-5 pt-8 pb-6 sm:grid-cols-[1.4fr_0.6fr] sm:pt-10 lg:grid-cols-[1.25fr_0.75fr] lg:gap-14 lg:pt-14 lg:pb-10">
+          <div className="self-center">
+            <h1 className="max-w-[16ch] text-[2.25rem] leading-[1.05] font-extrabold sm:text-hero">
               Read the label first. That&rsquo;s the point.
             </h1>
-            <p className="mt-5 max-w-[52ch] text-lead text-ink-soft">
-              Namkeen, sweets and snacks from The True Store, and daily gummies from Woman Axis,
-              Kids Vault and Man Rituals. Every nutrient figure, allergen and dosage is on the
-              product page before you add anything to your basket.
+            <p className="mt-3 max-w-[52ch] text-base text-ink-soft sm:mt-4 sm:text-lead">
+              Snacks and daily gummies with every nutrient, allergen and dose on the page before you add anything to your basket.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/true-store" className="btn btn-solid">
-                Shop The True Store
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+              <Link href="/true-store" className="btn btn-solid justify-center">
+                <span className="sm:hidden">The True Store</span>
+                <span className="hidden sm:inline">Shop The True Store</span>
               </Link>
-              <Link href="/gummies" className="btn btn-outline">
-                Shop gummies
+              <Link href="/gummies" className="btn btn-outline justify-center">
+                <span className="sm:hidden">Gummies</span>
+                <span className="hidden sm:inline">Shop gummies</span>
               </Link>
             </div>
           </div>
-
-          {/* A real statutory-style panel as the hero visual. */}
-          <div className="panel self-start">
-            <div className="panel-head flex items-center justify-between">
-              <span>Nutrition per 30 g</span>
-              <span className="mark mark-veg" role="img" aria-label="Vegetarian" />
-            </div>
-            <dl>
-              {[
-                ["Energy", "123 kcal"],
-                ["Protein", "5.7 g"],
-                ["Carbohydrate", "15.6 g"],
-                ["of which sugars", "0.9 g"],
-                ["Total fat", "3.6 g"],
-                ["of which saturates", "0.6 g"],
-                ["Trans fat", "0 g"],
-                ["Dietary fibre", "4.5 g"],
-                ["Sodium", "144 mg"],
-              ].map(([k, v]) => (
-                <div className="panel-row" key={k}>
-                  <dt className={k.startsWith("of which") ? "pl-4 text-ink-soft" : ""}>{k}</dt>
-                  <dd>{v}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="px-3.5 py-2.5 text-micro text-ink-faint">
-              Illustrative panel. Live products show their own declared figures.
-            </p>
-          </div>
+          {/* Beside the headline from tablet up; further down on a phone. */}
+          <NutritionPanel className="hidden text-small sm:block" />
         </div>
       </section>
+
+      {/* TRUST — facts from the store's own settings, spread edge to edge. */}
+      {trust.length > 0 && (
+        <section aria-label="Why you can trust what you order" className="border-y border-rule bg-shelf">
+          <ul className="mx-auto grid max-w-6xl grid-cols-2 gap-x-4 gap-y-1.5 px-5 py-2.5 text-small font-semibold sm:flex sm:justify-between">
+            {trust.map((f) => (
+              <li key={f.id} className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-veg)" strokeWidth="2.5" aria-hidden="true" className="shrink-0">
+                  <path d="M5 12l5 5L19 7" />
+                </svg>
+                {/* Phones get the short wording, so each fact fits its half of the row. */}
+                {f.href ? (
+                  <Link href={f.href} className="underline-offset-2 hover:underline">
+                    <span className="sm:hidden">{f.short ?? f.text}</span>
+                    <span className="hidden sm:inline">{f.text}</span>
+                  </Link>
+                ) : (
+                  <>
+                    <span className="sm:hidden">{f.short ?? f.text}</span>
+                    <span className="hidden sm:inline">{f.text}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* BESTSELLERS — Featured picks, then the month's best sellers by units (src/lib/home-rail.ts). */}
+      {rail.length > 0 && (
+        <section className="mx-auto max-w-6xl pt-8 pl-5 lg:pr-5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pr-5 lg:pr-0">
+            <h2 className="text-h2 font-extrabold">Bestsellers</h2>
+            <p className="text-small text-ink-soft">What people ordered most this month</p>
+          </div>
+          <ul className="mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto pr-5 pb-2 lg:pr-0" aria-label="Bestsellers">
+            {rail.map((p) => (
+              <li key={p.id} className="flex w-[44%] shrink-0 snap-start sm:w-[30%] lg:w-[calc((100%-4rem)/5)]">
+                <ProductCard product={p} compact />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="mx-auto max-w-6xl px-5 pt-8 sm:hidden">
+        <NutritionPanel className="text-small" />
+      </div>
 
       {/* BRANDS */}
       <section className="mx-auto max-w-6xl px-5 py-16">
@@ -123,23 +183,6 @@ export default async function Home() {
             ))}
           </div>
         </div>
-      </section>
-
-      {/* FEATURED */}
-      <section className="mx-auto max-w-6xl px-5 pb-16">
-        <h2 className="mb-6 text-h2 font-extrabold">Picked this week</h2>
-        {featured.length > 0 ? (
-          <ProductGrid products={featured} />
-        ) : (
-          <Empty
-            title="No products yet"
-            detail={
-              brandCount > 0
-                ? "Brands and categories are set up. Add your first product from the owner console to see it here."
-                : "Run the seed script to create your brands and categories, then add products from the owner console."
-            }
-          />
-        )}
       </section>
     </>
   );

@@ -573,6 +573,15 @@ export function ProductForm({
           {err("isActive") && <Err>{err("isActive")}</Err>}
         </span>
       </label>
+      <label className="panel flex items-start gap-3 p-4 text-small">
+        <input type="checkbox" name="isFeatured" className="mt-1" defaultChecked={product?.isFeatured ?? false} />
+        <span>
+          <span className="font-semibold">Featured on the home page</span>
+          <span className="block text-ink-soft">
+            Leads the home page&apos;s Bestsellers row, ahead of what sold most this month. Only shows while it&apos;s live and in stock.
+          </span>
+        </span>
+      </label>
 
       {/* Stays in view while scrolling, so saving never needs a trip to the bottom. */}
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-4 border-t border-rule bg-surface px-4 py-3">

@@ -108,9 +108,12 @@ export function ProductCard({
   mode = "shop",
   action,
   selected = false,
+  compact = false,
 }: {
   product: ProductSummary;
   mode?: "shop" | "box";
+  /** A narrower card for a rail (the home page's bestsellers): no description line; label facts, allergens and price stay. */
+  compact?: boolean;
   /** Rendered under the card, outside its link (a link can't hold a button). */
   action?: React.ReactNode;
   /** Highlighted: e.g. already in the box being built. */
@@ -122,7 +125,7 @@ export function ProductCard({
 
   return (
     <div
-      className={`group flex flex-col gap-3 border bg-surface p-4 transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-strong hover:shadow-card ${selected ? "border-veg bg-shelf" : "border-rule"}`}
+      className={`group flex w-full flex-col gap-3 border bg-surface ${compact ? "p-3" : "p-4"} transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-strong hover:shadow-card ${selected ? "border-veg bg-shelf" : "border-rule"}`}
       style={{ borderRadius: "var(--radius-panel)" }}
     >
     <Link href={`/product/${product.slug}`} className="relative flex flex-1 flex-col gap-3">
@@ -175,7 +178,7 @@ export function ProductCard({
         </p>
       )}
 
-      <p className="text-small text-ink-soft">{product.shortDescription}</p>
+      {!compact && <p className="text-small text-ink-soft">{product.shortDescription}</p>}
 
       {/* Allergens sit on the card, not behind a click. The brief's research
           says label-conscious shoppers are the majority here, so hiding this

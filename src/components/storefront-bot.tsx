@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { showsTabBar } from "@/lib/tab-bar";
 import { formatDate } from "@/lib/format";
 import { formatPriceTag } from "@/lib/money";
 import type { BotBlock, BotReply, BotState, Intent, QuickReply } from "@/lib/assistant";
@@ -188,7 +189,8 @@ export function StorefrontBot() {
   // Not on checkout (nothing should compete with paying), and not in the console.
   if (path.startsWith("/checkout") || path.startsWith("/admin")) return null;
   // Product and basket pages have a buy bar along the bottom on phones.
-  const lifted = path.startsWith("/product/") || path === "/cart";
+  // Above whatever sits at the bottom: a product's buy bar, the basket's bar, or the tab bar (src/lib/tab-bar.ts).
+  const lifted = path.startsWith("/product/") || path === "/cart" || showsTabBar(path);
   const prompt = PROMPT[expect];
 
   return (

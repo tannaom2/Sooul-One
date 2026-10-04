@@ -6,7 +6,7 @@ import type { TopBarMessage } from "@/lib/site-content";
 
 /**
  * The storefront's top bar (Settings → Top bar). Wide screens show every
- * message in one line; narrow ones show one at a time, changing every few
+ * message in one line, spread edge to edge; narrow ones show one at a time, changing every few
  * seconds. The rotation stops while the pointer or keyboard focus is on it,
  * has a pause button (WCAG 2.2.2), and never starts for people who have
  * asked their device for reduced motion; they get arrows instead. Screen
@@ -39,13 +39,10 @@ export function TopBar({ messages }: { messages: TopBarMessage[] }) {
 
   return (
     <section aria-label="Store announcements" className="bg-inverse text-micro font-semibold text-on-inverse">
-      {/* Wide screens: all of them. */}
-      <ul className="mx-auto hidden max-w-6xl items-center justify-center gap-x-3 px-5 py-1.5 lg:flex">
-        {messages.map((m, i) => (
-          <li key={m.id} className="flex items-center gap-3">
-            {i > 0 && <span aria-hidden="true">·</span>}
-            {text(m)}
-          </li>
+      {/* Wide screens: all of them, spread edge to edge across the page's width. */}
+      <ul className={`mx-auto hidden max-w-6xl items-center gap-x-6 px-5 py-1.5 lg:flex ${count > 1 ? "justify-between" : "justify-center"}`}>
+        {messages.map((m) => (
+          <li key={m.id}>{text(m)}</li>
         ))}
       </ul>
 
