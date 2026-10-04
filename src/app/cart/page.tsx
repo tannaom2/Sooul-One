@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { basketBoxes, loadBasketKits, priceNoteFor, quoteCart, readSessionId } from "@/server/cart";
 import { Empty, PageHeader, VegMark } from "@/components/ui";
 import { CartQuantity } from "@/components/cart-quantity";
@@ -54,6 +55,13 @@ export default async function CartPage() {
   const boxes = basketBoxes(result);
   const boxNeedsAttention = boxes.some((b) => b.issue);
   const linesBlocked = quote.lines.some((l) => l.status !== "OK");
+  // A kit product's extra units first, next to the kits; units inside a kit are shown in the kit.
+  const shownLines = quote.lines
+    .filter((l) => !l.boxId && l.quantityRequested - (kitUnits.get(l.productId) ?? 0) > 0)
+    .sort((a, b) => Number(kitUnits.has(b.productId)) - Number(kitUnits.has(a.productId)));
+  // Labels only when there's more than one kind of thing to tell apart.
+  const labelled = [boxes.length, kits.length, shownLines.length].filter((n) => n > 0).length > 1;
+  const label = (text: string) => labelled && <h2 className="text-micro font-semibold tracking-wide text-ink-soft uppercase">{text}</h2>;
 
   return (
     <>
@@ -62,25 +70,34 @@ export default async function CartPage() {
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 lg:grid-cols-[1fr_340px]">
         <div>
           {boxes.length > 0 && (
-            <div className="mb-3 grid gap-3">
-              {boxes.map((box) => (
-                <BoxBlock key={box.cartBoxId} box={box} refreshPage />
-              ))}
-            </div>
+            <section className="mb-6">
+              {label(boxes.length === 1 ? "Box" : "Boxes")}
+              <ul>
+                {boxes.map((box) => (
+                  <li key={box.cartBoxId} className="shelf-row py-5">
+                    <BoxBlock box={box} refreshPage tile={88} />
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
           {kits.length > 0 && (
-            <div className="mb-2 grid gap-3">
-              {kits.map((kit) => (
-                <KitBlock key={kit.bundleId} kit={kit} refreshPage />
-              ))}
-            </div>
+            <section className="mb-6">
+              {label(kits.length === 1 ? "Combo" : "Combos")}
+              <ul>
+                {kits.map((kit) => (
+                  <li key={kit.bundleId} className="shelf-row py-5">
+                    <KitBlock kit={kit} refreshPage tile={88} />
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
+          {label("Items")}
           <ul>
-            {/* A kit product's extra units first, next to the kits. */}
-            {quote.lines.filter((l) => !l.boxId).sort((a, b) => Number(kitUnits.has(b.productId)) - Number(kitUnits.has(a.productId))).map((line) => {
+            {shownLines.map((line) => {
               // Units inside a kit are shown in the kit above; this line shows the rest.
               const inKits = kitUnits.get(line.productId) ?? 0;
-              if (line.quantityRequested - inKits <= 0) return null;
               const extraAvailable = Math.max(0, line.quantityAvailable - inKits);
               const unitPaise = line.quantityAvailable > 0 ? line.grossPaise / line.quantityAvailable : 0;
               const listUnitPaise = line.quantityAvailable > 0 ? line.listGrossPaise / line.quantityAvailable : 0;
@@ -90,7 +107,12 @@ export default async function CartPage() {
 
               return (
                 <li key={line.productId} className="shelf-row flex gap-4 py-5">
-                  <div className="flex-1">
+                  {item?.product?.images?.[0]?.url ? (
+                    <Image src={item.product.images[0].url} alt="" width={88} height={88} sizes="88px" className="h-[88px] w-[88px] shrink-0 self-start border border-rule object-cover" />
+                  ) : (
+                    <div className="h-[88px] w-[88px] shrink-0 bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} aria-hidden />
+                  )}
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <Link
@@ -109,11 +131,12 @@ export default async function CartPage() {
 
                     <div className="mt-3 flex flex-wrap items-center gap-4">
                       <CartQuantity itemId={item?.id ?? ""} quantity={line.quantityRequested} inKits={inKits} name={line.name} />
-                      <span className="tabular text-small">
+                      {/* At the right edge, in line with a box's or combo's price above. */}
+                      <span className="tabular ml-auto text-right text-small">
+                        <span className="block font-semibold">{formatPriceTag(Math.round(unitPaise * extraAvailable))}</span>
                         {line.productDiscountPaise > 0 && (
-                          <s className="mr-2 text-ink-faint">{formatPriceTag(Math.round(listUnitPaise * extraAvailable))}</s>
+                          <s className="text-micro text-ink-faint">{formatPriceTag(Math.round(listUnitPaise * extraAvailable))}</s>
                         )}
-                        {formatPriceTag(Math.round(unitPaise * extraAvailable))}
                       </span>
                     </div>
 

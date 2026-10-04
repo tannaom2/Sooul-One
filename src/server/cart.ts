@@ -190,8 +190,9 @@ export async function updateQuantities(sessionId: string, changes: readonly { it
 }
 
 /** The quote's combos as basket kits, with each product's basket line attached (no suggestions). */
-function basketKits(quote: Quote, cartItems: readonly { id: string; productId: string }[]): BasketKit[] {
+function basketKits(quote: Quote, cartItems: readonly { id: string; productId: string; product?: { images?: readonly { url: string }[] } | null }[]): BasketKit[] {
   const itemIdByProduct = new Map(cartItems.map((i) => [i.productId, i.id]));
+  const imageByProduct = new Map(cartItems.map((i) => [i.productId, i.product?.images?.[0]?.url ?? null]));
   const quantityByProduct = new Map(quote.lines.map((l) => [l.productId, l.quantityRequested]));
   return groupKits(quote).map((kit) => ({
     ...kit,
@@ -199,6 +200,7 @@ function basketKits(quote: Quote, cartItems: readonly { id: string; productId: s
       ...m,
       itemId: itemIdByProduct.get(m.productId) ?? "",
       quantity: quantityByProduct.get(m.productId) ?? 0,
+      imageUrl: imageByProduct.get(m.productId) ?? null,
     })),
     growWith: [],
     growLabel: null,
@@ -556,7 +558,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
     settled.length > 0
       ? await db.product.findMany({
           where: { id: { in: [...new Set(settled.flatMap((n) => n.suggestProductIds))] }, ...SELLABLE_PRODUCT_WHERE, retailOnly: false },
-          include: { batches: { where: IN_STOCK_BATCH_WHERE } },
+          include: { batches: { where: IN_STOCK_BATCH_WHERE }, images: { orderBy: { sortOrder: "asc" }, take: 1 } },
         })
       : [];
   const arrives = estimateDeliveryDate(new Date(), SLOWEST_SERVED_ZONE);
@@ -579,6 +581,7 @@ export async function getBasketSnapshot(sessionId: string): Promise<BasketSnapsh
         productId: p.id,
         slug: p.slug,
         name: p.name,
+        imageUrl: p.images[0]?.url ?? null,
         pricePaise: resolveUnitPrice(decimalToPaise(p.basePrice), {
           active: Boolean(p.discountActive),
           percent: p.discountPercent == null ? null : Number(p.discountPercent.toString()),
@@ -634,6 +637,7 @@ export function basketBoxes(result: Pick<CartQuote, "quote" | "cartBoxes">): Bas
           slug: i.product.slug,
           name: i.product.name,
           brandName: i.product.brand?.name ?? "",
+          imageUrl: i.product.images?.[0]?.url ?? null,
           quantity: i.quantity,
           message: line && line.status !== "OK" ? (line.customerMessage ?? null) : null,
         };

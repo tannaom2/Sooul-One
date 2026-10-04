@@ -30,7 +30,7 @@ export interface BasketLine {
 
 /** A combo in the basket, with what the controls need to change it as one unit. */
 export interface BasketKit extends Omit<Kit, "members"> {
-  readonly members: readonly (Kit["members"][number] & { itemId: string; quantity: number })[];
+  readonly members: readonly (Kit["members"][number] & { itemId: string; quantity: number; imageUrl: string | null })[];
   /** In-stock products that would grow this kit (a step-up tier, or one more at its rate), with what each adds. */
   readonly growWith: readonly { productId: string; name: string; pricePaise: number; savingPaise: number }[];
   /** The line above those suggestions, e.g. "Add a third product: your kit becomes 15% off". */
@@ -56,7 +56,7 @@ export interface BasketBox {
   readonly savingPaise: number;
   /** Why the box isn't complete (and its price doesn't apply), or null. */
   readonly issue: string | null;
-  readonly items: readonly { productId: string; slug: string; name: string; brandName: string; quantity: number; message: string | null }[];
+  readonly items: readonly { productId: string; slug: string; name: string; brandName: string; imageUrl: string | null; quantity: number; message: string | null }[];
 }
 
 export interface BasketOffer {
@@ -64,7 +64,7 @@ export interface BasketOffer {
   readonly name: string;
   readonly missing: number;
   readonly discountLabel: string;
-  readonly suggestions: readonly { productId: string; slug: string; name: string; pricePaise: number }[];
+  readonly suggestions: readonly { productId: string; slug: string; name: string; imageUrl: string | null; pricePaise: number }[];
 }
 
 export interface BasketSnapshot {

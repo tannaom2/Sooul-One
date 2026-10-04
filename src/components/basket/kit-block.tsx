@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatPriceTag } from "@/lib/money";
 import { MAX_LINE_QUANTITY, type BasketKit } from "@/lib/basket-types";
+import { ComboPicture } from "@/components/box-carton";
 import { useCart } from "./cart-provider";
 import { QuantityStepper } from "./quantity-stepper";
 
@@ -18,8 +19,12 @@ import { QuantityStepper } from "./quantity-stepper";
  * When mix-and-match kits hold different products, "− kit" removes the last
  * kit formed (one of each of its products) and "+ kit" adds another like it,
  * so the count always moves by exactly one.
+ *
+ * Shaped like an item row, with two of its packs banded together where the
+ * photo goes (a box the shopper filled is a carton instead). `tile` is that
+ * picture's size: 64 in the drawer, 88 on the basket page.
  */
-export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refreshPage?: boolean }) {
+export function KitBlock({ kit, refreshPage = false, tile = 64 }: { kit: BasketKit; refreshPage?: boolean; tile?: number }) {
   const { setQuantities, add, pending: cartPending } = useCart();
   const [refreshing, startTransition] = useTransition();
   const router = useRouter();
@@ -63,82 +68,87 @@ export function KitBlock({ kit, refreshPage = false }: { kit: BasketKit; refresh
   const kitWord = kit.sets === 1 ? "kit" : "kits";
 
   return (
-    <div className="border border-rule bg-shelf p-3.5" style={{ borderRadius: "var(--radius-panel)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-micro font-semibold tracking-wide text-veg uppercase">Combo</p>
-          <p className="font-semibold">{kit.name}</p>
+    <div className={`flex ${tile >= 80 ? "gap-4" : "gap-3"}`}>
+      <ComboPicture pictures={kit.members.map((m) => m.imageUrl)} size={tile} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className={`font-semibold ${tile >= 80 ? "" : "text-small"}`}>{kit.name}</p>
+            <p className="text-micro text-ink-faint">
+              Combo · {kit.sets > 1 ? `${kit.sets} kits` : `${kit.members.length} packs`}
+            </p>
+          </div>
+          <p className="tabular shrink-0 text-right text-small">
+            <span className="block font-semibold">{formatPriceTag(kit.kitPaise)}</span>
+            <s className="text-micro text-ink-faint">{formatPriceTag(kit.salePaise)}</s>
+          </p>
         </div>
-        <p className="tabular shrink-0 text-right text-small">
-          <span className="block font-semibold">{formatPriceTag(kit.kitPaise)}</span>
-          <s className="text-micro text-ink-faint">{formatPriceTag(kit.salePaise)}</s>
-        </p>
-      </div>
 
-      <ul className="mt-2 grid text-small text-ink-soft">
-        {kit.members.map((m) => (
-          <li key={m.productId} className="flex items-center justify-between gap-3">
-            <span className="min-w-0">{m.name}</span>
-            <span className="flex shrink-0 items-center gap-1">
-              <span className="tabular text-ink-faint">{kit.uniform ? (kit.sets > 1 ? "1 per kit" : "1") : `× ${m.units}`}</span>
-              <button
-                type="button"
-                onClick={() => removeProduct(m)}
-                disabled={pending}
-                aria-label={`Take ${m.name} out of the ${kitWord}`}
-                title="Take out of the kit"
-                className="grid h-8 w-8 place-items-center text-ink-faint hover:text-alert"
-              >
-                ×
-              </button>
-            </span>
-          </li>
-        ))}
-      </ul>
+        <ul className="mt-1 grid text-micro text-ink-soft">
+          {kit.members.map((m) => (
+            <li key={m.productId} className="flex items-center justify-between gap-3">
+              <span className="min-w-0">{m.name}</span>
+              <span className="flex shrink-0 items-center gap-1">
+                <span className="tabular text-ink-faint">{kit.uniform ? (kit.sets > 1 ? "1 per kit" : "1") : `× ${m.units}`}</span>
+                <button
+                  type="button"
+                  onClick={() => removeProduct(m)}
+                  disabled={pending}
+                  aria-label={`Take ${m.name} out of the ${kitWord}`}
+                  title="Take out of the kit"
+                  className="grid h-8 w-8 place-items-center text-ink-faint hover:text-alert"
+                >
+                  ×
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <span className="flex items-center gap-3">
-          <QuantityStepper value={kit.sets} min={0} max={maxKits} label={kit.name} onChange={setKits} disabled={pending} />
-          <span className="text-small text-ink-soft">{kitWord}</span>
-          <button type="button" onClick={removeKits} disabled={pending} className="text-micro underline hover:text-alert">
-            Remove {kitWord}
-          </button>
-        </span>
-        <span className="text-small font-semibold text-veg">You save {formatPriceTag(kit.savingPaise)}</span>
-      </div>
-
-      {showGrow && (
-        <div className="mt-3 border-t border-rule pt-3 text-small">
-          <p className="font-semibold">{kit.growLabel}</p>
-          <ul className="mt-1 grid gap-1.5">
-            {kit.growWith.map((g) => (
-              <li key={g.productId} className="flex items-center justify-between gap-3">
-                <span className="min-w-0">
-                  {g.name} <span className="tabular text-ink-faint">{formatPriceTag(g.pricePaise)}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-micro font-semibold text-veg">save {formatPriceTag(g.savingPaise)} more</span>
-                  <button type="button" onClick={() => addToKit(g.productId)} disabled={pending} className="btn btn-outline px-3 py-1 text-micro">
-                    Add
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {showComplete && (
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-rule pt-3 text-small">
-          <span>
-            Add {kit.completeWith.map((c) => c.name).join(" + ")} to make another kit and save{" "}
-            {formatPriceTag(kit.nextKitSavingPaise)}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <span className="flex items-center gap-3">
+            <QuantityStepper value={kit.sets} min={0} max={maxKits} label={kit.name} onChange={setKits} disabled={pending} />
+            <span className="text-small text-ink-soft">{kitWord}</span>
+            <button type="button" onClick={removeKits} disabled={pending} className="text-micro underline hover:text-alert">
+              Remove {kitWord}
+            </button>
           </span>
-          <button type="button" onClick={completeKit} disabled={pending} className="btn btn-outline shrink-0 px-3 py-1 text-micro">
-            Add
-          </button>
+          <span className="text-micro font-semibold text-veg">Save {formatPriceTag(kit.savingPaise)}</span>
         </div>
-      )}
+
+        {showGrow && (
+          <div className="mt-3 border-t border-rule pt-3 text-small">
+            <p className="font-semibold">{kit.growLabel}</p>
+            <ul className="mt-1 grid gap-1.5">
+              {kit.growWith.map((g) => (
+                <li key={g.productId} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    {g.name} <span className="tabular text-ink-faint">{formatPriceTag(g.pricePaise)}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="text-micro font-semibold text-veg">save {formatPriceTag(g.savingPaise)} more</span>
+                    <button type="button" onClick={() => addToKit(g.productId)} disabled={pending} className="btn btn-outline px-3 py-1 text-micro">
+                      Add
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {showComplete && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-rule pt-3 text-small">
+            <span>
+              Add {kit.completeWith.map((c) => c.name).join(" + ")} to make another kit and save{" "}
+              {formatPriceTag(kit.nextKitSavingPaise)}
+            </span>
+            <button type="button" onClick={completeKit} disabled={pending} className="btn btn-outline shrink-0 px-3 py-1 text-micro">
+              Add
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

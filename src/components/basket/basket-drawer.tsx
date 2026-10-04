@@ -61,6 +61,16 @@ export function BasketDrawer() {
   const empty = lines.length === 0 && boxes.length === 0;
   const boxNeedsAttention = boxes.some((b) => b.issue);
   const loading = isOpen && !basket;
+  const kits = basket?.kits ?? [];
+  // Units inside a kit are shown in the kit; a line shows only the rest, and a
+  // kit product's extra units come first, next to the kits.
+  const itemRows = [...lines]
+    .sort((a, b) => Number(b.kitUnits > 0) - Number(a.kitUnits > 0))
+    .map((line) => ({ line, extra: line.quantity - line.kitUnits, extraAvailable: line.quantityAvailable - line.kitUnits }))
+    .filter(({ extra }) => extra > 0);
+  // Labels only when there's more than one kind of thing to tell apart.
+  const labelled = [boxes.length, kits.length, itemRows.length].filter((n) => n > 0).length > 1;
+  const label = (text: string) => labelled && <h3 className="text-micro font-semibold tracking-wide text-ink-soft uppercase">{text}</h3>;
 
   return (
     <div className={`fixed inset-0 z-[60] ${isOpen ? "" : "pointer-events-none"}`} aria-hidden={!isOpen} inert={!isOpen}>
@@ -127,21 +137,96 @@ export function BasketDrawer() {
                 </div>
               )}
 
+              {boxes.length > 0 && (
+                <section className="mb-5">
+                  {label(boxes.length === 1 ? "Box" : "Boxes")}
+                  <ul>
+                    {boxes.map((box) => (
+                      <li key={box.cartBoxId} className="border-b border-rule py-4">
+                        <BoxBlock box={box} onNavigate={closeBasket} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {kits.length > 0 && (
+                <section className="mb-5">
+                  {label(kits.length === 1 ? "Combo" : "Combos")}
+                  <ul>
+                    {kits.map((kit) => (
+                      <li key={kit.bundleId} className="border-b border-rule py-4">
+                        <KitBlock kit={kit} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {itemRows.length > 0 && (
+                <section>
+                  {label("Items")}
+                  <ul>
+                    {itemRows.map(({ line, extra, extraAvailable }) => (
+                      <li key={line.itemId} className="flex gap-3 border-b border-rule py-4">
+                        {line.imageUrl ? (
+                          <Image src={line.imageUrl} alt="" width={64} height={64} sizes="64px" className="h-16 w-16 shrink-0 self-start border border-rule object-cover" />
+                        ) : (
+                          <div className="h-16 w-16 shrink-0 bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} aria-hidden />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <Link href={`/product/${line.slug}`} onClick={closeBasket} className="block text-small font-semibold hover:underline">
+                                {line.name}
+                              </Link>
+                              <p className="text-micro text-ink-faint">
+                                {line.brandName}
+                                {line.kitUnits > 0 && " · extra, at the usual price"}
+                              </p>
+                            </div>
+                            <p className="tabular shrink-0 text-right text-small">
+                              <span className="block font-semibold">{formatPriceTag(line.unitPaise * Math.max(0, extraAvailable))}</span>
+                              {line.listUnitPaise > line.unitPaise && (
+                                <s className="text-micro text-ink-faint">{formatPriceTag(line.listUnitPaise * Math.max(0, extraAvailable))}</s>
+                              )}
+                            </p>
+                          </div>
+                          <div className="mt-2">
+                            <QuantityStepper value={extra} min={0} max={MAX_LINE_QUANTITY - line.kitUnits} label={line.name} onChange={(q) => setQuantity(line.itemId, line.kitUnits + q)} />
+                          </div>
+                          {line.message && <p className="mt-2 border-l-4 border-alert bg-shelf px-2 py-1 text-micro">{line.message}</p>}
+                          {line.priceNote && <p className="mt-2 border-l-4 border-rule bg-shelf px-2 py-1 text-micro">{line.priceNote}</p>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* After the shopper's own things: one more, and an offer applies. */}
               {basket?.nextOffer && (
-                <div className="mb-5 border border-rule bg-shelf p-3" style={{ borderRadius: "var(--radius-panel)" }}>
-                  <p className="text-small font-semibold">
-                    Add {basket.nextOffer.missing} more to get {basket.nextOffer.discountLabel}
-                  </p>
-                  <p className="text-micro text-ink-soft">{basket.nextOffer.name}</p>
-                  <ul className="mt-2 grid gap-2">
+                <div className="mt-5 border border-rule bg-shelf p-3" style={{ borderRadius: "var(--radius-panel)" }}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="text-small font-semibold">
+                      Add {basket.nextOffer.missing} more, get {basket.nextOffer.discountLabel}
+                    </p>
+                    <p className="min-w-0 truncate text-micro text-ink-soft">{basket.nextOffer.name}</p>
+                  </div>
+                  <ul className="mt-2.5 grid grid-cols-3 gap-2">
                     {basket.nextOffer.suggestions.map((s) => (
-                      <li key={s.productId} className="flex items-center justify-between gap-2 text-small">
-                        <Link href={`/product/${s.slug}`} onClick={closeBasket} className="min-w-0 truncate hover:underline">
-                          {s.name}
+                      <li key={s.productId} className="flex flex-col gap-1.5 border border-rule bg-surface p-1.5" style={{ borderRadius: "var(--radius-panel)" }}>
+                        <Link href={`/product/${s.slug}`} onClick={closeBasket} className="flex flex-col gap-1.5 hover:underline">
+                          {s.imageUrl ? (
+                            <Image src={s.imageUrl} alt="" width={240} height={128} sizes="120px" className="h-16 w-full object-cover" />
+                          ) : (
+                            <span className="block h-16 bg-shelf" aria-hidden />
+                          )}
+                          <span className="line-clamp-2 min-h-[2.5em] text-micro leading-tight font-semibold">{s.name}</span>
                         </Link>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="tabular">{formatPriceTag(s.pricePaise)}</span>
-                          <button type="button" onClick={() => add(s.productId, 1)} disabled={pending} className="btn btn-outline px-3 py-1 text-micro">
+                        <span className="mt-auto flex items-center justify-between gap-1">
+                          <span className="tabular text-micro text-ink-soft">{formatPriceTag(s.pricePaise)}</span>
+                          <button type="button" onClick={() => add(s.productId, 1)} disabled={pending} className="btn btn-outline px-2.5 py-1 text-micro" aria-label={`Add ${s.name}`}>
                             Add
                           </button>
                         </span>
@@ -150,60 +235,6 @@ export function BasketDrawer() {
                   </ul>
                 </div>
               )}
-
-              {boxes.length > 0 && (
-                <div className="mb-4 grid gap-3">
-                  {boxes.map((box) => (
-                    <BoxBlock key={box.cartBoxId} box={box} onNavigate={closeBasket} />
-                  ))}
-                </div>
-              )}
-
-              {basket && basket.kits.length > 0 && (
-                <div className="mb-4 grid gap-3">
-                  {basket.kits.map((kit) => (
-                    <KitBlock key={kit.bundleId} kit={kit} />
-                  ))}
-                </div>
-              )}
-
-              <ul className="grid gap-4">
-                {/* Units inside a kit are shown in the kit; a line shows only the rest,
-                    and a kit product's extra units come first, next to the kits. */}
-                {[...lines]
-                  .sort((a, b) => Number(b.kitUnits > 0) - Number(a.kitUnits > 0))
-                  .map((line) => ({ line, extra: line.quantity - line.kitUnits, extraAvailable: line.quantityAvailable - line.kitUnits }))
-                  .filter(({ extra }) => extra > 0)
-                  .map(({ line, extra, extraAvailable }) => (
-                  <li key={line.itemId} className="flex gap-3 border-b border-rule pb-4 last:border-b-0">
-                    {line.imageUrl ? (
-                      <Image src={line.imageUrl} alt="" width={64} height={64} sizes="64px" className="h-16 w-16 shrink-0 border border-rule object-cover" />
-                    ) : (
-                      <div className="h-16 w-16 shrink-0 bg-shelf" style={{ borderRadius: "var(--radius-panel)" }} aria-hidden />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <Link href={`/product/${line.slug}`} onClick={closeBasket} className="block text-small font-semibold hover:underline">
-                        {line.name}
-                      </Link>
-                      <p className="text-micro text-ink-faint">
-                        {line.brandName}
-                        {line.kitUnits > 0 && " · extra, at the usual price"}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <QuantityStepper value={extra} min={0} max={MAX_LINE_QUANTITY - line.kitUnits} label={line.name} onChange={(q) => setQuantity(line.itemId, line.kitUnits + q)} />
-                        <span className="tabular text-small">
-                          {line.listUnitPaise > line.unitPaise && (
-                            <s className="mr-1 text-ink-faint">{formatPriceTag(line.listUnitPaise * Math.max(0, extraAvailable))}</s>
-                          )}
-                          {formatPriceTag(line.unitPaise * Math.max(0, extraAvailable))}
-                        </span>
-                      </div>
-                      {line.message && <p className="mt-2 border-l-4 border-alert bg-shelf px-2 py-1 text-micro">{line.message}</p>}
-                      {line.priceNote && <p className="mt-2 border-l-4 border-rule bg-shelf px-2 py-1 text-micro">{line.priceNote}</p>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
             </>
           )}
         </div>

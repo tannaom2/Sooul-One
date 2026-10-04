@@ -41,7 +41,7 @@ export interface SavedBoxView {
   readonly boxSlug: string;
   readonly available: boolean;
   readonly picks: readonly BoxPick[];
-  readonly items: readonly { name: string; quantity: number }[];
+  readonly items: readonly { name: string; imageUrl: string | null; quantity: number }[];
 }
 
 /** This shopper's saved boxes, newest first, with what's in each. */
@@ -49,8 +49,8 @@ export async function savedBoxes(customerId: string): Promise<SavedBoxView[]> {
   const rows = await db.savedBox.findMany({ where: { customerId }, orderBy: { updatedAt: "desc" }, include: { box: { select: { name: true, slug: true, isActive: true } } } });
   const picksById = new Map(rows.map((r) => [r.id, parsePicks(r.picks)]));
   const ids = [...new Set([...picksById.values()].flat().map((p) => p.productId))];
-  const products = ids.length ? await db.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : [];
-  const names = new Map(products.map((p) => [p.id, p.name]));
+  const products = ids.length ? await db.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } } } }) : [];
+  const byId = new Map(products.map((p) => [p.id, p]));
   return rows.map((r) => {
     const picks = picksById.get(r.id) ?? [];
     return {
@@ -61,7 +61,7 @@ export async function savedBoxes(customerId: string): Promise<SavedBoxView[]> {
       boxSlug: r.box.slug,
       available: r.box.isActive,
       picks,
-      items: picks.map((p) => ({ name: names.get(p.productId) ?? "A product no longer sold", quantity: p.quantity })),
+      items: picks.map((p) => ({ name: byId.get(p.productId)?.name ?? "A product no longer sold", imageUrl: byId.get(p.productId)?.images[0]?.url ?? null, quantity: p.quantity })),
     };
   });
 }

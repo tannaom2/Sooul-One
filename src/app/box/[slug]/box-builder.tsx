@@ -9,6 +9,8 @@ import type { BoxPage } from "@/server/boxes";
 import type { ProductSummary } from "@/server/catalog";
 import { useCart } from "@/components/basket/cart-provider";
 import { ProductCard } from "@/components/ui";
+import { BoxCarton } from "@/components/box-carton";
+import { MAX_SHOWN, cartonContents } from "@/lib/box-carton";
 import { saveMyBox } from "@/app/account/saved-actions";
 
 /**
@@ -16,7 +18,7 @@ import { saveMyBox } from "@/app/account/saved-actions";
  * "Add to box" action underneath; the filter above them is the same tabs
  * (gummies) or chips (True Store) the shop pages use. A tray that stays in
  * view shows the slots filling, what the picks are worth and what the box
- * costs. Picks are kept in this browser across tabs and refreshes until the
+ * costs, and the carton above fills as packs drop in (src/components/box-carton.tsx). Picks are kept in this browser across tabs and refreshes until the
  * box goes in the basket, where the server checks everything again.
  */
 
@@ -133,6 +135,8 @@ function Builder({
     }),
   );
   const firstIssue = issues.find((i) => i.kind !== "TOO_FEW");
+  const carton = cartonContents(pickList.map((p) => ({ picture: byId.get(p.productId)!.imageUrl, quantity: p.quantity })));
+  const cartonProps = { packs: carton.shown, more: carton.more, complete: complete && count > 0, spots: Math.min(box.size, MAX_SHOWN), animate: true };
 
   const shown = filter.value ? box.items.filter((i) => i[filter.field] === filter.value) : box.items;
 
@@ -191,6 +195,10 @@ function Builder({
           {box.maxPerProduct === 1 ? ", all different" : ""}.
         </p>
         {box.description && <p className="mt-2 max-w-[60ch] text-ink-soft">{box.description}</p>}
+        {/* Phones and tablets; a wide screen has it in the tray beside the products. */}
+        <div className="mt-5 flex justify-center border border-rule bg-surface lg:hidden" style={{ borderRadius: "var(--radius-panel)" }}>
+          <BoxCarton {...cartonProps} width={300} height={184} pad={6} />
+        </div>
       </header>
 
       {tabs}
@@ -237,6 +245,9 @@ function Builder({
 
         {/* The tray: bottom bar on a phone, a sidebar on a wide screen. */}
         <aside className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-elevated px-5 pt-3 shadow-elevated lg:sticky lg:top-24 lg:self-start lg:border lg:p-4 lg:shadow-none" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderRadius: "var(--radius-panel)" }}>
+          <div className="mb-3 hidden border border-rule bg-surface lg:block" style={{ borderRadius: "var(--radius-panel)" }}>
+            <BoxCarton {...cartonProps} width={286} height={176} pad={6} />
+          </div>
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-small font-semibold">
