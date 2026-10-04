@@ -73,3 +73,47 @@ export function cartonContents<T>(items: readonly { picture: T; quantity: number
   const units = items.flatMap((i) => Array.from({ length: Math.max(0, i.quantity) }, () => i.picture));
   return { shown: units.slice(0, MAX_SHOWN), more: Math.max(0, units.length - MAX_SHOWN) };
 }
+
+/**
+ * Closing the box when it goes in the basket: the packs settle down into the
+ * carton, the side flaps fold in, the long flaps shut over them, ink tape
+ * runs along the seam, then the box flies into the Basket button.
+ */
+export type CartonPhase = "open" | "settle" | "closing" | "taped";
+
+/** Flap lengths: the two long flaps meet exactly when shut. */
+export const FLAPS = { side: CARTON.w * 0.36, back: CARTON.d * 0.42, front: CARTON.d * 0.58 } as const;
+
+export interface CartonPose {
+  /** Packs squash to fit under the shut flaps (they stand taller than the box when open). */
+  readonly squash: number;
+  readonly sideFlap: number;
+  readonly backFlap: number;
+  /** The front flap waits tucked just inside the front wall (172), then swings up and over (90). */
+  readonly frontFlap: number;
+  readonly frontShown: boolean;
+  readonly tape: boolean;
+}
+
+export function cartonPose(phase: CartonPhase): CartonPose {
+  const open = { squash: 1, sideFlap: CARTON.sideFlap, backFlap: CARTON.backFlap, frontFlap: 172, frontShown: false, tape: false };
+  if (phase === "open") return open;
+  if (phase === "settle") return { ...open, squash: 0.68, frontShown: true };
+  // Side flaps a touch past flat, so the long flaps lie over them cleanly.
+  return { squash: 0.68, sideFlap: 93, backFlap: 90, frontFlap: 90, frontShown: true, tape: phase === "taped" };
+}
+
+/** When each step starts, in ms from the tap. About 1.7 s to landing. */
+export const CLOSE_TIMELINE = { closing: 260, taped: 820, fly: 1150, land: 1700 } as const;
+
+/** How far the carton's anchor must travel to reach the centre of `target` (both in viewport px). */
+export function flyDelta(
+  stage: { left: number; top: number },
+  frame: { width: number; height: number; pad: number },
+  target: { left: number; top: number; width: number; height: number },
+): { x: number; y: number } {
+  const fit = cartonFit(frame.width, frame.height, frame.pad);
+  const anchorX = stage.left + frame.width / 2 + fit.left;
+  const anchorY = stage.top + fit.top;
+  return { x: target.left + target.width / 2 - anchorX, y: target.top + target.height / 2 - anchorY };
+}

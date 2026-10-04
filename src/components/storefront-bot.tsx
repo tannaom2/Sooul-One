@@ -191,6 +191,10 @@ export function StorefrontBot() {
   // Product and basket pages have a buy bar along the bottom on phones.
   // Above whatever sits at the bottom: a product's buy bar, the basket's bar, or the tab bar (src/lib/tab-bar.ts).
   const lifted = path.startsWith("/product/") || path === "/cart" || showsTabBar(path);
+  // The box page's tray (count, price, Add box to basket, and the save form
+  // after adding) is taller and changes height: the page measures it into
+  // --box-tray (src/app/box/[slug]/box-builder.tsx) and the button sits 12 px above.
+  const overTray = path.startsWith("/box/");
   const prompt = PROMPT[expect];
 
   return (
@@ -201,7 +205,7 @@ export function StorefrontBot() {
           type="button"
           onClick={openPanel}
           aria-haspopup="dialog"
-          className={`fixed right-4 z-50 flex items-center gap-2 bg-inverse px-4 py-2.5 text-small font-semibold text-on-inverse shadow-elevated print:hidden lg:bottom-6 ${lifted ? "bottom-24" : "bottom-4"}`}
+          className={`fixed right-4 z-50 flex items-center gap-2 bg-inverse px-4 py-2.5 text-small font-semibold text-on-inverse shadow-elevated print:hidden lg:bottom-6 ${overTray ? "bottom-[calc(var(--box-tray,160px)_+_12px)]" : lifted ? "bottom-24" : "bottom-4"}`}
           style={{ borderRadius: 999 }}
         >
           <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">

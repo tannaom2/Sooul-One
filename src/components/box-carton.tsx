@@ -1,13 +1,14 @@
 import Image from "next/image";
 import type { CSSProperties, ReactNode } from "react";
-import { CARTON, cartonFit, packSpots } from "@/lib/box-carton";
+import { CARTON, FLAPS, cartonFit, cartonPose, packSpots, type CartonPhase } from "@/lib/box-carton";
 
 /**
  * A box the shopper built, pictured as an open SooulOne carton with their
  * packs standing inside, drawn in CSS 3D from the real product photos
  * (geometry and sizing: src/lib/box-carton.ts). One drawing for every size:
  * the basket's 64 px tile, the basket page, saved boxes and the box page,
- * where packs drop in as they're picked (`spots` + `animate`).
+ * where packs drop in as they're picked (`spots` + `animate`), and the box
+ * closes, is taped and flies into the basket when it's added (`phase`, `fly`).
  *
  * Decorative: the box's contents are always written beside it, so it's
  * hidden from screen readers. Kraft colours are fixed, like a real carton.
@@ -32,23 +33,32 @@ function Face({ width, height, transform, background, style, children }: { width
   );
 }
 
-function Flap({ width, height, wall, angle }: { width: number; height: number; wall: string; angle: number }) {
+function Flap({ width, height, wall, angle, transition, lift = 0, hidden = false }: { width: number; height: number; wall: string; angle: number; transition?: string; lift?: number; hidden?: boolean }) {
   return (
     <div
       style={{
         position: "absolute",
         left: -width / 2,
-        top: -H / 2 - height,
+        top: -H / 2 - height - lift,
         width,
         height,
         transformOrigin: "50% 100%",
         transform: `${wall} rotateX(${angle}deg)`,
         background: KRAFT.flap,
         borderRadius: "2px 2px 0 0",
+        opacity: hidden ? 0 : 1,
+        transition,
       }}
     />
   );
 }
+
+/** Printed ink packing tape: the wordmark repeated, so green stays the one "complete" colour. */
+const TAPE_PRINT = Array.from({ length: 4 }, (_, i) => (
+  <span key={i} className="font-display" style={{ fontWeight: 800, fontSize: 7, letterSpacing: "0.04em", color: "rgba(255,255,255,.55)" }}>
+    SooulOne
+  </span>
+));
 
 export interface BoxCartonProps {
   /** Pictures of the packs to stand in the carton, in order (up to four). */
@@ -65,17 +75,33 @@ export interface BoxCartonProps {
   /** The box page: this many places, the empty ones waiting above until a pack drops in. */
   readonly spots?: number;
   readonly animate?: boolean;
+  /** Closing when the box goes in the basket (src/lib/box-carton.ts cartonPose). */
+  readonly phase?: CartonPhase;
+  /** Fly to this offset from the carton's anchor, shrinking away (into the Basket button). */
+  readonly fly?: { x: number; y: number } | null;
+  /** Gone at once, no transition: after landing, before the next empty box fades in. */
+  readonly vanish?: boolean;
 }
 
-export function BoxCarton({ packs, more = 0, complete = false, width, height, pad = 1, shadow = false, spots, animate = false }: BoxCartonProps) {
+export function BoxCarton({ packs, more = 0, complete = false, width, height, pad = 1, shadow = false, spots, animate = false, phase = "open", fly = null, vanish = false }: BoxCartonProps) {
   const fit = cartonFit(width, height, pad, shadow);
   // Room for the little pop when the box fills.
   const scale = animate && !complete ? fit.scale * 0.96 : fit.scale;
   const places = packSpots(spots ?? packs.length);
   const motion = animate ? "motion-reduce:transition-none" : "";
+  const pose = cartonPose(phase);
+  const ease = (delay = 0) => (animate ? `transform .32s cubic-bezier(.45,0,.2,1) ${delay}s` : undefined);
+  const anchorTransition = vanish
+    ? "none"
+    : fly
+      ? "transform .55s cubic-bezier(.55,-0.3,.7,1), opacity .2s ease .4s"
+      : animate
+        ? "transform .45s cubic-bezier(.3,1.9,.5,1), opacity .3s ease"
+        : undefined;
 
   return (
-    <div aria-hidden style={{ position: "relative", width, height, overflow: "hidden" }}>
+    // While flying it may leave its frame, and passes over the page header.
+    <div aria-hidden style={{ position: "relative", width, height, overflow: fly ? "visible" : "hidden", zIndex: fly ? 60 : undefined }}>
       {shadow && (
         <div
           style={{
@@ -96,9 +122,10 @@ export function BoxCarton({ packs, more = 0, complete = false, width, height, pa
           position: "absolute",
           left: `calc(50% + ${fit.left}px)`,
           top: fit.top,
-          transform: `scale(${scale})`,
+          transform: fly ? `translate(${fly.x}px, ${fly.y}px) scale(${fit.scale * 0.14})` : `scale(${scale})`,
+          opacity: fly || vanish ? 0 : 1,
           transformStyle: "preserve-3d",
-          transition: animate ? "transform .45s cubic-bezier(.3,1.9,.5,1)" : undefined,
+          transition: anchorTransition,
         }}
       >
         <div style={{ position: "absolute", perspective: CARTON.perspective, transformStyle: "preserve-3d" }}>
@@ -121,7 +148,8 @@ export function BoxCarton({ packs, more = 0, complete = false, width, height, pa
                     top: H / 2 - spot.height,
                     width: spot.width,
                     height: spot.height,
-                    transform: `translate3d(${spot.x}px, ${filled ? 0 : -230}px, ${spot.z}px) rotateY(${spot.turn}deg)`,
+                    transformOrigin: "50% 100%",
+                    transform: `translate3d(${spot.x}px, ${filled ? 0 : -230}px, ${spot.z}px) rotateY(${spot.turn}deg) scaleY(${pose.squash})`,
                     opacity: filled ? 1 : 0,
                     transition: animate ? "transform .6s cubic-bezier(.2,1.35,.45,1), opacity .2s ease" : undefined,
                   }}
@@ -204,9 +232,33 @@ export function BoxCarton({ packs, more = 0, complete = false, width, height, pa
               </span>
             </Face>
 
-            <Flap width={W} height={D * 0.42} wall={`rotateY(180deg) translateZ(${D / 2}px)`} angle={CARTON.backFlap} />
-            <Flap width={D} height={W * 0.36} wall={`rotateY(-90deg) translateZ(${W / 2}px)`} angle={CARTON.sideFlap} />
-            <Flap width={D} height={W * 0.36} wall={`rotateY(90deg) translateZ(${W / 2}px)`} angle={CARTON.sideFlap} />
+            {/* Side flaps shut first; the long flaps follow and lie over them. */}
+            <Flap width={D} height={FLAPS.side} wall={`rotateY(-90deg) translateZ(${W / 2}px)`} angle={pose.sideFlap} transition={ease()} />
+            <Flap width={D} height={FLAPS.side} wall={`rotateY(90deg) translateZ(${W / 2}px)`} angle={pose.sideFlap} transition={ease()} />
+            <Flap width={W} height={FLAPS.back} wall={`rotateY(180deg) translateZ(${D / 2}px)`} angle={pose.backFlap} transition={ease(0.16)} lift={0.6} />
+            <Flap width={W} height={FLAPS.front} wall={`translateZ(${D / 2}px)`} angle={pose.frontFlap} transition={ease(0.16)} lift={0.6} hidden={!pose.frontShown} />
+            {phase !== "open" && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: -W / 2 - 2,
+                  top: -7,
+                  width: W + 4,
+                  height: 14,
+                  background: "linear-gradient(180deg, #3a2f26, #241c15 60%, #1a140f)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-around",
+                  overflow: "hidden",
+                  transformOrigin: "0 50%",
+                  // Along the seam where the long flaps meet.
+                  transform: `translate3d(0, ${-H / 2 - 1.4}px, ${D / 2 - FLAPS.front}px) rotateX(90deg) scaleX(${pose.tape ? 1 : 0})`,
+                  transition: animate ? "transform .28s cubic-bezier(.45,0,.2,1)" : undefined,
+                }}
+              >
+                {TAPE_PRINT}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -215,24 +267,54 @@ export function BoxCarton({ packs, more = 0, complete = false, width, height, pa
 }
 
 /**
- * A combo the shop put together: two packs held by a green band, flat, so a
- * combo never looks like a box the shopper filled.
+ * A combo the shop put together: two packs side by side with a kraft paper
+ * sleeve round their lower half, the way gift pairs are sold. Flat, so a
+ * combo never looks like a box the shopper filled; kraft, so the two belong
+ * together. Large enough, the sleeve carries the wordmark.
  */
 export function ComboPicture({ pictures, size }: { pictures: readonly (string | null)[]; size: number }) {
   const [a, b] = [pictures[0] ?? null, pictures[1] ?? pictures[0] ?? null];
-  const pack = (src: string | null, left: number, top: number, turn: number) => {
-    const style: CSSProperties = { position: "absolute", left: size * left, top: size * top, width: size * 0.44, height: size * 0.62, border: "1px solid #fff", borderRadius: 2, transform: `rotate(${turn}deg)` };
+  const k = size / 64;
+  const pack = (src: string | null, left: number, turn: number) => {
+    const style: CSSProperties = {
+      position: "absolute",
+      left: left * k,
+      top: 9 * k,
+      width: 27 * k,
+      height: 44 * k,
+      border: `${Math.max(1, Math.round(k))}px solid #fff`,
+      borderRadius: 2 * k,
+      boxShadow: `0 ${k}px ${3 * k}px rgba(0,0,0,.18)`,
+      transform: `rotate(${turn}deg)`,
+    };
     return src ? (
-      <Image src={src} alt="" width={Math.round(size * 0.9)} height={Math.round(size * 1.24)} className="object-cover" style={style} />
+      <Image src={src} alt="" width={Math.round(54 * k)} height={Math.round(88 * k)} className="object-cover" style={style} />
     ) : (
       <span style={{ ...style, background: "#f2ede4" }} />
     );
   };
   return (
     <div aria-hidden className="relative shrink-0 self-start overflow-hidden border border-rule bg-surface" style={{ width: size, height: size }}>
-      {pack(a, 0.11, 0.16, -5)}
-      {pack(b, 0.45, 0.19, 5)}
-      <span className="absolute bg-veg" style={{ left: size * 0.06, right: size * 0.06, top: size * 0.47, height: Math.max(4, size * 0.09), borderRadius: 1 }} />
+      {pack(a, 6, -4)}
+      {pack(b, 29, 4)}
+      <span
+        className="absolute flex items-center justify-center"
+        style={{
+          left: 7 * k,
+          right: 7 * k,
+          top: 33 * k,
+          height: 20 * k,
+          borderRadius: 2 * k,
+          background: `linear-gradient(180deg, #b48a52 0, #d2aa6e ${3 * k}px, #c99f62 55%, #b88e55 100%)`,
+          boxShadow: `0 ${k}px ${2 * k}px rgba(60,38,14,.35)`,
+        }}
+      >
+        {size >= 80 && (
+          <span className="font-display" style={{ fontWeight: 800, fontSize: 6.5 * k, letterSpacing: "0.02em", color: "rgba(60,38,14,.6)" }}>
+            SooulOne
+          </span>
+        )}
+      </span>
     </div>
   );
 }

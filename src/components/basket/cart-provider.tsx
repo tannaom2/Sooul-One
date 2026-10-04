@@ -49,7 +49,8 @@ interface CartContextValue {
   /** Drop what can't ship, trim what partly can. */
   removeUnavailable: () => Promise<void>;
   /** A finished box (Make Your Own Box), new or replacing one being edited. Resolves true when it went in. */
-  saveBox: (input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }) => Promise<boolean>;
+  /** `open: false` waits (the box page's closing animation opens it on landing); a failure still opens it, to say why. */
+  saveBox: (input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }, options?: { open?: boolean }) => Promise<boolean>;
   removeBox: (cartBoxId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -259,11 +260,13 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
   );
 
   const saveBox = useCallback(
-    (input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }) =>
+    (input: { boxId: string; picks: { productId: string; quantity: number }[]; replaceCartBoxId?: string }, options?: { open?: boolean }) =>
       new Promise<boolean>((resolve) => {
         setError(null);
-        setOpen(true);
-        track({ type: "CART_OPENED" });
+        if (options?.open !== false) {
+          setOpen(true);
+          track({ type: "CART_OPENED" });
+        }
         startTransition(async () => {
           // A box counts as one item, and an edited box replaces itself.
           if (!input.replaceCartBoxId) addOptimistic({ type: "add", quantity: 1 });
@@ -272,6 +275,7 @@ export function CartProvider({ initialCount, children }: { initialCount: number;
           else {
             setError(result.message);
             if (result.basket) accept(result.basket);
+            if (options?.open === false) setOpen(true);
           }
           resolve(result.ok);
         });

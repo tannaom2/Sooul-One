@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_SHOWN, OUTLINE, cartonContents, cartonFit, packSpots } from "@/lib/box-carton";
+import { CLOSE_TIMELINE, FLAPS, MAX_SHOWN, OUTLINE, cartonContents, cartonFit, cartonPose, flyDelta, packSpots } from "@/lib/box-carton";
 
 /** The 3D box picture (src/lib/box-carton.ts): what it shows and how it fills a frame. */
 
@@ -48,5 +48,32 @@ describe("fitting the carton to a frame", () => {
 
   it("never goes negative in a frame too small to hold it", () => {
     expect(cartonFit(1, 1, 4).scale).toBe(0);
+  });
+});
+
+describe("closing the box", () => {
+  it("settles the packs, shuts the flaps, then tapes the seam", () => {
+    const open = cartonPose("open");
+    expect(open).toMatchObject({ squash: 1, frontShown: false, tape: false });
+    expect(cartonPose("settle")).toMatchObject({ squash: 0.68, frontShown: true, tape: false, sideFlap: open.sideFlap });
+    expect(cartonPose("closing")).toMatchObject({ sideFlap: 93, backFlap: 90, frontFlap: 90, tape: false });
+    expect(cartonPose("taped").tape).toBe(true);
+    // Squashed packs fit under the shut flaps.
+    expect(96 * cartonPose("closing").squash).toBeLessThan(72);
+  });
+
+  it("has long flaps that meet exactly, and steps in order", () => {
+    expect(FLAPS.back + FLAPS.front).toBeCloseTo(110);
+    expect(CLOSE_TIMELINE.closing).toBeLessThan(CLOSE_TIMELINE.taped);
+    expect(CLOSE_TIMELINE.taped).toBeLessThan(CLOSE_TIMELINE.fly);
+    expect(CLOSE_TIMELINE.fly).toBeLessThan(CLOSE_TIMELINE.land);
+  });
+
+  it("flies from the carton's anchor to the middle of the basket button", () => {
+    const frame = { width: 300, height: 184, pad: 6 };
+    const fit = cartonFit(frame.width, frame.height, frame.pad);
+    const d = flyDelta({ left: 45, top: 330 }, frame, { left: 300, top: 50, width: 70, height: 36 });
+    expect(d.x).toBeCloseTo(335 - (45 + 150 + fit.left));
+    expect(d.y).toBeCloseTo(68 - (330 + fit.top));
   });
 });

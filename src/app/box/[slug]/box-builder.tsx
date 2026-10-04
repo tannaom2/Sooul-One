@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { formatPriceTag } from "@/lib/money";
 import { boxIssues, boxIssueMessage, priceBox, type BoxRule } from "@/lib/checkout/boxes";
@@ -10,7 +10,7 @@ import type { ProductSummary } from "@/server/catalog";
 import { useCart } from "@/components/basket/cart-provider";
 import { ProductCard } from "@/components/ui";
 import { BoxCarton } from "@/components/box-carton";
-import { MAX_SHOWN, cartonContents } from "@/lib/box-carton";
+import { CLOSE_TIMELINE, MAX_SHOWN, cartonContents, flyDelta, type CartonPhase } from "@/lib/box-carton";
 import { saveMyBox } from "@/app/account/saved-actions";
 
 /**
@@ -18,7 +18,9 @@ import { saveMyBox } from "@/app/account/saved-actions";
  * "Add to box" action underneath; the filter above them is the same tabs
  * (gummies) or chips (True Store) the shop pages use. A tray that stays in
  * view shows the slots filling, what the picks are worth and what the box
- * costs, and the carton above fills as packs drop in (src/components/box-carton.tsx). Picks are kept in this browser across tabs and refreshes until the
+ * costs, and the carton above fills as packs drop in (src/components/box-carton.tsx).
+ * Adding the box closes the carton, tapes it and flies it into the Basket
+ * button while the basket saves it; if saving fails, the carton opens again. Picks are kept in this browser across tabs and refreshes until the
  * box goes in the basket, where the server checks everything again.
  */
 
@@ -27,6 +29,13 @@ type Editing = { cartBoxId: string; picks: { productId: string; quantity: number
 type Filter = { field: "brandSlug" | "categorySlug"; value: string | null; param: "brand" | "concern" };
 
 const draftKey = (slug: string) => `soulone_box_${slug}`;
+/** The two places the carton is drawn: under the title on phones, in the tray on wide screens. */
+const PHONE_FRAME = { width: 300, height: 184, pad: 6 };
+const TRAY_FRAME = { width: 286, height: 176, pad: 6 };
+const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, Math.max(0, ms)));
+/** Milliseconds since `start`, for the closing animation's steps (called from the click handler only). */
+const since = (start: number) => performance.now() - start;
+const now = () => performance.now();
 const noop = () => () => {};
 
 function readDraft(slug: string): Picks {
@@ -88,7 +97,38 @@ function Builder({
   signedIn: boolean;
 }) {
   const router = useRouter();
-  const { saveBox, pending } = useCart();
+  const { saveBox, openBasket, pending } = useCart();
+  // The closing animation (addBox): its step, the flight to the Basket button,
+  // and a moment with no transitions so the next empty box doesn't fly back.
+  const [phase, setPhase] = useState<CartonPhase>("open");
+  const [fly, setFly] = useState<{ x: number; y: number } | null>(null);
+  const [vanish, setVanish] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const phoneStage = useRef<HTMLDivElement>(null);
+  const trayStage = useRef<HTMLDivElement>(null);
+  const tray = useRef<HTMLElement>(null);
+
+  // The Help button sits just above the tray while it's a bar along the bottom
+  // (phones): the tray's height changes (a status line, the save form after
+  // adding), so it's measured, not guessed (src/components/storefront-bot.tsx).
+  useEffect(() => {
+    const el = tray.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const update = () => {
+      if (getComputedStyle(el).position === "fixed") root.style.setProperty("--box-tray", `${Math.round(el.getBoundingClientRect().height)}px`);
+      else root.style.removeProperty("--box-tray");
+    };
+    const watch = new ResizeObserver(update);
+    watch.observe(el);
+    window.addEventListener("resize", update);
+    update();
+    return () => {
+      watch.disconnect();
+      window.removeEventListener("resize", update);
+      root.style.removeProperty("--box-tray");
+    };
+  }, []);
   const [picks, setPicks] = useState<Picks>(initial);
   const [added, setAdded] = useState(false);
   // The box just added, so it can still be saved after the tray empties.
@@ -136,7 +176,7 @@ function Builder({
   );
   const firstIssue = issues.find((i) => i.kind !== "TOO_FEW");
   const carton = cartonContents(pickList.map((p) => ({ picture: byId.get(p.productId)!.imageUrl, quantity: p.quantity })));
-  const cartonProps = { packs: carton.shown, more: carton.more, complete: complete && count > 0, spots: Math.min(box.size, MAX_SHOWN), animate: true };
+  const cartonProps = { packs: carton.shown, more: carton.more, complete: (complete && count > 0) || phase !== "open", spots: Math.min(box.size, MAX_SHOWN), animate: true, phase, fly, vanish };
 
   const shown = filter.value ? box.items.filter((i) => i[filter.field] === filter.value) : box.items;
 
@@ -159,13 +199,8 @@ function Builder({
     setPicks((p) => ({ ...p, [productId]: Math.max(0, (p[productId] ?? 0) + delta) }));
   };
 
-  async function addBox() {
-    const ok = await saveBox({ boxId: box.id, picks: pickList, replaceCartBoxId: editing?.cartBoxId });
-    if (!ok) return;
-    if (editing) {
-      router.push("/cart");
-      return;
-    }
+  /** After the box is in the basket: start a fresh one, keeping this one to save for later. */
+  function afterAdd() {
     try {
       localStorage.removeItem(draftKey(box.slug));
     } catch {}
@@ -173,6 +208,54 @@ function Builder({
     setSaveNote(null);
     setPicks({});
     setAdded(true);
+  }
+
+  async function addBox() {
+    if (busy) return;
+    const still = editing || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still) {
+      const ok = await saveBox({ boxId: box.id, picks: pickList, replaceCartBoxId: editing?.cartBoxId });
+      if (!ok) return;
+      if (editing) router.push("/cart");
+      else afterAdd();
+      return;
+    }
+
+    // Saved in the background while the carton closes; nothing waits on the animation.
+    setBusy(true);
+    const started = now();
+    const until = (ms: number) => wait(ms - since(started));
+    const saving = saveBox({ boxId: box.id, picks: pickList }, { open: false });
+    setPhase("settle");
+    await until(CLOSE_TIMELINE.closing);
+    setPhase("closing");
+    await until(CLOSE_TIMELINE.taped);
+    setPhase("taped");
+    if (!(await saving)) {
+      // The basket opens with the reason; the box opens again so it can be fixed.
+      setPhase("open");
+      setBusy(false);
+      return;
+    }
+
+    await until(CLOSE_TIMELINE.fly);
+    const stage = [phoneStage.current, trayStage.current].find((el) => el && el.offsetParent !== null);
+    const target = document.querySelector<HTMLElement>('header [aria-haspopup="dialog"]');
+    const carton = stage?.firstElementChild;
+    if (carton && target) {
+      setFly(flyDelta(carton.getBoundingClientRect(), stage === phoneStage.current ? PHONE_FRAME : TRAY_FRAME, target.getBoundingClientRect()));
+    }
+    await until(CLOSE_TIMELINE.land);
+    target?.animate([{ transform: "scale(1)" }, { transform: "scale(1.15)" }, { transform: "scale(1)" }], { duration: 320, easing: "ease-out" });
+
+    setVanish(true);
+    setFly(null);
+    setPhase("open");
+    afterAdd();
+    openBasket();
+    await wait(60);
+    setVanish(false);
+    setBusy(false);
   }
 
   async function saveForLater() {
@@ -196,8 +279,8 @@ function Builder({
         </p>
         {box.description && <p className="mt-2 max-w-[60ch] text-ink-soft">{box.description}</p>}
         {/* Phones and tablets; a wide screen has it in the tray beside the products. */}
-        <div className="mt-5 flex justify-center border border-rule bg-surface lg:hidden" style={{ borderRadius: "var(--radius-panel)" }}>
-          <BoxCarton {...cartonProps} width={300} height={184} pad={6} />
+        <div ref={phoneStage} className="mt-5 flex justify-center border border-rule bg-surface lg:hidden" style={{ borderRadius: "var(--radius-panel)" }}>
+          <BoxCarton {...cartonProps} {...PHONE_FRAME} />
         </div>
       </header>
 
@@ -208,7 +291,7 @@ function Builder({
           {shown.map((item) => {
             const picked = picks[item.id] ?? 0;
             const leftToPick = item.availability.shippableUnits - picked;
-            const canAdd = !full && picked < box.maxPerProduct && leftToPick > 0;
+            const canAdd = !busy && !full && picked < box.maxPerProduct && leftToPick > 0;
             const blockedBy = leftToPick <= 0 ? "No more left" : full ? "Box is full" : "Add to box";
             return (
               <ProductCard
@@ -244,9 +327,10 @@ function Builder({
         </div>
 
         {/* The tray: bottom bar on a phone, a sidebar on a wide screen. */}
-        <aside className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-elevated px-5 pt-3 shadow-elevated lg:sticky lg:top-24 lg:self-start lg:border lg:p-4 lg:shadow-none" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderRadius: "var(--radius-panel)" }}>
-          <div className="mb-3 hidden border border-rule bg-surface lg:block" style={{ borderRadius: "var(--radius-panel)" }}>
-            <BoxCarton {...cartonProps} width={286} height={176} pad={6} />
+        {/* Raised over the page header while the box flies out of it to the Basket button. */}
+        <aside ref={tray} className={`fixed inset-x-0 bottom-0 ${fly ? "z-[60]" : "z-40"} border-t border-rule bg-elevated px-5 pt-3 shadow-elevated lg:sticky lg:top-24 lg:self-start lg:border lg:p-4 lg:shadow-none`} style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderRadius: "var(--radius-panel)" }}>
+          <div ref={trayStage} className="mb-3 hidden border border-rule bg-surface lg:block" style={{ borderRadius: "var(--radius-panel)" }}>
+            <BoxCarton {...cartonProps} {...TRAY_FRAME} />
           </div>
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -343,8 +427,8 @@ function Builder({
           )}
           {saveNote && !saveNote.ok && <p className="mt-1 text-micro text-alert">{saveNote.message}</p>}
 
-          <button type="button" onClick={addBox} disabled={!complete || pending} className="btn btn-solid mt-3 w-full">
-            {pending ? "Adding…" : cta}
+          <button type="button" onClick={addBox} disabled={!complete || pending || busy} className="btn btn-solid mt-3 w-full">
+            {pending || busy ? "Adding…" : cta}
           </button>
           {editing && (
             <Link href="/cart" className="mt-2 block text-center text-small underline">
