@@ -7,7 +7,7 @@ import { boxKindLabel } from "@/lib/checkout/boxes";
 import { PageHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Make your own box — SooulOne" };
+export const metadata = { title: "Make your own box" };
 
 /** The header's "Make your box" link: straight to the box when there's one, a choice when there are several. */
 export default async function BoxesPage() {

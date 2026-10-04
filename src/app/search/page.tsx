@@ -16,7 +16,7 @@ import { fillTokens } from "@/lib/site-content";
 import { getStoreFacts } from "@/server/store-settings";
 import { brandHref } from "@/lib/brand-domains";
 
-export const metadata: Metadata = { title: "Search — SooulOne", robots: { index: false, follow: true } };
+export const metadata: Metadata = { title: "Search", robots: { index: false, follow: true } };
 export const dynamic = "force-dynamic";
 
 /**

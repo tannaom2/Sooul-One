@@ -15,7 +15,7 @@ import { normalizeBatch, validBatch, verifyResult, type VerifyResult } from "@/l
 import { formatBestBefore, formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Check your batch — SooulOne",
+  title: "Check your batch",
   description: "Enter the batch number on your pack to see the product, when it was made and its best-before date.",
   alternates: { canonical: "/verify" },
 };

@@ -7,7 +7,7 @@ import { ARTICLE_PILLARS, readingMinutes, type ArticlePillar } from "@/lib/site-
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "Learn — SooulOne",
+  title: "Learn",
   description: "Reading labels, ingredients explained, and everyday nutrition for women, men, kids and snack lovers.",
   alternates: { canonical: "/learn" },
 };

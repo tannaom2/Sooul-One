@@ -12,7 +12,7 @@ import { reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Your basket — SooulOne" };
+export const metadata = { title: "Your basket" };
 
 export default async function CartPage() {
   const sessionId = await readSessionId();

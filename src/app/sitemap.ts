@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { SELLABLE_PRODUCT_WHERE } from "@/lib/basket-rules";
 import { brandPath, canonicalUrl, normalizeHost } from "@/lib/brand-domains";
 import { getBrandFamily, siteUrl } from "@/server/brand-family";
+import { mayIndex, searchIndexingOn } from "@/lib/indexing";
 
 // Generated per-request, not baked into the build — the product list
 // changes far more often than the app gets redeployed.
@@ -42,6 +43,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
   const host = normalizeHost((await headers()).get("host"));
   const hostBrand = family.find((b) => b.domain && b.domainMode === "STANDALONE" && normalizeHost(b.domain) === host)?.slug ?? null;
+  // Nothing to list while search engines are kept out (src/lib/indexing.ts).
+  if (!mayIndex({ on: searchIndexingOn(process.env.SEARCH_INDEXING), host, mainHost: new URL(base).host, standaloneBrand: hostBrand !== null })) return [];
 
   const products = await db.product.findMany({
     where: SELLABLE_PRODUCT_WHERE,

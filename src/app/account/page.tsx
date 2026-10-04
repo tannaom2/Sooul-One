@@ -16,7 +16,7 @@ import { addressSummary } from "@/lib/saved-addresses";
 import { SavedAddresses, SavedBoxes } from "./saved-lists";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Your account — SooulOne", robots: { index: false } };
+export const metadata = { title: "Your account", robots: { index: false } };
 
 /** In the shopper's words, not the warehouse's (compare STATUS_LABELS in order-lifecycle.ts). */
 const STATUS: Record<string, { label: string; tone: "live" | "done" | "off" }> = {

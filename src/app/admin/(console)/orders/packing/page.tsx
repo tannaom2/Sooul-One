@@ -8,7 +8,7 @@ import { packingQueue, type QueueOrder } from "@/server/packing";
 import { PackingBoard } from "./packing-board";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Packing — SooulOne console" };
+export const metadata = { title: "Packing" };
 
 /**
  * Orders › Packing: the orders waiting to go, oldest first. Tick a few, and

@@ -13,6 +13,7 @@ import { clientIp } from "@/lib/rate-limit-rules";
 import { verifyCrawler } from "@/server/crawler-verify";
 import { decideHost, normalizeHost } from "@/lib/brand-domains";
 import { brandDomainsForProxy } from "@/server/brand-family";
+import { NOINDEX, mayIndex, searchIndexingOn } from "@/lib/indexing";
 import { ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_OPTIONS, decodeAttribution, encodeAttribution, mergeTouch, touchFrom } from "@/lib/attribution";
 
 /**
@@ -49,6 +50,10 @@ import { ATTRIBUTION_COOKIE, ATTRIBUTION_COOKIE_OPTIONS, decodeAttribution, enco
  * 4. Attribution (src/lib/attribution.ts): note the campaign or site a
  *    visit came from, in a first-party cookie checkout copies onto the order.
  *
+ * 5. Search engines (src/lib/indexing.ts): every page says noindex until
+ *    SEARCH_INDEXING=on, and always on any address that isn't the shop's own
+ *    domain or a brand's standalone one.
+ *
  * `x-invoke-path`, `x-new-session` and `x-brand-host` are always overwritten here, never
  * trusted from the client, since layouts make decisions based on them.
  */
@@ -61,6 +66,7 @@ const MAIN_HOST = normalizeHost(URL.canParse(SITE_URL) ? new URL(SITE_URL).host 
 const MODE = guardMode(process.env.BOT_GUARD, process.env.NODE_ENV === "production");
 // QA suites and the demo drive a headless browser on purpose.
 const ALLOW_HEADLESS = process.env.BOT_GUARD_ALLOW_HEADLESS === "1";
+const SEARCH_ON = searchIndexingOn(process.env.SEARCH_INDEXING);
 
 function refused(status: 403 | 429, retryAfter?: number): NextResponse {
   return new NextResponse(status === 403 ? "Automated access isn't allowed." : "Too many requests. Slow down and try again shortly.", {
@@ -167,6 +173,7 @@ export async function proxy(request: NextRequest) {
     ? NextResponse.rewrite(new URL(`${rewrite}${request.nextUrl.search}`, request.url), { request: { headers: requestHeaders } })
     : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+  if (!mayIndex({ on: SEARCH_ON, host, mainHost: MAIN_HOST, standaloneBrand: brandHost !== null })) response.headers.set("X-Robots-Tag", NOINDEX);
   if (newSessionId) response.cookies.set(SESSION_COOKIE, newSessionId, SESSION_COOKIE_OPTIONS);
 
   // Sliding expiry: page views only. Not the owner console or APIs, and not

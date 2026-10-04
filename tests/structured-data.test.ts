@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteUrl, googleProductFeed, jsonLdScript, productJsonLd, type StructuredProduct } from "@/lib/structured-data";
+import { absoluteUrl, brandTrail, breadcrumbJsonLd, googleProductFeed, jsonLdScript, organizationJsonLd, productJsonLd, websiteJsonLd, type StructuredProduct } from "@/lib/structured-data";
 
 /** F5: what Google and shopping agents read about a product. */
 
@@ -54,5 +54,30 @@ describe("Google Merchant feed", () => {
     const feed = googleProductFeed([{ ...P, images: [] }, { ...P, sku: "TS-1", name: "Chana & Jor <Garam>", images: ["https://x/y.jpg"] }], { title: "SooulOne", siteUrl: "https://sooulone.in" });
     expect(feed).not.toContain("WA-BIO-30");
     expect(feed).toContain("<g:title>Chana &amp; Jor &lt;Garam&gt;</g:title>");
+  });
+});
+
+describe("the business, the site and where a page sits", () => {
+  const SITE = "https://sooulone.in";
+
+  it("names the business with its customer-care contact, only what's filled in", () => {
+    const org = organizationJsonLd({ name: "SooulOne", url: SITE, logo: `${SITE}/android-chrome-512x512.png`, phone: "+91 79 4890 2200", email: null });
+    expect(org).toMatchObject({ "@type": "Organization", name: "SooulOne", contactPoint: { telephone: "+91 79 4890 2200", areaServed: "IN" } });
+    expect((org.contactPoint as Record<string, unknown>).email).toBeUndefined();
+    expect(organizationJsonLd({ name: "SooulOne", url: SITE, logo: "x", phone: null, email: null }).contactPoint).toBeUndefined();
+    expect(websiteJsonLd({ name: "SooulOne", url: SITE })).toEqual({ "@context": "https://schema.org", "@type": "WebSite", name: "SooulOne", url: SITE });
+  });
+
+  it("puts gummy brands under Gummies and The True Store on its own", () => {
+    expect(brandTrail({ name: "Woman Axis", slug: "woman-axis" }, `${SITE}/gummies/woman-axis`, SITE).map((s) => s.name)).toEqual(["Home", "Gummies", "Woman Axis"]);
+    expect(brandTrail({ name: "The True Store", slug: "the-true-store" }, `${SITE}/true-store`, SITE).map((s) => s.name)).toEqual(["Home", "The True Store"]);
+  });
+
+  it("numbers the trail from 1", () => {
+    const list = breadcrumbJsonLd([{ name: "Home", url: SITE + "/" }, { name: "Gummies", url: SITE + "/gummies" }]);
+    expect(list.itemListElement).toEqual([
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE + "/" },
+      { "@type": "ListItem", position: 2, name: "Gummies", item: SITE + "/gummies" },
+    ]);
   });
 });

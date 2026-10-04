@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Page not found — SooulOne" };
+export const metadata = { title: "Page not found" };
 
 /**
  * A wrong or old link (a product taken down, a mistyped URL shared on

@@ -3,7 +3,8 @@ import { getBrandBySlug, getProductsByBrand } from "@/server/catalog";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
 import { ConcernTiles } from "@/components/concern-tiles";
 import { GummyBrandTabs } from "@/components/gummy-brand-tabs";
-import { canonicalFor } from "@/server/brand-family";
+import { canonicalFor, siteUrl } from "@/server/brand-family";
+import { brandTrail, breadcrumbJsonLd, jsonLdScript } from "@/lib/structured-data";
 import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<{ brand: st
   const description = brand?.description ?? `Daily gummies from ${name}, with full supplement facts and dosage guidance.`;
 
   return {
-    title: `${name} — SooulOne Gummies`,
+    title: `${name} gummies`,
     description,
     openGraph: { title: name, description },
     // The brand's own domain when it runs standalone, else this page.
@@ -58,8 +59,11 @@ export default async function BrandPage({
     products: products.filter((p) => p.categorySlug === o.slug).map((p) => ({ slug: p.slug, name: p.name })),
   }));
 
+  const trail = brandTrail({ name, slug }, await canonicalFor(`/gummies/${slug}`, slug), siteUrl());
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd(trail)) }} />
       <PageHeader
         title={name}
         intro={brand?.description ?? undefined}

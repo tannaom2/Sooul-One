@@ -121,6 +121,11 @@ const POLICIES: Record<string, Policy> = {
   },
 };
 
+export async function generateMetadata({ params }: { params: Promise<{ policy: string }> }) {
+  const policy = POLICIES[(await params).policy];
+  return policy ? { title: policy.title } : {};
+}
+
 export default async function PolicyPage({ params }: { params: Promise<{ policy: string }> }) {
   const { policy: slug } = await params;
   const policy = POLICIES[slug];

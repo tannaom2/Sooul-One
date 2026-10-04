@@ -4,6 +4,7 @@ import { getHomeRail } from "@/server/home-rail";
 import { getTopBar } from "@/server/site-content";
 import { getShippingPolicy, getStoreControls } from "@/server/store-settings";
 import { getBusinessProfile } from "@/server/business";
+import { absoluteUrl, jsonLdScript, organizationJsonLd, websiteJsonLd } from "@/lib/structured-data";
 import { trustFacts, type TrustFact } from "@/lib/trust-strip";
 import { reportError } from "@/lib/observability";
 
@@ -51,6 +52,7 @@ export default async function Home() {
   // site, not a stack trace.
   let rail: Awaited<ReturnType<typeof getHomeRail>> = [];
   let trust: TrustFact[] = [];
+  let seller: { name: string; phone: string | null; email: string | null } = { name: "SooulOne", phone: null, email: null };
   try {
     const [products, messages, controls, shipping, business] = await Promise.all([getHomeRail(), getTopBar(), getStoreControls(), getShippingPolicy(), getBusinessProfile()]);
     rail = products;
@@ -59,12 +61,21 @@ export default async function Home() {
       { fssaiLicence: business.fssaiLicence, codEnabled: controls.codEnabled, freeDeliveryAbove: shipping.freeAbovePaise > 0 && shipping.flatRatePaise > 0 ? Math.round(shipping.freeAbovePaise / 100) : null },
       messages.map((m) => m.text),
     );
+    seller = { name: business.tradeName ?? business.legalName ?? "SooulOne", phone: business.customerCarePhone, email: business.customerCareEmail };
   } catch (error) {
     reportError("home", error);
   }
+  // For search results: the business's name, logo and customer care, and the site's own name.
+  const site = process.env.SITE_URL ?? "http://localhost:3000";
+  const structured = [
+    organizationJsonLd({ ...seller, url: absoluteUrl("/", site), logo: absoluteUrl("/android-chrome-512x512.png", site) }),
+    websiteJsonLd({ name: "SooulOne", url: absoluteUrl("/", site) }),
+  ];
 
   return (
     <>
+      {/* Data blocks, never executed, so the CSP's script rules don't apply to them. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(structured) }} />
       {/* HERO — the most characteristic thing in this brief is the label
           itself, so the hero is a label, not a lifestyle photograph. Kept
           short, so products reach the first screen on every size. */}

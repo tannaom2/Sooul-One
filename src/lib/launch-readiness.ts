@@ -31,6 +31,8 @@ export interface ReadinessFacts {
   readonly cronConfigured: boolean;
   readonly onlinePayments: boolean;
   readonly errorMonitoring: boolean;
+  /** SEARCH_INDEXING=on: search engines may list the shop (src/lib/indexing.ts). */
+  readonly searchIndexing: boolean;
   /** Region of the database host, when it can be read from DATABASE_URL. */
   readonly databaseRegion: string | null;
   /** Active admin accounts that look like test accounts. */
@@ -164,6 +166,14 @@ export function evaluateReadiness(f: ReadinessFacts): Readiness {
       label: "Online payment (Razorpay)",
       detail: f.onlinePayments ? undefined : "Checkout offers cash on delivery only until it's set up.",
       status: f.onlinePayments ? "done" : "warning",
+      blocking: false,
+    },
+    {
+      id: "search",
+      group: "Operations",
+      label: "Found on Google",
+      detail: f.searchIndexing ? undefined : "Search engines are kept out: every page says noindex. Set SEARCH_INDEXING=on on launch day, then redeploy.",
+      status: f.searchIndexing ? "done" : "warning",
       blocking: false,
     },
     {

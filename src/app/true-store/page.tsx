@@ -3,13 +3,14 @@ import { ConcernChips } from "@/components/concern-chips";
 import { activeFilter, applyFilter, filterOptions } from "@/lib/concern-filter";
 import { ProductGrid, Empty, PageHeader } from "@/components/ui";
 import { reportError } from "@/lib/observability";
-import { canonicalFor } from "@/server/brand-family";
+import { canonicalFor, siteUrl } from "@/server/brand-family";
+import { brandTrail, breadcrumbJsonLd, jsonLdScript } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   return {
-    title: "The True Store — SooulOne",
+    title: "The True Store",
     description: "Healthy namkeen, sweets and munchies, with the full nutrition panel on every page.",
     // The brand's own domain when it runs standalone, else this page.
     alternates: { canonical: await canonicalFor("/true-store", "the-true-store") },
@@ -32,8 +33,11 @@ export default async function TrueStore({ searchParams }: { searchParams: Promis
   const active = activeFilter(concern, options);
   const shown = applyFilter(products, active);
 
+  const trail = brandTrail({ name: "The True Store", slug: "the-true-store" }, await canonicalFor("/true-store", "the-true-store"), siteUrl());
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd(trail)) }} />
       <PageHeader
         title="The True Store"
         intro="Namkeen, sweets and munchies made to be read as well as eaten. Nutrition, allergens and best-before are on every product page."

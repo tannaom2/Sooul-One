@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE_OPTIONS,
 } from "@/lib/session-cookie";
 import { db } from "@/lib/db";
+import { mergedQuantity, planSignInBasket, type SignInBasketMode } from "@/lib/basket-sign-in";
 import { decimalToPaise } from "@/lib/format";
 import { buildQuote, type Quote, type QuoteBox, type QuoteCredit, type QuoteLineInput } from "@/lib/checkout/quote";
 import { boxIssues, boxIssueMessage, boxKindLabel } from "@/lib/checkout/boxes";
@@ -57,6 +58,75 @@ export async function getOrCreateSessionId(): Promise<string> {
 export async function readSessionId(): Promise<string | null> {
   const store = await cookies();
   return store.get(SESSION_COOKIE)?.value ?? null;
+}
+
+/**
+ * Just signed in on this browser: the account's basket follows it
+ * (src/lib/basket-sign-in.ts). This browser's guest basket is brought into
+ * the account's (same product: quantities added, within the line limit; boxes
+ * moved as they are), and the browser then uses the account's basket, so it's
+ * the same one on every device the shopper signs in on. "keep" (checkout)
+ * changes nothing the shopper is about to order. Server Actions only.
+ */
+export async function basketOnSignIn(customerId: string, mode: SignInBasketMode): Promise<void> {
+  const store = await cookies();
+  const sessionId = store.get(SESSION_COOKIE)?.value ?? null;
+  const [here, account] = await Promise.all([
+    sessionId ? db.cart.findUnique({ where: { sessionId }, select: { id: true, customerId: true } }) : null,
+    db.cart.findUnique({ where: { customerId }, select: { id: true, sessionId: true } }),
+  ]);
+  const plan = planSignInBasket(here, account, customerId, mode);
+  if (plan.kind === "none") return;
+  if (plan.kind === "claim") {
+    await db.cart.update({ where: { id: plan.cartId }, data: { customerId } });
+    return;
+  }
+  if (plan.kind === "fresh") {
+    await startFreshBasket();
+    return;
+  }
+
+  if (plan.kind === "merge") {
+    await db.$transaction(async (tx) => {
+      const [guestItems, accountItems] = await Promise.all([
+        tx.cartItem.findMany({ where: { cartId: plan.from } }),
+        tx.cartItem.findMany({ where: { cartId: plan.into }, select: { productId: true, quantity: true } }),
+      ]);
+      const had = new Map(accountItems.map((i) => [i.productId, i.quantity]));
+      for (const item of guestItems) {
+        await tx.cartItem.upsert({
+          where: { cartId_productId: { cartId: plan.into, productId: item.productId } },
+          create: { cartId: plan.into, productId: item.productId, quantity: item.quantity, priceAtAdd: item.priceAtAdd },
+          // The guest's price is the one they saw most recently.
+          update: { quantity: mergedQuantity(had.get(item.productId) ?? 0, item.quantity), priceAtAdd: item.priceAtAdd },
+        });
+      }
+      await tx.cartBox.updateMany({ where: { cartId: plan.from }, data: { cartId: plan.into } });
+      await tx.cart.delete({ where: { id: plan.from } });
+    });
+  }
+
+  // This browser now uses the account's basket.
+  const into = plan.kind === "merge" ? plan.into : plan.cartId;
+  let shared = account?.sessionId ?? null;
+  if (!shared) {
+    shared = randomUUID();
+    await db.cart.update({ where: { id: into }, data: { sessionId: shared } });
+  }
+  store.set(SESSION_COOKIE, shared, SESSION_COOKIE_OPTIONS);
+  const snapshot = await getBasketSnapshot(shared).catch(() => null);
+  if (snapshot) await writeBasketCount(snapshot.count);
+}
+
+/**
+ * An empty basket for this browser: after signing out (the account keeps its
+ * basket for next time, and the next person on a shared computer doesn't see
+ * it), or when the browser held someone else's. Server Actions only.
+ */
+export async function startFreshBasket(): Promise<void> {
+  const store = await cookies();
+  store.set(SESSION_COOKIE, randomUUID(), SESSION_COOKIE_OPTIONS);
+  await writeBasketCount(0);
 }
 
 const CART_ITEM_INCLUDE = {

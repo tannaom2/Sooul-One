@@ -5,7 +5,7 @@ import { reportError } from "@/lib/observability";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Find a store — SooulOne",
+  title: "Find a store",
   description: "Our True Store superstores: address, opening hours and the brands each one carries.",
 };
 

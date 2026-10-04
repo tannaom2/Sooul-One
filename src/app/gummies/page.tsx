@@ -6,7 +6,7 @@ import { GummyBrandTabs } from "@/components/gummy-brand-tabs";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Gummies — SooulOne",
+  title: "Gummies",
   description: "Daily gummies from Woman Axis, Kids Vault and Man Rituals, with full supplement facts and dosage.",
 };
 

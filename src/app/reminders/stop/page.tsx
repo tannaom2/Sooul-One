@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { StopButton } from "./stop-button";
 
 export const metadata: Metadata = {
-  title: "Stop emails — SooulOne",
+  title: "Stop emails",
   robots: { index: false, follow: false },
 };
 

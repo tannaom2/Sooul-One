@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const article = await getArticle(slug).catch(() => null);
   if (!article) return {};
   return {
-    title: `${article.title} — SooulOne Learn`,
+    title: `${article.title}`,
     description: article.excerpt,
     alternates: { canonical: `/learn/${article.slug}` },
     openGraph: { type: "article", title: article.title, description: article.excerpt, ...(article.coverImageUrl ? { images: [article.coverImageUrl] } : {}) },

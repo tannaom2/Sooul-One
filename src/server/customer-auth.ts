@@ -1,4 +1,7 @@
 import "server-only";
+import { basketOnSignIn, startFreshBasket } from "@/server/cart";
+import { reportError } from "@/lib/observability";
+import type { SignInBasketMode } from "@/lib/basket-sign-in";
 import { cache } from "react";
 import { after } from "next/server";
 import { cookies, headers } from "next/headers";
@@ -123,7 +126,7 @@ export async function sendSignInCode(rawPhone: string): Promise<SendCodeResult> 
   return { ok: true, sentTo: maskMobile(phone), resendIn: RESEND_AFTER_SECONDS, demoCode: code };
 }
 
-export async function verifySignInCode(rawPhone: string, rawCode: string): Promise<VerifyCodeResult> {
+export async function verifySignInCode(rawPhone: string, rawCode: string, basket: SignInBasketMode = "follow"): Promise<VerifyCodeResult> {
   if (codeDeliveryHere() === "off") return { ok: false, message: NOT_AVAILABLE };
   const phone = normaliseMobile(rawPhone);
   if (!phone) return { ok: false, message: BAD_NUMBER };
@@ -158,6 +161,9 @@ export async function verifySignInCode(rawPhone: string, rawCode: string): Promi
 
   const customer = await claimNumber(phone, now);
   const deviceHash = await startSession(customer.id);
+  // The account's basket follows it to this browser (never at checkout: "keep").
+  // A problem here mustn't stop the sign-in.
+  await basketOnSignIn(customer.id, basket).catch((error) => reportError("customer-auth/basket", error, { mode: basket }));
 
   // Arrived through a friend's link or code: this is where it counts, once the
   // number is proven. Whatever the outcome, the remembered code is used up.
@@ -255,4 +261,6 @@ export async function signOutCustomer({ everywhere }: { everywhere: boolean }): 
     await db.customerSession.deleteMany({ where: { tokenHash } });
   }
   store.delete(CUSTOMER_COOKIE);
+  // The basket stays with the account; this browser starts an empty one.
+  if (token) await startFreshBasket();
 }

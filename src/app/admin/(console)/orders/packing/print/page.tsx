@@ -8,7 +8,7 @@ import { getBusinessProfile } from "@/server/business";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Pick list and packing slips — SooulOne console" };
+export const metadata = { title: "Pick list and packing slips" };
 
 /**
  * The packing run on paper: the pick list first, then one packing slip per

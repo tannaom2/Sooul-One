@@ -29,6 +29,7 @@ const ready: ReadinessFacts = {
   cronConfigured: true,
   onlinePayments: false,
   errorMonitoring: false,
+  searchIndexing: false,
   databaseRegion: "ap-southeast-1",
   testAdmins: [],
   activeOwners: 1,

@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { NoAccess } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Downloads — SooulOne console" };
+export const metadata = { title: "Downloads" };
 
 const IST_MS = 5.5 * 60 * 60 * 1000;
 /** Today in India time, as yyyy-mm-dd: the default range ends here. */

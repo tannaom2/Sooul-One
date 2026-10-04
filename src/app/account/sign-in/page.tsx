@@ -7,7 +7,7 @@ import { getProgram, rememberedCode } from "@/server/referrals";
 import { turnstileSiteKey } from "@/lib/turnstile";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Sign in — SooulOne", robots: { index: false } };
+export const metadata = { title: "Sign in", robots: { index: false } };
 
 /** Only a path on this site, so a crafted link can't send a shopper elsewhere after signing in. */
 function safeNext(next: string | undefined): string {

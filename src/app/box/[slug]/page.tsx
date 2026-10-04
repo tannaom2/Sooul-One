@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const box = await boxPage((await params).slug);
   return box
-    ? { title: `${box.name}: any ${box.size} for ${formatPriceTag(box.pricePaise)} — SooulOne`, description: box.description ?? undefined }
-    : { title: "Box not found — SooulOne" };
+    ? { title: `${box.name}: any ${box.size} for ${formatPriceTag(box.pricePaise)}`, description: box.description ?? undefined }
+    : { title: "Box not found" };
 }
 
 /**

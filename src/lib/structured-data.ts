@@ -62,6 +62,56 @@ export function productJsonLd(p: StructuredProduct, seller: string): Record<stri
  * JSON for a <script type="application/ld+json">: "<" is escaped, so text a
  * product name contains can never close the script element.
  */
+/**
+ * Who sells: on the home page, so search results can show the business's own
+ * name, logo and customer-care contact (Settings → Business details).
+ */
+export function organizationJsonLd(o: { name: string; url: string; logo: string; phone: string | null; email: string | null }): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: o.name,
+    url: o.url,
+    logo: o.logo,
+    ...(o.phone || o.email
+      ? {
+          contactPoint: {
+            "@type": "ContactPoint",
+            contactType: "customer service",
+            areaServed: "IN",
+            ...(o.phone ? { telephone: o.phone } : {}),
+            ...(o.email ? { email: o.email } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/** The site's own name for search results ("SooulOne", not the domain). */
+export function websiteJsonLd(o: { name: string; url: string }): Record<string, unknown> {
+  return { "@context": "https://schema.org", "@type": "WebSite", name: o.name, url: o.url };
+}
+
+/** Where a page sits: Home › Gummies › Woman Axis › a product. Shown by search results in place of the raw URL. */
+export function breadcrumbJsonLd(trail: readonly { name: string; url: string }[]): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: trail.map((step, i) => ({ "@type": "ListItem", position: i + 1, name: step.name, item: step.url })),
+  };
+}
+
+/**
+ * The trail to a brand's page, as the shop's own menu has it: The True Store
+ * is a shop of its own; the gummy brands sit under Gummies. `brandUrl` is the
+ * brand page's canonical address (its own domain, when it has one).
+ */
+export function brandTrail(brand: { name: string; slug: string }, brandUrl: string, siteUrl: string): { name: string; url: string }[] {
+  const home = { name: "Home", url: absoluteUrl("/", siteUrl) };
+  if (brand.slug === "the-true-store") return [home, { name: brand.name, url: brandUrl }];
+  return [home, { name: "Gummies", url: absoluteUrl("/gummies", siteUrl) }, { name: brand.name, url: brandUrl }];
+}
+
 export function jsonLdScript(data: unknown): string {
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }

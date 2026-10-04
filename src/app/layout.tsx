@@ -44,7 +44,9 @@ export const metadata: Metadata = {
   // ones. Falls back to localhost in dev; set SITE_URL before going live or
   // every canonical and Open Graph image resolves to the wrong domain.
   metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
-  title: TITLE,
+  // Pages name themselves ("Gummies", a product, an article); the site name is
+  // added once, here, so every title reads the same way. The home page uses TITLE.
+  title: { default: TITLE, template: "%s — SooulOne" },
   description: DESCRIPTION,
   applicationName: "SooulOne",
   // Made by scripts/brand/make-icons.cjs. /manifest.webmanifest comes from app/manifest.ts.

@@ -1,4 +1,5 @@
 import "server-only";
+import { searchIndexingOn } from "@/lib/indexing";
 import { turnstileEnabled } from "@/lib/turnstile";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
@@ -53,6 +54,7 @@ export async function getReadiness(): Promise<Readiness> {
     cronConfigured: Boolean(process.env.CRON_SECRET),
     onlinePayments: onlinePaymentsEnabled(),
     errorMonitoring: Boolean(process.env.SENTRY_DSN),
+    searchIndexing: searchIndexingOn(process.env.SEARCH_INDEXING),
     databaseRegion: regionFromDatabaseUrl(process.env.DATABASE_URL),
     testAdmins: admins.filter((a) => looksLikeTestAccount(a.email)).map((a) => a.email),
     activeOwners: admins.filter((a) => a.role === "OWNER").length,

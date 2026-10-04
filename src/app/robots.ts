@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { normalizeHost } from "@/lib/brand-domains";
 import { getBrandFamily } from "@/server/brand-family";
+import { mayIndex, searchIndexingOn } from "@/lib/indexing";
 
 const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
@@ -12,6 +13,10 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const host = normalizeHost((await headers()).get("host"));
   const standalone = (await getBrandFamily()).some((b) => b.domain && b.domainMode === "STANDALONE" && normalizeHost(b.domain) === host);
   const base = standalone ? `https://${host}` : SITE_URL;
+  // Before launch, and on any address that isn't the shop's own, pages say
+  // noindex (src/proxy.ts). Crawling stays allowed so search engines can read
+  // that; there's just no sitemap to send them looking.
+  const indexable = mayIndex({ on: searchIndexingOn(process.env.SEARCH_INDEXING), host, mainHost: new URL(SITE_URL).host, standaloneBrand: standalone });
   return {
     rules: {
       userAgent: "*",
@@ -21,6 +26,6 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       // a stranger on. Search results pages are thin and endless.
       disallow: ["/admin", "/api", "/cart", "/checkout", "/order", "/account", "/r/", "/search"],
     },
-    sitemap: `${base}/sitemap.xml`,
+    ...(indexable ? { sitemap: `${base}/sitemap.xml` } : {}),
   };
 }

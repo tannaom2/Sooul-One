@@ -136,7 +136,10 @@ function CheckoutForm({
   // One id per checkout visit, sent with every Place order: a double click or
   // a retry after a dropped connection gets the same order back, never two.
   const [attemptKey] = useState(() => crypto.randomUUID());
-  const { quote, couponRejected, empty, creditNote, referralWaiting, cod } = useQuote(form.postalCode, form.state, form.couponCode);
+  const { quote, couponRejected, empty, creditNote, referralWaiting, cod, refresh: requote } = useQuote(form.postalCode, form.state, form.couponCode);
+  // Set when proving the number changed the total (a friend's offer now applies):
+  // the shopper sees the new amount and places the order with one more tap.
+  const [repriced, setRepriced] = useState<string | null>(null);
   const place = usePincode(form.postalCode);
   // Only what this deployment can take right now: UPI and card once Razorpay
   // is set up, cash on delivery unless the owner has switched it off.
@@ -243,6 +246,7 @@ function CheckoutForm({
     setBusy(true);
     setError(null);
     setBlocked([]);
+    setRepriced(null);
 
     try {
       const clean = normalise(form);
@@ -624,6 +628,7 @@ function CheckoutForm({
                           <p className="mb-3 text-small font-semibold">Confirm your number to place this cash on delivery order</p>
                           <PhoneCodeForm
                             key={codeSent.phone}
+                            keepBasket
                             turnstileSiteKey={turnstileSiteKey}
                             sent={codeSent}
                             submitLabel={total ? `Confirm and place order · pay ${total} on delivery` : "Confirm and place order"}
@@ -635,6 +640,18 @@ function CheckoutForm({
                               const phone = codeSent.phone;
                               setProvenPhone(phone);
                               setCodeSent(null);
+                              // Signing in can apply a friend's welcome offer: price it
+                              // before placing, so the order never costs other than shown.
+                              const before = quote?.totalPaise;
+                              const fresh = await requote();
+                              if (fresh && before != null && fresh.totalPaise !== before) {
+                                setRepriced(
+                                  fresh.totalPaise < before
+                                    ? `Your offer is applied: you now pay ${formatPriceTag(fresh.totalPaise)}.`
+                                    : `Your total is now ${formatPriceTag(fresh.totalPaise)}.`,
+                                );
+                                return;
+                              }
                               await submit(phone);
                             }}
                           />
@@ -644,6 +661,11 @@ function CheckoutForm({
                         </div>
                       ) : (
                         <>
+                          {repriced && (
+                            <p role="status" className="border-l-4 border-veg bg-shelf px-3 py-2 text-small font-semibold">
+                              {repriced} Place your order to confirm.
+                            </p>
+                          )}
                           <Turnstile siteKey={turnstileSiteKey} action="checkout" onToken={setHumanToken} resetKey={humanReset} />
                           <button onClick={() => submit()} disabled={busy || !quote?.canProceed || humanPending || (codOff && payNow === "COD")} className="btn btn-solid w-full sm:w-auto sm:justify-self-start">
                             {busy ? "Working…" : payLabel}

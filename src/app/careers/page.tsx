@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui";
 import { getOpenRoles, getSiteText } from "@/server/site-content";
 
 export const metadata: Metadata = {
-  title: "Careers — SooulOne",
+  title: "Careers",
   description: "Open roles at SooulOne.",
   alternates: { canonical: "/careers" },
 };

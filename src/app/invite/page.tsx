@@ -4,7 +4,7 @@ import { invite, rememberedCode } from "@/server/referrals";
 import { formatPriceTag } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "You've been invited — SooulOne", robots: { index: false } };
+export const metadata = { title: "You've been invited", robots: { index: false } };
 
 /** Where a friend's link lands: whose invitation, what it's worth, and how to use it. */
 export default async function InvitePage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {

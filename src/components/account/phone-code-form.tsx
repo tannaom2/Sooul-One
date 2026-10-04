@@ -25,6 +25,7 @@ export function PhoneCodeForm({
   sent: initialSent,
   submitLabel,
   onVerified,
+  keepBasket = false,
   onChangeNumber,
   autoFocus = true,
   turnstileSiteKey = null,
@@ -32,6 +33,8 @@ export function PhoneCodeForm({
   sent?: CodeSent;
   submitLabel: string;
   onVerified: () => void | Promise<void>;
+  /** At checkout: leave the basket being ordered exactly as it is (no merge from other devices). */
+  keepBasket?: boolean;
   /** Checkout owns the number, so "Change number" goes back to its contact step. */
   onChangeNumber?: () => void;
   autoFocus?: boolean;
@@ -93,7 +96,7 @@ export function PhoneCodeForm({
     setBusy(true);
     setError(null);
     try {
-      const result = await confirmSignInCode(sent.phone, code);
+      const result = await confirmSignInCode(sent.phone, code, keepBasket ? "keep" : "follow");
       if (!result.ok) {
         setError(result.message);
         if (result.expired) setWait(0);

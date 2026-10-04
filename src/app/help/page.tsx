@@ -8,7 +8,7 @@ import { groupFaqs } from "@/lib/site-content";
 import { getStoreFacts } from "@/server/store-settings";
 
 export const metadata: Metadata = {
-  title: "Questions and answers — SooulOne",
+  title: "Questions and answers",
   description: "Orders, delivery, payments, returns and genuine products: answers to what shoppers ask most.",
   alternates: { canonical: "/help" },
 };

@@ -47,11 +47,12 @@ export async function requestSignInCode(phone: string, humanToken?: string | nul
   }
 }
 
-export async function confirmSignInCode(phone: string, code: string): Promise<VerifyCodeResult> {
+/** `basket`: "follow" brings the account's basket to this browser (sign-in page); "keep" leaves it (checkout). */
+export async function confirmSignInCode(phone: string, code: string, basket: "follow" | "keep" = "follow"): Promise<VerifyCodeResult> {
   const parsed = z.object({ phone: phoneSchema, code: codeSchema }).safeParse({ phone, code });
   if (!parsed.success) return { ok: false, message: "Enter the 6-digit code." };
   try {
-    return await verifySignInCode(parsed.data.phone, parsed.data.code);
+    return await verifySignInCode(parsed.data.phone, parsed.data.code, basket === "keep" ? "keep" : "follow");
   } catch (error) {
     reportError("customer-auth/verify", error);
     return { ok: false, message: TRY_AGAIN };

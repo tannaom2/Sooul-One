@@ -8,7 +8,7 @@ import { turnstileSiteKey } from "@/lib/turnstile";
 import { EnquiryForm } from "./enquiry-form";
 
 export const metadata: Metadata = {
-  title: "Contact us — SooulOne",
+  title: "Contact us",
   description: "Customer care, collaborations, deliveries outside India and careers at SooulOne.",
   alternates: { canonical: "/contact" },
 };

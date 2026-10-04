@@ -28,7 +28,8 @@ import { canonicalFor } from "@/server/brand-family";
 import { JumpLink } from "@/components/jump-link";
 import { formatINR } from "@/lib/money";
 import { decimalToPaise } from "@/lib/format";
-import { absoluteUrl, jsonLdScript, productJsonLd } from "@/lib/structured-data";
+import { absoluteUrl, brandTrail, breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/structured-data";
+import { brandPath } from "@/lib/brand-domains";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const product: any = await getProductBySlug(slug);
   if (!product || !isSellable(product)) return {};
 
-  const title = `${product.name} — ${product.brand?.name ?? "SooulOne"}`;
+  // "Biotin Glow Gummies — Woman Axis"; the layout adds " — SooulOne".
+  const title = product.brand?.name ? `${product.name} — ${product.brand.name}` : product.name;
   const description = product.shortDescription;
 
   return {
@@ -145,6 +147,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   // What search engines read for rich results (F5): only what this page shows.
   const site = process.env.SITE_URL ?? "http://localhost:3000";
+  const productUrl = await canonicalFor(`/product/${product.slug}`, product.brand?.slug ?? null);
+  const trail = product.brand
+    ? [...brandTrail(product.brand, await canonicalFor(brandPath(product.brand.slug), product.brand.slug), site), { name: product.name, url: productUrl }]
+    : null;
   const structured = productJsonLd(
     {
       name: product.name,
@@ -152,7 +158,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       description: product.shortDescription,
       brand: product.brand?.name ?? "SooulOne",
       category: product.category?.name ?? null,
-      url: await canonicalFor(`/product/${product.slug}`, product.brand?.slug ?? null),
+      url: productUrl,
       images: (product.images ?? []).map((i: { url: string }) => absoluteUrl(i.url, site)),
       pricePaise: price.pricePaise,
       inStock: buyable,
@@ -165,7 +171,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     <BuyQuantityProvider max={availability.shippableUnits}>
     <article className="mx-auto max-w-6xl px-5 py-8 lg:py-10">
       {/* A data block, never executed, so the CSP's script rules don't apply to it. */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(structured) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(trail ? [structured, breadcrumbJsonLd(trail)] : structured) }} />
       <nav className="mb-5 text-small text-ink-faint">
         {product.brand?.name} / {product.category?.name}
       </nav>
