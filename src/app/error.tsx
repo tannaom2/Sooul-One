@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { reportClientError } from "@/lib/report-client-error";
 
 /**
  * Storefront error boundary.
@@ -11,8 +13,11 @@ import Link from "next/link";
  * is "this doesn't exist," the other is "we can't tell right now." Letting
  * the error reach this boundary instead means a transient outage shows as an
  * outage, with a retry, rather than as a product or order that's vanished.
+ * An error that started in the browser is reported from here (F8); one from
+ * the server already was.
  */
-export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => reportClientError(error, "storefront"), [error]);
   return (
     <div className="mx-auto max-w-lg px-5 py-24 text-center">
       <p className="text-h2 font-extrabold">Something didn&apos;t load</p>

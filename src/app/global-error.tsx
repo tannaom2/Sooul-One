@@ -1,11 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "@/lib/report-client-error";
+
 /**
  * Last-resort boundary for errors in the root layout itself, where
  * src/app/error.tsx can't help because the layout (and its styles) is what
  * failed. Must render its own <html> and <body>, so styling is inline.
  */
-export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => reportClientError(error, "root"), [error]);
   return (
     <html lang="en">
       <body style={{ margin: 0, fontFamily: "system-ui, sans-serif", background: "#fbf8f3", color: "#1d1a16" }}>

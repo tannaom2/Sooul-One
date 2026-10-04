@@ -39,7 +39,9 @@ async function main() {
     RAZORPAY_KEY_SECRET: "",
     RAZORPAY_WEBHOOK_SECRET: "",
     CLOUDINARY_URL: "",
-    SENTRY_DSN: "",
+    // DEMO_SENTRY_DSN tries error reporting against a stand-in Sentry on this
+    // machine; anything not on localhost is ignored, so reports still can't leave.
+    SENTRY_DSN: localOnly(process.env.DEMO_SENTRY_DSN),
     // No texts leave the machine either: sign-in and cash on delivery codes
     // are shown on screen, labelled as a demo (codeDelivery in src/lib/otp.ts
     // allows this only for a localhost site, never on a hosted server).
@@ -75,6 +77,12 @@ async function main() {
   console.log(`▸ Serving the demo at http://localhost:3000 (storefront) and http://localhost:3000/admin (console). Ctrl+C to stop.`);
   const server = spawn(dev ? "npx next dev -p 3000" : "npx next start -p 3000", { env, stdio: "inherit", shell: true });
   server.on("exit", (code) => process.exit(code ?? 0));
+}
+
+/** The DSN if it points at this machine, otherwise blank. */
+function localOnly(dsn: string | undefined): string {
+  if (!dsn || !URL.canParse(dsn)) return "";
+  return ["localhost", "127.0.0.1"].includes(new URL(dsn).hostname) ? dsn : "";
 }
 
 main().catch((error) => {

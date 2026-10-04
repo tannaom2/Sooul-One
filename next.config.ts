@@ -17,6 +17,14 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Browser error reporting (src/instrumentation-client.ts) switches on with
+  // the same SENTRY_DSN as the server, copied into the browser code at build
+  // time. A DSN is meant to be public: it can only send reports, and those
+  // pass through our own /api/errors, which accepts our project only.
+  env: {
+    NEXT_PUBLIC_SENTRY_DSN: process.env.SENTRY_DSN ?? "",
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "",
+  },
   // Cloudinary resizes and re-encodes (AVIF/WebP) at the edge, instead of our
   // server downloading originals to resize them. See src/lib/cloudinary-loader.ts.
   images: {

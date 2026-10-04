@@ -95,6 +95,8 @@ export const PUBLIC_LIMITS = {
   batchCheck: { max: 30, windowSeconds: 10 * 60 },
   /** Storefront searches (typing a new query each time). */
   search: { max: 120, windowSeconds: 10 * 60 },
+  /** Error reports from browsers, forwarded to Sentry: a page sends at most 10 (src/lib/browser-errors.ts). */
+  browserErrors: { max: 60, windowSeconds: 10 * 60 },
 } as const satisfies Record<string, Limit>;
 
 export type PublicScope = keyof typeof PUBLIC_LIMITS;

@@ -170,7 +170,7 @@ export function evaluateReadiness(f: ReadinessFacts): Readiness {
       id: "monitoring",
       group: "Operations",
       label: "Error monitoring (Sentry)",
-      detail: f.errorMonitoring ? undefined : "Errors only reach the server log, where nobody is watching.",
+      detail: f.errorMonitoring ? undefined : "Errors only reach the server log, where nobody is watching, and errors in shoppers' browsers aren't seen at all. Add SENTRY_DSN, then redeploy.",
       status: f.errorMonitoring ? "done" : "warning",
       blocking: false,
     },
