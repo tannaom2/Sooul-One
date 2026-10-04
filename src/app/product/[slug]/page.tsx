@@ -433,6 +433,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                     {"☆".repeat(5 - r.rating)}
                   </span>
                   <span className="text-small font-semibold">{r.customerName}</span>
+                  {/* Written from the buyer's own order page, so we know they bought it. */}
+                  {r.orderId && <span className="text-micro font-semibold text-veg">Verified buyer</span>}
                   <span className="text-micro text-ink-faint">{formatDate(r.createdAt)}</span>
                 </div>
                 <p className="mt-2 text-small text-ink-soft">{r.comment}</p>
@@ -444,7 +446,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         )}
 
         <div className="mt-8">
-          <h3 className="mb-4 text-h3 font-bold">Write a review</h3>
+          <h3 className="text-h3 font-bold">Write a review</h3>
+          <p className="mb-4 mt-1 text-small text-ink-faint">Bought it from us? Review it from your order page and it shows as from a verified buyer.</p>
           <ReviewForm productId={product.id} turnstileSiteKey={turnstileSiteKey()} />
         </div>
       </section>

@@ -13,6 +13,8 @@ import { ReorderButton } from "@/components/reorder-button";
 import { canReorder } from "@/lib/reorder";
 import { REFILL_NOTICE, refillStatus } from "@/server/refill-reminders";
 import { RefillReminder } from "./refill-reminder";
+import { OrderReviews } from "./order-reviews";
+import { canReviewFrom, reviewableItems, suggestedReviewName } from "@/lib/follow-ups";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,7 @@ export default async function OrderPage({
     where: { orderNumber },
     include: {
       items: true,
+      reviews: { select: { productId: true, rating: true, isApproved: true } },
       // Only what the tracker reads; staff notes stay in admin (order-progress.ts).
       events: { select: { type: true, detail: true, createdAt: true }, orderBy: { createdAt: "asc" } },
     },
@@ -65,6 +68,13 @@ export default async function OrderPage({
   const linkToken = orderTokenMatches(t, order.accessToken) ? (t ?? null) : null;
   // Supplements: offer a reminder before they run out (src/server/refill-reminders.ts).
   const refill = await refillStatus(order.id);
+  // Delivered: each product once, with the review already written from this order, if any.
+  const reviewItems = canReviewFrom(order.status)
+    ? reviewableItems(order.items, []).map((i) => {
+        const r = order.reviews.find((x) => x.productId === i.productId);
+        return { productId: i.productId, name: i.productNameSnapshot, review: r ? { rating: r.rating, published: r.isApproved } : null };
+      })
+    : [];
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-16">
@@ -157,6 +167,10 @@ export default async function OrderPage({
           hasEmail={refill.hasEmail}
           notice={REFILL_NOTICE}
         />
+      )}
+
+      {reviewItems.length > 0 && (
+        <OrderReviews orderNumber={order.orderNumber} token={linkToken} items={reviewItems} suggestedName={suggestedReviewName(address?.name)} />
       )}
 
       <div className="mt-8 flex flex-wrap gap-3">

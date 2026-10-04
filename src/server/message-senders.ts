@@ -9,6 +9,7 @@ import { getBusinessProfile } from "@/server/business";
 import { sendRefillReminder } from "@/server/refill-reminders";
 import { sendLicenceReminder } from "@/server/suppliers";
 import { sendRecallNotice } from "@/server/recall";
+import { sendCheckIn, sendDeliveredNotice, sendRefundNotice, sendReviewRequest } from "@/server/follow-ups";
 
 /**
  * One sender per message kind (src/lib/messages.ts). Each looks up what it
@@ -86,5 +87,21 @@ export const SENDERS: Record<MessageKind, (payload: Payload, orderId: string | n
 
   async recall_notice(p, orderId) {
     return sendRecallNotice(p, orderId);
+  },
+
+  async delivered_notice(_p, orderId) {
+    return sendDeliveredNotice(orderId);
+  },
+
+  async check_in(_p, orderId) {
+    return sendCheckIn(orderId);
+  },
+
+  async review_request(_p, orderId) {
+    return sendReviewRequest(orderId);
+  },
+
+  async refund_notice(p, orderId) {
+    return sendRefundNotice(p, orderId);
   },
 };

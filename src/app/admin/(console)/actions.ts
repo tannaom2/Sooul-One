@@ -11,7 +11,10 @@ import { diffFields } from "@/lib/audit-diff";
 import { recordOrderEvent } from "@/lib/order-events";
 import { productInputSchema } from "@/lib/validation/product";
 import { liveLicenceProblem } from "@/lib/suppliers";
-import { deliverNow, messageKey } from "@/server/messages";
+import { deliverNow, enqueueMessage, messageKey, processMessages } from "@/server/messages";
+import type { Outcome } from "@/lib/messages";
+import { followUpKey } from "@/lib/follow-ups";
+import { followUpsOnDelivery } from "@/server/follow-ups";
 import { STATUS_LABELS, checkMove, isClosing, releasesStock } from "@/lib/order-lifecycle";
 import { releaseStock } from "@/server/order-stock";
 import { issueInvoiceNumber } from "@/server/invoice-number";
@@ -513,6 +516,11 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
     if (count === 1 && statusChanges && status === "SHIPPED" && !previous.invoiceNumber) {
       invoiceNumber = await issueInvoiceNumber(tx, orderId);
     }
+    // Delivered: the arrival email now, a check-in at a week and a review
+    // request at two (src/server/follow-ups.ts), queued with the change.
+    if (count === 1 && statusChanges && status === "DELIVERED") {
+      await enqueueMessage(tx, ...followUpsOnDelivery(orderId, now));
+    }
     return count === 1;
   });
   if (!applied) return { ok: false, message: STALE };
@@ -533,20 +541,25 @@ export async function setOrderStatus(_prev: ActionResult, form: FormData): Promi
     await audit(session, "SET_ORDER_STATUS", "Order", orderId, changes);
   }
 
+  // What happened to the customer's email, in one sentence for staff.
+  const mailedNote = (outcome: Outcome | undefined, what: string) =>
+    outcome?.status === "SENT"
+      ? " Customer notified."
+      : outcome?.status === "SKIPPED"
+        ? outcome.reason === "not_configured"
+          ? " Email isn't configured, so the customer wasn't notified."
+          : outcome.reason === "no_recipient"
+            ? ` No email address on this order, so no ${what}.`
+            : ` No ${what} was needed.`
+        : ` The ${what} didn't go yet; it will be retried (see Messages).`;
   let mailed = "";
   if (status === "SHIPPED" && previous.status !== "SHIPPED") {
     const [sent] = await deliverNow({ kind: "shipping_notification", dedupeKey: messageKey.shipping(orderId), orderId });
-    const outcome = sent?.outcome;
-    mailed =
-      outcome?.status === "SENT"
-        ? " Customer notified."
-        : outcome?.status === "SKIPPED"
-          ? outcome.reason === "not_configured"
-            ? " Email isn't configured, so the customer wasn't notified."
-            : outcome.reason === "no_recipient"
-              ? " No email address on this order, so no shipping email."
-              : " No shipping email was needed."
-          : " The shipping email didn't go yet; it will be retried (see Messages).";
+    mailed = mailedNote(sent?.outcome, "shipping email");
+  }
+  if (statusChanges && status === "DELIVERED") {
+    const [sent] = await processMessages({ dedupeKeys: [followUpKey.delivered(orderId)] });
+    mailed = mailedNote(sent?.outcome, "delivered email");
   }
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${orderId}`);

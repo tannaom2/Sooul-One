@@ -13,6 +13,10 @@ export const MESSAGE_KINDS = {
   refill_reminder: "Refill reminder email",
   supplier_licence_expiry: "Supplier licence expiry email to you",
   recall_notice: "Recall notice email",
+  delivered_notice: "Delivered email",
+  check_in: "Week-one check-in email",
+  review_request: "Review request email",
+  refund_notice: "Refund email",
 } as const;
 
 export type MessageKind = keyof typeof MESSAGE_KINDS;

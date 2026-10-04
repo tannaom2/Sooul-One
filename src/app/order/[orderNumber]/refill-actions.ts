@@ -2,28 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { db } from "@/lib/db";
-import { orderTokenMatches } from "@/lib/order-access";
 import { reportError } from "@/lib/observability";
-import { getCustomer } from "@/server/customer-auth";
 import { optInRefill, refillStatus, stopRefill } from "@/server/refill-reminders";
+import { ownOrder } from "@/server/order-owner";
 
 export interface RefillResult {
   ok: boolean;
   message: string;
-}
-
-const input = z.object({ orderNumber: z.string().min(1).max(40), token: z.string().max(200).nullable() });
-
-/** The order, if this caller can open it: its link token, or the signed-in shopper it belongs to. */
-async function ownOrder(orderNumber: string, token: string | null) {
-  const parsed = input.safeParse({ orderNumber, token });
-  if (!parsed.success) return null;
-  const order = await db.order.findUnique({ where: { orderNumber: parsed.data.orderNumber }, select: { id: true, accessToken: true, customerId: true } });
-  if (!order) return null;
-  if (orderTokenMatches(parsed.data.token, order.accessToken)) return order;
-  const customer = order.customerId ? await getCustomer() : null;
-  return customer && customer.id === order.customerId ? order : null;
 }
 
 /** "Remind me before it runs out" on the order page (src/server/refill-reminders.ts). */

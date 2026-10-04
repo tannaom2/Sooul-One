@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth";
 import { Empty, NoAccess } from "@/components/ui";
@@ -20,12 +21,12 @@ export default async function ReviewsPage() {
     [pending, published] = await Promise.all([
       db.review.findMany({
         where: { isApproved: false },
-        include: { product: { select: { name: true, regulatoryType: true } } },
+        include: { product: { select: { name: true, regulatoryType: true } }, order: { select: { id: true, orderNumber: true } } },
         orderBy: { createdAt: "asc" },
       }),
       db.review.findMany({
         where: { isApproved: true },
-        include: { product: { select: { name: true } } },
+        include: { product: { select: { name: true } }, order: { select: { orderNumber: true } } },
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
@@ -73,6 +74,14 @@ export default async function ReviewsPage() {
                     {"☆".repeat(5 - r.rating)}
                   </span>
                   <span className="text-small font-semibold">{r.customerName}</span>
+                  {/* Written from its order (src/app/order/[orderNumber]/review-actions.ts). */}
+                  {r.order ? (
+                    <Link href={`/admin/orders/${r.order.id}`} className="text-micro text-veg underline">
+                      Verified buyer · {r.order.orderNumber}
+                    </Link>
+                  ) : (
+                    <span className="text-micro text-ink-faint">Left on the product page</span>
+                  )}
                 </div>
                 <p className="mt-2 text-small">{r.comment}</p>
 
@@ -118,7 +127,8 @@ export default async function ReviewsPage() {
                 <p>
                   <span className="font-semibold">{r.product.name}</span>
                   <span className="ml-2 text-ink-faint">
-                    {"★".repeat(r.rating)} · {r.customerName} · {formatDate(r.createdAt)}
+                    {"★".repeat(r.rating)} · {r.customerName}
+                    {r.order && <span className="text-veg"> · verified buyer</span>} · {formatDate(r.createdAt)}
                   </span>
                 </p>
                 <p className="mt-1 text-ink-soft">{r.comment}</p>

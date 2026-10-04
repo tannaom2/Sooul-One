@@ -356,3 +356,142 @@ export async function sendRecallNoticeEmail(
   const text = [`Recall: ${recall.product}, batch ${recall.batchNumber}`, `You bought this batch in order ${recall.orderNumber}.`, "", recall.notice, "", ...(recall.contact ? [`Contact us: ${recall.contact}`] : [])].join("\n");
   return send(to, `Important: recall of ${recall.product}, batch ${recall.batchNumber}`, html, text);
 }
+
+/* ------------------------------------------------- after the order (R5) */
+
+type Usage = { name: string; guidance: string };
+
+const usageHtml = (usage: readonly Usage[]) =>
+  usage.length === 0
+    ? ""
+    : `<p style="margin:0 0 8px;font-size:15px;font-weight:700">How to take ${usage.length === 1 ? "it" : "them"}</p>
+       <ul style="margin:0 0 16px;padding-left:20px;font-size:15px;line-height:1.5">${usage
+         .map((u) => `<li style="margin:0 0 6px"><strong>${esc(u.name)}</strong>: ${esc(u.guidance)}</li>`)
+         .join("")}</ul>
+       <p style="margin:0 0 16px;font-size:13px;color:#8c7f73">As printed on the pack. Don't take more than it says.</p>`;
+
+const usageText = (usage: readonly Usage[]) =>
+  usage.length === 0 ? [] : [`How to take ${usage.length === 1 ? "it" : "them"} (as printed on the pack):`, ...usage.map((u) => `  - ${u.name}: ${u.guidance}`), ""];
+
+/** A follow-up's footer: why it came, and the one-tap stop. */
+const followUpFooter = (orderNumber: string, stopUrl: string) =>
+  `About your order ${esc(orderNumber)}. We send one check-in and one review request per order, never offers. <a href="${esc(stopUrl)}" style="color:#8c7f73">Stop these emails</a>.`;
+
+/**
+ * The order arrived (on the move to DELIVERED). A service message: what came,
+ * how to take any supplements in it, in the pack's own words, and where to
+ * turn if something is wrong. Mentions the refill reminder only when the
+ * order could have one and hasn't asked.
+ */
+export async function sendDeliveredEmail(
+  to: string,
+  order: { orderNumber: string; orderUrl: string | null; usage: readonly Usage[]; offerRefill: boolean },
+): Promise<Sent> {
+  const refillHtml = order.offerRefill && order.orderUrl
+    ? `<p style="margin:0 0 16px;font-size:14px;color:#5b4f45">Want a heads-up before it runs out? Ask for a refill reminder on your order page.</p>`
+    : "";
+  const html = wrap(
+    "Your order has arrived",
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">Order <strong>${esc(order.orderNumber)}</strong> was delivered today.</p>
+     ${usageHtml(order.usage)}
+     ${refillHtml}
+     ${order.orderUrl ? emailButton(order.orderUrl, "View your order") : ""}
+     <p style="margin:0;font-size:13px;color:#8c7f73">If anything is damaged, missing or not what you ordered, reply to this email and we'll put it right.</p>`,
+  );
+  const text = [
+    "Your order has arrived.",
+    "",
+    `Order ${order.orderNumber} was delivered today.`,
+    "",
+    ...usageText(order.usage),
+    ...(order.offerRefill && order.orderUrl ? ["Want a heads-up before it runs out? Ask for a refill reminder on your order page.", ""] : []),
+    ...(order.orderUrl ? [`View your order: ${order.orderUrl}`, ""] : []),
+    "If anything is damaged, missing or not what you ordered, reply to this email and we'll put it right.",
+  ].join("\n");
+  return send(to, `Your SooulOne order ${order.orderNumber} has arrived`, html, text);
+}
+
+/**
+ * A week after delivery: is everything all right? Repeats how to take it, and
+ * asks them to reply if not. No products, no offers.
+ */
+export async function sendCheckInEmail(
+  to: string,
+  order: { orderNumber: string; orderUrl: string | null; usage: readonly Usage[]; stopUrl: string },
+): Promise<Sent> {
+  const html = wrap(
+    "How's it going?",
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">It's been a week since order <strong>${esc(order.orderNumber)}</strong> arrived. We hope it's all as it should be.</p>
+     ${usageHtml(order.usage)}
+     <p style="margin:0 0 16px;font-size:15px;line-height:1.5">If anything isn't right, or you have a question about what you bought, just reply. A person reads every reply.</p>
+     ${order.orderUrl ? emailButton(order.orderUrl, "View your order") : ""}`,
+    followUpFooter(order.orderNumber, order.stopUrl),
+  );
+  const text = [
+    "How's it going?",
+    "",
+    `It's been a week since order ${order.orderNumber} arrived. We hope it's all as it should be.`,
+    "",
+    ...usageText(order.usage),
+    "If anything isn't right, or you have a question, just reply. A person reads every reply.",
+    ...(order.orderUrl ? ["", `View your order: ${order.orderUrl}`] : []),
+    "",
+    `Stop these emails: ${order.stopUrl}`,
+  ].join("\n");
+  return send(to, `How's your SooulOne order going?`, html, text);
+}
+
+/**
+ * Two weeks after delivery: would they review what they bought? The link opens
+ * the review form on their order page, so the review carries a "Verified
+ * buyer" tag. Asks for an honest review, whatever the rating; nothing is
+ * offered in return.
+ */
+export async function sendReviewRequestEmail(
+  to: string,
+  order: { orderNumber: string; reviewUrl: string; products: readonly string[]; stopUrl: string },
+): Promise<Sent> {
+  const list = order.products.map((p) => `<li style="margin:0 0 4px">${esc(p)}</li>`).join("");
+  const html = wrap(
+    "What did you think?",
+    `<p style="margin:0 0 12px;font-size:15px;line-height:1.5">You've had order <strong>${esc(order.orderNumber)}</strong> for two weeks. Would you tell other shoppers how you found it?</p>
+     <ul style="margin:0 0 16px;padding-left:20px;font-size:15px">${list}</ul>
+     ${emailButton(order.reviewUrl, order.products.length === 1 ? "Write a review" : "Write your reviews")}
+     <p style="margin:0;font-size:13px;color:#8c7f73">Good or bad, we publish honest reviews. Yours will show as from a verified buyer. We check each one before it appears, and we don't publish health claims.</p>`,
+    followUpFooter(order.orderNumber, order.stopUrl),
+  );
+  const text = [
+    "What did you think?",
+    "",
+    `You've had order ${order.orderNumber} for two weeks. Would you tell other shoppers how you found it?`,
+    ...order.products.map((p) => `  - ${p}`),
+    "",
+    `Write a review: ${order.reviewUrl}`,
+    "",
+    "Good or bad, we publish honest reviews. Yours will show as from a verified buyer.",
+    "",
+    `Stop these emails: ${order.stopUrl}`,
+  ].join("\n");
+  return send(to, `How did you find your SooulOne order?`, html, text);
+}
+
+/** A refund has been processed (Razorpay's refund.processed). A service message. */
+export async function sendRefundEmail(to: string, refund: { orderNumber: string; amountPaise: number | null; orderUrl: string | null }): Promise<Sent> {
+  const amount = refund.amountPaise != null ? `₹${(refund.amountPaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null;
+  const what = amount ? `A refund of <strong>${amount}</strong>` : "Your refund";
+  const html = wrap(
+    "Your refund is on its way",
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5">${what} for order <strong>${esc(refund.orderNumber)}</strong> has been processed. It goes back the way you paid, and usually shows in your account within 5 to 7 working days, depending on your bank.</p>
+     ${refund.orderUrl ? emailButton(refund.orderUrl, "View your order") : ""}
+     <p style="margin:0;font-size:13px;color:#8c7f73">Not there after 7 working days? Reply to this email and we'll chase it with the bank.</p>`,
+  );
+  const text = [
+    "Your refund is on its way.",
+    "",
+    `${amount ? `A refund of ${amount}` : "Your refund"} for order ${refund.orderNumber} has been processed. It goes back the way you paid, and usually shows within 5 to 7 working days.`,
+    ...(refund.orderUrl ? ["", `View your order: ${refund.orderUrl}`] : []),
+    "",
+    "Not there after 7 working days? Reply to this email and we'll chase it.",
+  ].join("\n");
+  return send(to, `Refund processed for SooulOne order ${refund.orderNumber}`, html, text);
+}

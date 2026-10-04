@@ -441,6 +441,7 @@ model Order {
   items                 OrderItem[]
   events                OrderEvent[]
   messages              OutboundMessage[]
+  reviews               Review[]
   /// Sum of lines at the price paid, after product-level discounts.
   subtotal              Decimal      @db.Decimal(10, 2)
   /// [ADDED] Saved through product-level discounts (list price minus price paid).
@@ -652,7 +653,13 @@ model Review {
   comment      String
   isApproved   Boolean   @default(false)
   createdAt    DateTime  @default(now())
+  /// The order it was written from (the order page or the day-14 email),
+  /// which makes it a "Verified buyer" review. Null for reviews left on a
+  /// product page. One review per product per order.
+  orderId      String?
+  order        Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
+  @@unique([orderId, productId])
   @@index([productId, isApproved])
 }
 

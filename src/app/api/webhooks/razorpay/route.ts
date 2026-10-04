@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { recordOrderEvent } from "@/lib/order-events";
 import { reportError } from "@/lib/observability";
 import { afterPaymentCaptured, handleLateCapture } from "@/server/payments";
+import { deliverNow } from "@/server/messages";
+import { followUpKey } from "@/lib/follow-ups";
 import { parseRazorpayWebhook, paymentTransition, verifyRazorpaySignature } from "@/lib/payment-webhook";
 
 /**
@@ -120,12 +122,19 @@ export async function POST(request: Request) {
       });
       break;
 
-    case "refund.processed":
-      await recordOrderEvent(order.id, "REFUNDED", { type: "SYSTEM" }, {
-        razorpayRefundId: webhook.refund?.id ?? null,
-        amountPaise: webhook.refund?.amountPaise ?? null,
-      });
+    case "refund.processed": {
+      const refundId = webhook.refund?.id ?? null;
+      const amountPaise = webhook.refund?.amountPaise ?? null;
+      await recordOrderEvent(order.id, "REFUNDED", { type: "SYSTEM" }, { razorpayRefundId: refundId, amountPaise });
+      // Tell the shopper (src/server/follow-ups.ts). Keyed by refund, so
+      // Razorpay redelivering the webhook doesn't email them twice.
+      try {
+        await deliverNow({ kind: "refund_notice", dedupeKey: followUpKey.refund(order.id, refundId), orderId: order.id, payload: { amountPaise } });
+      } catch (error) {
+        reportError("webhook/refund-notice", error, { orderId: order.id });
+      }
       break;
+    }
   }
 
   return NextResponse.json({ received: true });
