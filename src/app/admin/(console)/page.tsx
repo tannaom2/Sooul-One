@@ -16,6 +16,7 @@ import { stockView } from "@/lib/stock-view";
 import { SELLABLE_BATCH_WHERE } from "@/lib/basket-rules";
 import { Suspense } from "react";
 import { DashboardInsights, DashboardInsightsLoading } from "./dashboard-insights";
+import { ContentToday, FulfilmentToday } from "./today-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,17 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard() {
   const session = await requirePermission("dashboard:view");
   if (!session) return <NoAccess />;
+  // Today by role (src/app/admin/(console)/today-roles.tsx): packing first for
+  // fulfilment, words first for content. The owner, manager and staff get the
+  // dashboard below, which already shows each only what their role can act on.
+  if (session.role === "FULFILMENT" || session.role === "CONTENT") {
+    try {
+      return session.role === "FULFILMENT" ? await FulfilmentToday() : await ContentToday();
+    } catch (error) {
+      reportError("admin/today", error);
+      return <Empty title="Can't reach the database" detail="Check DATABASE_URL and that migrations have run." />;
+    }
+  }
   const canSeeFinance = can(session.role, "finance:view");
   const canSeeOrders = can(session.role, "orders:view");
 

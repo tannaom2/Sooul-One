@@ -8,5 +8,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // A test's first dynamic import of a large module (the basket, the console
+    // actions) can take several seconds when ~90 files run at once; the 5 s
+    // default made those flaky, not wrong.
+    testTimeout: 20_000,
   },
 });

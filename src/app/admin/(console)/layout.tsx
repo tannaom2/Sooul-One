@@ -1,86 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
-import { can, type Permission } from "@/lib/permissions";
-import { AdminNav } from "./admin-nav";
+import { Suspense } from "react";
+import { can } from "@/lib/permissions";
+import { db } from "@/lib/db";
+import { visibleWorkspaces } from "@/lib/console-nav";
+import { reportError } from "@/lib/observability";
+import { AdminNav, WorkspaceTabs, type NavWorkspace } from "./admin-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CONSOLE_THEME_STORAGE_KEY } from "@/lib/theme";
 import { CopilotDrawer } from "./copilot-drawer";
 import { CommandMenu } from "./command-menu";
 
 export const dynamic = "force-dynamic";
-
-type NavItem = { href: string; label: string; permission: Permission };
-
-// Grouped by the job being done, not by database table. Hiding a link is
-// convenience only — each page and action enforces its own permission
-// server-side, so a typed-in URL gets "no access", not the page.
-const NAV: { group: string | null; items: NavItem[] }[] = [
-  { group: null, items: [{ href: "/admin", label: "Overview", permission: "dashboard:view" }] },
-  // Grouped by the job, not the table: packing and stock work sit together,
-  // and the catalogue apart from it.
-  {
-    group: "Operations",
-    items: [
-      { href: "/admin/orders", label: "Orders", permission: "orders:view" },
-      { href: "/admin/analytics/risk", label: "RTO risk", permission: "orders:view" },
-      { href: "/admin/batches", label: "Stock batches", permission: "batches:write" },
-      { href: "/admin/suppliers", label: "Suppliers", permission: "batches:write" },
-      { href: "/admin/messages", label: "Messages", permission: "orders:view" },
-    ],
-  },
-  {
-    group: "Catalogue",
-    items: [
-      { href: "/admin/products", label: "Products", permission: "products:view" },
-      { href: "/admin/categories", label: "Categories", permission: "products:write" },
-      { href: "/admin/bundles", label: "Bundles", permission: "bundles:write" },
-      { href: "/admin/boxes", label: "Boxes", permission: "bundles:write" },
-      { href: "/admin/analytics/site", label: "Search terms", permission: "content:write" },
-    ],
-  },
-  {
-    group: "Customers",
-    items: [
-      { href: "/admin/enquiries", label: "Enquiries", permission: "enquiries:manage" },
-      { href: "/admin/reviews", label: "Reviews", permission: "reviews:moderate" },
-      { href: "/admin/referrals", label: "Referrals", permission: "settings:manage" },
-      { href: "/admin/coupons", label: "Discount codes", permission: "products:pricing" },
-    ],
-  },
-  {
-    group: "Storefront",
-    items: [
-      { href: "/admin/brands", label: "Brands", permission: "settings:manage" },
-      { href: "/admin/top-bar", label: "Top bar", permission: "settings:manage" },
-      { href: "/admin/site-text", label: "Site text", permission: "settings:manage" },
-      { href: "/admin/faqs", label: "FAQs", permission: "content:write" },
-      { href: "/admin/articles", label: "Articles", permission: "content:write" },
-      { href: "/admin/careers", label: "Careers", permission: "content:write" },
-    ],
-  },
-  {
-    group: "Insights",
-    items: [
-      { href: "/admin/analytics", label: "Analytics", permission: "finance:view" },
-      { href: "/admin/funnel", label: "Funnel", permission: "finance:view" },
-      { href: "/admin/reconciliation", label: "Reconciliation", permission: "finance:view" },
-      { href: "/admin/activity/downloads", label: "Downloads", permission: "finance:view" },
-    ],
-  },
-  {
-    group: "Settings",
-    items: [
-      { href: "/admin/launch", label: "Launch checklist", permission: "settings:manage" },
-      { href: "/admin/controls", label: "Store controls", permission: "settings:manage" },
-      { href: "/admin/assistants", label: "Assistants", permission: "settings:manage" },
-      { href: "/admin/business", label: "Business details", permission: "settings:manage" },
-      { href: "/admin/stores", label: "Stores", permission: "stores:write" },
-      { href: "/admin/team", label: "Team", permission: "team:manage" },
-      { href: "/admin/activity", label: "Activity", permission: "audit:view" },
-    ],
-  },
-];
 
 /**
  * The console around every signed-in page. The sign-in and sign-out pages
@@ -94,10 +26,24 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   const session = await requirePermission("dashboard:view");
   if (!session) redirect("/admin/login");
 
-  const groups = NAV.map((g) => ({
-    group: g.group,
-    items: g.items.filter((i) => can(session.role, i.permission)).map(({ href, label }) => ({ href, label })),
-  })).filter((g) => g.items.length > 0);
+  // Seven workspaces and Settings (src/lib/console-nav.ts), trimmed to this role.
+  const { workspaces, settings } = visibleWorkspaces(session.role);
+  // What's waiting in each, for the sidebar's counts. Cheap counts only; a
+  // database hiccup shows no counts rather than no console.
+  const role = session.role;
+  const badges: Record<string, number> = {};
+  try {
+    const [toPack, enquiries, reviews, unlicensed] = await Promise.all([
+      can(role, "orders:view") ? db.order.count({ where: { status: { in: ["PAID", "PROCESSING"] } } }) : 0,
+      can(role, "enquiries:manage") ? db.enquiry.count({ where: { status: "NEW" } }) : 0,
+      can(role, "reviews:moderate") ? db.review.count({ where: { isApproved: false } }) : 0,
+      can(role, "batches:write") ? db.supplier.count({ where: { isActive: true, fssaiLicence: null, OR: [{ manufactured: { some: { isActive: true } } }, { marketed: { some: { isActive: true } } }] } }) : 0,
+    ]);
+    Object.assign(badges, { orders: toPack, customers: enquiries + reviews, stock: unlicensed });
+  } catch (error) {
+    reportError("console/badges", error);
+  }
+  const nav = (w: { id: string; label: string; tabs: readonly { href: string }[] }): NavWorkspace => ({ id: w.id, label: w.label, href: w.tabs[0].href, badge: badges[w.id] ?? 0 });
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[15rem_1fr]">
@@ -109,7 +55,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           <p className="text-micro text-ink-faint">Owner console</p>
           {/* Ctrl+K: jump to a page or find a record (src/app/admin/(console)/command-menu.tsx). */}
           <div className="mt-3">
-            <CommandMenu pages={groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.group })))} />
+            <CommandMenu pages={[...workspaces, ...(settings ? [settings] : [])].flatMap((w) => w.tabs.map((t) => ({ href: t.href, label: t.label, group: w.label })))} />
           </div>
           {/* The owner's AI copilot (docs/COPILOT.md): for people who can see the store's figures. */}
           {can(session.role, "finance:view") && (
@@ -119,7 +65,9 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           )}
         </div>
 
-        <AdminNav groups={groups} />
+        <Suspense fallback={null}>
+          <AdminNav workspaces={workspaces.map(nav)} settings={settings ? nav(settings) : null} />
+        </Suspense>
 
         <div className="border-t border-rule px-5 py-4 text-micro text-ink-faint">
           <div className="flex items-start justify-between gap-2">
@@ -149,7 +97,12 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
         </div>
       </aside>
 
-      <div className="min-w-0 px-5 py-8 lg:px-10">{children}</div>
+      <div className="min-w-0 px-5 py-8 lg:px-10">
+        <Suspense fallback={null}>
+          <WorkspaceTabs workspaces={[...workspaces, ...(settings ? [settings] : [])]} />
+        </Suspense>
+        {children}
+      </div>
     </div>
   );
 }
