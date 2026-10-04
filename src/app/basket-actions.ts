@@ -18,7 +18,8 @@ import { reportError } from "@/lib/observability";
 import { EMPTY_BASKET, MAX_LINE_QUANTITY, type BasketResult } from "@/lib/basket-types";
 import { db } from "@/lib/db";
 import { orderTokenMatches } from "@/lib/order-access";
-import { canReorder, reorderLines, reorderMessage } from "@/lib/reorder";
+import { boxFallbackMessage, canReorder, looseLines, orderBoxes, partialNote, reorderLines, reorderMessage } from "@/lib/reorder";
+import { samePicks } from "@/lib/saved-boxes";
 import { getCustomer } from "@/server/customer-auth";
 
 /**
@@ -142,7 +143,7 @@ export async function reorderToBasket(orderNumber: string, token: string | null)
   try {
     order = await db.order.findUnique({
       where: { orderNumber: parsed.data.orderNumber },
-      select: { status: true, accessToken: true, customerId: true, items: { select: { productId: true, productNameSnapshot: true, quantity: true } } },
+      select: { status: true, accessToken: true, customerId: true, boxSnapshot: true, items: { select: { productId: true, productNameSnapshot: true, quantity: true } } },
     });
   } catch (error) {
     reportError("basket/reorder", error);
@@ -153,12 +154,45 @@ export async function reorderToBasket(orderNumber: string, token: string | null)
   if (!order || !allowed) return { ok: false, message: "That order couldn't be found." };
   if (!canReorder(order.status)) return { ok: false, message: "This order is still waiting for its payment, and its items are still in your basket." };
 
-  const lines = reorderLines(order.items).slice(0, 30);
+  const all = reorderLines(order.items).slice(0, 30);
   const sessionId = await getOrCreateSessionId();
+  // Each box goes back as a box, checked against its rules and stock today;
+  // one that can't goes back as loose items, with a note saying why.
+  const boxes = orderBoxes(order.boxSnapshot);
+  const notes: string[] = [];
+  let lines = looseLines(all, boxes);
+  let boxesAdded = 0;
+  // The same box already in the basket (pressed twice, or an unpaid order's
+  // basket still full) counts as back in, not added again.
+  const inBasket = boxes.length
+    ? await db.cartBox.findMany({ where: { cart: { sessionId }, boxId: { in: boxes.map((b) => b.boxId) } }, select: { boxId: true, items: { select: { productId: true, quantity: true } } } })
+    : [];
+  for (const box of boxes) {
+    const twin = inBasket.findIndex((c) => c.boxId === box.boxId && samePicks(c.items, box.picks));
+    if (twin >= 0) {
+      inBasket.splice(twin, 1);
+      boxesAdded += 1;
+      continue;
+    }
+    let reason: string;
+    try {
+      const saved = await saveCartBox(sessionId, { boxId: box.boxId, picks: box.picks });
+      if (saved.ok) {
+        boxesAdded += 1;
+        continue;
+      }
+      reason = saved.message;
+    } catch (error) {
+      reportError("basket/reorder-box", error, { boxId: box.boxId });
+      reason = "Something went wrong";
+    }
+    notes.push(boxFallbackMessage(box.name, reason));
+    lines = reorderLines([...lines.map((l) => ({ productId: l.productId, productNameSnapshot: l.name, quantity: l.quantity })), ...box.picks.map((p) => ({ productId: p.productId, productNameSnapshot: all.find((l) => l.productId === p.productId)?.name ?? "An item", quantity: p.quantity }))]);
+  }
   const missed: string[] = [];
   for (const line of lines) {
     try {
-      await addToCart(sessionId, line.productId, line.quantity);
+      await addToCart(sessionId, line.productId, line.quantity, { atLeast: true });
     } catch (error) {
       const known = error instanceof Error && /isn't available|stores only|sold out/.test(error.message);
       if (!known) reportError("basket/reorder-line", error, { productId: line.productId });
@@ -166,10 +200,13 @@ export async function reorderToBasket(orderNumber: string, token: string | null)
     }
   }
   const added = lines.length - missed.length;
-  if (added > 0) after(() => recordEvent(sessionId, "ADD_TO_CART", { metadata: { via: "reorder", lines: added } }));
+  if (added + boxesAdded > 0) after(() => recordEvent(sessionId, "ADD_TO_CART", { metadata: { via: "reorder", lines: added, boxes: boxesAdded } }));
   try {
     const basket = await snapshotFor(sessionId);
-    const message = reorderMessage(missed, lines.length);
+    // Boxes that went in count as added, so a missed loose item never reads as "nothing was added".
+    const missedNote = reorderMessage(missed, lines.length + boxesAdded);
+    const shortNote = partialNote(basket.lines, lines.map((l) => l.productId));
+    const message = [...notes, ...(missedNote ? [missedNote] : []), ...(shortNote ? [shortNote] : [])].join(" ") || null;
     return message ? { ok: false, message, basket } : { ok: true, basket };
   } catch (error) {
     reportError("basket/reorder-snapshot", error);

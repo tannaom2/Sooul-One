@@ -290,6 +290,10 @@ export async function POST(request: Request) {
             sessionId,
             // A signed-in shopper's order is theirs even if it goes to another number.
             customerId: customer?.id ?? null,
+            // Which items came as a Make Your Own Box, so "Order again" can rebuild it (src/lib/reorder.ts).
+            ...(result.cartBoxes.length > 0 && {
+              boxSnapshot: result.cartBoxes.map((b) => ({ boxId: b.box.id, name: b.box.name, picks: b.items.map((i) => ({ productId: i.productId, quantity: i.quantity })) })),
+            }),
             guestEmail: input.email || null,
             guestPhone: input.phone,
             phoneVerifiedAt: phoneProven ? new Date() : null,

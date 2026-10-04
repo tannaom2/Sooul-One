@@ -111,7 +111,12 @@ export async function getCart(sessionId: string) {
   });
 }
 
-export async function addToCart(sessionId: string, productId: string, quantity: number) {
+/**
+ * Add a product. With `atLeast`, the line ends up holding at least `quantity`
+ * rather than that many more: "Order again" uses it, so pressing it twice, or
+ * on an order whose items never left the basket, doesn't double anything.
+ */
+export async function addToCart(sessionId: string, productId: string, quantity: number, options: { atLeast?: boolean } = {}) {
   // One statement, so two first adds at once (a double tap) can't both try to
   // create the basket and trip the unique session (audit L5).
   const cart = await db.cart.upsert({ where: { sessionId }, create: { sessionId }, update: {} });
@@ -143,7 +148,7 @@ export async function addToCart(sessionId: string, productId: string, quantity: 
     await db.cartItem.update({
       where: { id: existing.id },
       // Capped per line, matching the quantity control; repeated adds used to grow without limit.
-      data: { quantity: Math.min(MAX_LINE_QUANTITY, existing.quantity + quantity), priceAtAdd },
+      data: { quantity: Math.min(MAX_LINE_QUANTITY, options.atLeast ? Math.max(existing.quantity, quantity) : existing.quantity + quantity), priceAtAdd },
     });
   } else {
     await db.cartItem.create({

@@ -461,6 +461,10 @@ model Order {
   /// [ADDED] Saved through bundle / combination offers.
   bundleDiscountAmount  Decimal      @default(0) @db.Decimal(10, 2)
   bundleLabel           String?
+  /// The Make Your Own Boxes in it, as [{ boxId, name, picks: [{ productId,
+  /// quantity }] }]. Its items are order lines like any other; this lets
+  /// "Order again" put each box back as a box (src/lib/reorder.ts).
+  boxSnapshot           Json?
   /// Coupon discount only.
   discountAmount        Decimal      @default(0) @db.Decimal(10, 2)
   /// Referral credit or a referred friend's welcome discount (never with a coupon).

@@ -8,7 +8,7 @@ import { SignOutButtons } from "./sign-out-buttons";
 import { InviteFriends } from "./invite-friends";
 import { accountReferrals, checkoutCredit, isReferred } from "@/server/referrals";
 import { ReorderButton } from "@/components/reorder-button";
-import { canReorder } from "@/lib/reorder";
+import { offerReorder } from "@/lib/reorder";
 import { ReferralCodeEntry } from "@/components/account/referral-code-entry";
 import { savedAddresses } from "@/server/saved-addresses";
 import { savedBoxes } from "@/server/saved-boxes";
@@ -91,7 +91,7 @@ export default async function AccountPage() {
                       <span className="mt-0.5 block text-micro underline">Track</span>
                     </span>
                   </Link>
-                  {canReorder(o.status) && (
+                  {offerReorder(o.status) && (
                     <div className="flex items-center px-4 pb-4 max-sm:w-full sm:pb-0 sm:pl-0">
                       <ReorderButton orderNumber={o.orderNumber} token={null} className="btn btn-outline max-sm:w-full" />
                     </div>

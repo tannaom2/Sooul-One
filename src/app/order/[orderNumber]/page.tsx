@@ -10,7 +10,7 @@ import { orderProgress } from "@/lib/order-progress";
 import { asAddress } from "@/lib/stored-order";
 import { getCustomer } from "@/server/customer-auth";
 import { ReorderButton } from "@/components/reorder-button";
-import { canReorder } from "@/lib/reorder";
+import { offerReorder } from "@/lib/reorder";
 import { REFILL_NOTICE, refillStatus } from "@/server/refill-reminders";
 import { RefillReminder } from "./refill-reminder";
 import { OrderReviews } from "./order-reviews";
@@ -175,7 +175,7 @@ export default async function OrderPage({
 
       <div className="mt-8 flex flex-wrap gap-3">
         {/* Once it's on its way or done with: while it's being packed, "again" is noise. */}
-        {canReorder(order.status) && !["PAID", "PROCESSING"].includes(order.status) && (
+        {offerReorder(order.status) && (
           <ReorderButton orderNumber={order.orderNumber} token={linkToken} className="btn btn-solid" />
         )}
         <Link href="/" className="btn btn-outline">
